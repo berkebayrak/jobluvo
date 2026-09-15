@@ -25,6 +25,7 @@ import {
   STATUS,
   type Status,
 } from "@/components";
+import { logoUrl } from "@/lib/logo";
 
 /* ---------------------------------------------------------------- layout -- */
 
@@ -200,8 +201,8 @@ export default function StyleguidePage() {
             }}
           >
             Every shared component in every state. Monochrome, no shadows, status by
-            glyph and border weight. Company logos are left out here because they load
-            from Logo.dev with a token.
+            glyph and border weight. Employer logos come from Logo.dev and are the only
+            colour on the page.
           </p>
         </header>
 
@@ -616,6 +617,7 @@ export default function StyleguidePage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <KanbanCard
                   company="Datadog"
+                  logo={logoUrl("datadoghq.com")}
                   title="Director, Strategy"
                   match={88}
                   event="Second round booked"
@@ -623,6 +625,7 @@ export default function StyleguidePage() {
                 />
                 <KanbanCard
                   company="Mistral AI"
+                  logo={logoUrl("mistral.ai")}
                   title="Head of Revenue Operations"
                   match={74}
                   event="Recruiter screen done"
@@ -630,6 +633,7 @@ export default function StyleguidePage() {
                 />
                 <KanbanCard
                   company="Shopify"
+                  logo={logoUrl("shopify.com")}
                   title="Strategy Lead, Payments"
                   event="Waiting on the panel"
                   date="29 Aug"
@@ -647,6 +651,7 @@ export default function StyleguidePage() {
               {[
                 {
                   from: "Datadog",
+                  logo: logoUrl("datadoghq.com"),
                   subject: "Second round",
                   preview: "We would like to invite you",
                   when: "Yesterday",
@@ -655,6 +660,7 @@ export default function StyleguidePage() {
                 },
                 {
                   from: "Salesforce",
+                  logo: logoUrl("salesforce.com"),
                   subject: "One question before we submit",
                   preview: "US work authorization",
                   when: "18 Sep",
@@ -663,6 +669,7 @@ export default function StyleguidePage() {
                 },
                 {
                   from: "Stripe",
+                  logo: logoUrl("stripe.com"),
                   subject: "Application received",
                   preview: "Thanks for applying to Stripe",
                   when: "16 Sep",
@@ -670,6 +677,7 @@ export default function StyleguidePage() {
                 },
                 {
                   from: "Airbnb",
+                  logo: logoUrl("airbnb.com"),
                   subject: "Update on your application",
                   preview: "We are moving ahead with other candidates",
                   when: "12 Sep",
@@ -702,6 +710,7 @@ export default function StyleguidePage() {
           >
             <JobCard
               company="Stripe"
+              logo={logoUrl("stripe.com")}
               title="Strategy and Operations Lead"
               location="New York"
               salary="USD 175k to 215k"
@@ -719,6 +728,7 @@ export default function StyleguidePage() {
             />
             <JobCard
               company="Datadog"
+              logo={logoUrl("datadoghq.com")}
               title="Director, Strategy"
               location="New York or remote"
               salary="USD 190k to 240k"
@@ -730,6 +740,7 @@ export default function StyleguidePage() {
             />
             <JobCard
               company="Nvidia"
+              logo={logoUrl("nvidia.com")}
               title="Business Operations Manager"
               location="Santa Clara"
               match={49}
@@ -773,6 +784,7 @@ export default function StyleguidePage() {
               />
               <SwipeCard
                 company="Datadog"
+                logo={logoUrl("datadoghq.com")}
                 title="Director, Strategy"
                 location="New York or remote"
                 posted="2 h ago"

@@ -1,0 +1,31 @@
+:root {
+  /* Radii: small and few */
+  --radius-xs: 3px;   /* tags, checkboxes, tiny avatars */
+  --radius-sm: 6px;   /* buttons, inputs, logo tiles */
+  --radius-md: 8px;   /* cards, rows that lift, toasts */
+  --radius-lg: 12px;  /* modals, swipe card, phone panels */
+  --radius-full: 999px; /* toggles, pill chips */
+
+  /* Borders. Always 1px. Shadows are never used.
+     There is deliberately no --border-strong shorthand here: colors.css
+     already defines --border-strong as the grey-300 colour, and every
+     component reads it as a colour. Declaring
+       --border-strong: 1px solid var(--border-strong);
+     would be self-referential, which makes the variable invalid and takes
+     the colour down with it. Write `1px solid var(--border-strong)` in full
+     where a strong rule is needed. */
+  --border-width: 1px;
+  --border-default: 1px solid var(--border);
+  --focus-ring: 0 0 0 1px var(--border-focus); /* box-shadow used only as a hairline ring */
+
+  /* Icons: Lucide, stroke 1.5 */
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --icon-stroke: 1.5;
+
+  /* Motion */
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+}

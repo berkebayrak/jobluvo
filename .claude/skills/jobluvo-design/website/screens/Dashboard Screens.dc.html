@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#f0f0ee;color:#111214;font-family:"Geist",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;line-height:20px;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#111214}a:hover{color:#4a4d52}</style>
+</helmet>
+<section style="padding:40px;display:flex;flex-direction:column;gap:40px">
+  <sc-for list="{{ screens }}" as="s" hint-placeholder-count="6">
+    <div id="{{ s.id }}" data-screen-label="{{ s.label }}" style="display:flex;flex-direction:column;gap:10px;width:1400px">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:500;border:1px solid #d6d6d3;border-radius:3px;padding:0 6px;background:#fff">{{ s.badge }}</span><span style="font-weight:500">{{ s.label }}</span><span style="color:#8a8d93;font-size:12px">Dashboard.html{{ s.hash }}</span></div>
+      <iframe src="{{ s.src }}" title="{{ s.label }}" style="width:1400px;height:900px;border:1px solid #d6d6d3;border-radius:8px;background:#fff;display:block"></iframe>
+    </div>
+  </sc-for>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const list = [['dashboard','Dashboard','#dashboard'],['jobs-list','Jobs, list view','#jobs/list'],['jobs-swipe','Jobs, swipe view','#jobs/swipe'],['autoapply','Auto Apply','#autoapply'],['tracker','Tracker','#tracker'],['inbox','Inbox','#inbox'],['profile','Profile','#profile'],['settings','Settings','#settings']];
+    return { screens: list.map(([id, label, hash], i) => ({ id, label, hash, badge: String(i + 1).padStart(2, '0'), src: './Dashboard.html' + hash })) };
+  }
+}
+</script>
+</body>
+</html>

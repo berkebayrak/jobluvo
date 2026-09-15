@@ -1,26 +1,194 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   Jobluvo design tokens.
+   Ported verbatim from .claude/skills/jobluvo-design/styles.css and the files
+   it imports (tokens/colors.css, typography.css, spacing.css, shape.css).
+   Do not add values here that are not in the handoff.
+   ========================================================================= */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* --- colors.css -------------------------------------------------------- */
+  /* Base: warm grey ramp, black, white. No hues except logos and one muted red. */
+  --jl-white: #ffffff;
+  --jl-grey-50: #f7f7f3;
+  --jl-grey-100: #f0f0ee;
+  --jl-grey-200: #e8e8e6;
+  --jl-grey-300: #d6d6d3;
+  --jl-grey-400: #b6b7b3;
+  --jl-grey-500: #8a8d93;
+  --jl-grey-700: #4a4d52;
+  --jl-grey-800: #2a2c30;
+  --jl-grey-900: #111214;
+  --jl-red: #b4423f;
+  --jl-red-soft: #f7ecec;
+
+  /* Semantic: surfaces (background steps replace shadows) */
+  --surface-0: var(--jl-white);      /* page, cards */
+  --surface-1: var(--jl-grey-50);    /* hover, sunken areas, kanban columns */
+  --surface-2: var(--jl-grey-100);   /* selected rows, pressed buttons */
+  --surface-3: var(--jl-grey-200);   /* thumb tracks, dividers as fills */
+  --surface-header: var(--jl-grey-200); /* card and table headers, ink text, grey-300 rule below */
+  --surface-inverse: var(--jl-grey-900);
+
+  /* Semantic: borders */
+  --border: var(--jl-grey-200);
+  --border-strong: var(--jl-grey-300);
+  --border-focus: var(--jl-grey-900);
+
+  /* Semantic: text */
+  --fg: var(--jl-grey-900);
+  --fg-muted: var(--jl-grey-700);
+  --fg-subtle: var(--jl-grey-500);
+  --fg-disabled: var(--jl-grey-400);
+  --fg-inverse: var(--jl-white);
+
+  /* Semantic: interactive */
+  --accent: var(--jl-grey-900);
+  --accent-hover: var(--jl-grey-800);
+  --danger: var(--jl-red);
+  --danger-soft: var(--jl-red-soft);
+
+  /* --- typography.css ---------------------------------------------------- */
+  /* Geist is self-hosted through next/font (see src/app/fonts.ts), so the
+     handoff's tokens/fonts.css Google Fonts @import is deliberately not used.
+     --font-geist-sans is the variable next/font exposes. */
+  --font-sans: var(--font-geist-sans), -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  /* Size / line-height pairs */
+  --text-2xs: 11px; --leading-2xs: 16px;   /* table meta, tag text */
+  --text-xs: 12px;  --leading-xs: 16px;    /* labels, eyebrows, timestamps */
+  --text-sm: 13px;  --leading-sm: 20px;    /* dense UI, table cells */
+  --text-base: 14px; --leading-base: 20px; /* default product body */
+  --text-md: 16px;  --leading-md: 24px;    /* card titles, marketing body */
+  --text-lg: 18px;  --leading-lg: 26px;    /* section titles */
+  --text-xl: 22px;  --leading-xl: 28px;    /* page titles, stat values */
+  --text-2xl: 28px; --leading-2xl: 34px;   /* greeting, large stats */
+  --text-3xl: 36px; --leading-3xl: 40px;   /* marketing h2 */
+  --text-4xl: 52px; --leading-4xl: 56px;   /* marketing hero */
+
+  --weight-regular: 400;
+  --weight-medium: 500;   /* the only emphasis weight in product UI */
+  --weight-semibold: 600; /* wordmark and stat values only */
+
+  --tracking-tight: -0.02em;   /* 22px and up */
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;     /* uppercase labels */
+  --tracking-wordmark: 0.18em; /* JOBLUVO */
+
+  --numeric: tabular-nums;
+
+  /* --- spacing.css ------------------------------------------------------- */
+  /* 4px base */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Density. Compact is the data default, regular the reading default. */
+  --row-compact: 32px;
+  --row-regular: 40px;
+  --control-sm: 28px;
+  --control-md: 36px;
+  --control-lg: 44px;
+
+  /* Layout */
+  --panel-width: 320px;      /* agent panel */
+  --panel-collapsed: 48px;
+  --topnav-height: 52px;
+  --content-max: 1400px;
+  --content-pad: 32px;
+
+  /* --- shape.css --------------------------------------------------------- */
+  /* Radii: small and few */
+  --radius-xs: 3px;   /* tags, checkboxes, tiny avatars */
+  --radius-sm: 6px;   /* buttons, inputs, logo tiles */
+  --radius-md: 8px;   /* cards, rows that lift, toasts */
+  --radius-lg: 12px;  /* modals, swipe card, phone panels */
+  --radius-full: 999px; /* toggles, pill chips */
+
+  /* Borders. Always 1px. Shadows are never used.
+     The handoff's shape.css also declares
+       --border-strong: 1px solid var(--border-strong);
+     which is self-referential: it would invalidate the grey-300 colour that
+     colors.css defines and every component reads as a colour. The colour wins,
+     so only the non-colliding shorthand is carried over. */
+  --border-width: 1px;
+  --border-default: 1px solid var(--border);
+  --focus-ring: 0 0 0 1px var(--border-focus); /* box-shadow used only as a hairline ring */
+
+  /* Icons: Lucide, stroke 1.5 */
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --icon-stroke: 1.5;
+
+  /* Motion */
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
 }
+
+/* ============================================================================
+   Tailwind v4 theme. Ported from tokens/tailwind.theme.css, 1:1 with the
+   variables above.
+   ========================================================================= */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --color-white: var(--jl-white);
+  --color-grey-50: var(--jl-grey-50); --color-grey-100: var(--jl-grey-100); --color-grey-200: var(--jl-grey-200);
+  --color-grey-300: var(--jl-grey-300); --color-grey-400: var(--jl-grey-400); --color-grey-500: var(--jl-grey-500);
+  --color-grey-700: var(--jl-grey-700); --color-grey-800: var(--jl-grey-800); --color-grey-900: var(--jl-grey-900);
+  --color-red: var(--jl-red); --color-red-soft: var(--jl-red-soft);
+  --color-surface-0: var(--surface-0); --color-surface-1: var(--surface-1); --color-surface-2: var(--surface-2); --color-surface-3: var(--surface-3); --color-surface-header: var(--surface-header); --color-surface-inverse: var(--surface-inverse);
+  --color-fg: var(--fg); --color-fg-muted: var(--fg-muted); --color-fg-subtle: var(--fg-subtle); --color-fg-disabled: var(--fg-disabled); --color-fg-inverse: var(--fg-inverse);
+  --color-border: var(--border); --color-border-strong: var(--border-strong); --color-border-focus: var(--border-focus);
+  --color-accent: var(--accent); --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger); --color-danger-soft: var(--danger-soft);
+  --text-2xs: var(--text-2xs); --text-2xs--line-height: var(--leading-2xs);
+  --text-xs: var(--text-xs); --text-xs--line-height: var(--leading-xs);
+  --text-sm: var(--text-sm); --text-sm--line-height: var(--leading-sm);
+  --text-base: var(--text-base); --text-base--line-height: var(--leading-base);
+  --text-md: var(--text-md); --text-md--line-height: var(--leading-md);
+  --text-lg: var(--text-lg); --text-lg--line-height: var(--leading-lg);
+  --text-xl: var(--text-xl); --text-xl--line-height: var(--leading-xl); --text-xl--letter-spacing: var(--tracking-tight);
+  --text-2xl: var(--text-2xl); --text-2xl--line-height: var(--leading-2xl); --text-2xl--letter-spacing: var(--tracking-tight);
+  --text-3xl: var(--text-3xl); --text-3xl--line-height: var(--leading-3xl); --text-3xl--letter-spacing: var(--tracking-tight);
+  --text-4xl: var(--text-4xl); --text-4xl--line-height: var(--leading-4xl); --text-4xl--letter-spacing: -0.03em;
+  --spacing: 4px;
+  --radius-xs: var(--radius-xs); --radius-sm: var(--radius-sm); --radius-md: var(--radius-md); --radius-lg: var(--radius-lg); --radius-full: var(--radius-full);
+  --shadow-focus: var(--focus-ring);
+  --ease: var(--ease);
 }
 
-@media (prefers-color-scheme: dark) {
+/* ============================================================================
+   Base. Monochrome, light only: the handoff ships no dark ramp.
+   ========================================================================= */
+
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: light;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--surface-0);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading-base);
+  }
 }

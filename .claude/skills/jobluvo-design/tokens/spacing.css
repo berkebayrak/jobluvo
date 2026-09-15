@@ -1,0 +1,29 @@
+:root {
+  /* 4px base */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Density. Compact is the data default, regular the reading default. */
+  --row-compact: 32px;
+  --row-regular: 40px;
+  --control-sm: 28px;
+  --control-md: 36px;
+  --control-lg: 44px;
+
+  /* Layout */
+  --panel-width: 320px;      /* agent panel */
+  --panel-collapsed: 48px;
+  --topnav-height: 52px;
+  --content-max: 1400px;
+  --content-pad: 32px;
+}

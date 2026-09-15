@@ -1,0 +1,28 @@
+/* Tailwind v4: import after tailwindcss and the token files. */
+@theme inline {
+  --font-sans: var(--font-sans);
+  --color-white: var(--jl-white);
+  --color-grey-50: var(--jl-grey-50); --color-grey-100: var(--jl-grey-100); --color-grey-200: var(--jl-grey-200);
+  --color-grey-300: var(--jl-grey-300); --color-grey-400: var(--jl-grey-400); --color-grey-500: var(--jl-grey-500);
+  --color-grey-700: var(--jl-grey-700); --color-grey-800: var(--jl-grey-800); --color-grey-900: var(--jl-grey-900);
+  --color-red: var(--jl-red); --color-red-soft: var(--jl-red-soft);
+  --color-surface-0: var(--surface-0); --color-surface-1: var(--surface-1); --color-surface-2: var(--surface-2); --color-surface-3: var(--surface-3); --color-surface-header: var(--surface-header); --color-surface-inverse: var(--surface-inverse);
+  --color-fg: var(--fg); --color-fg-muted: var(--fg-muted); --color-fg-subtle: var(--fg-subtle); --color-fg-disabled: var(--fg-disabled); --color-fg-inverse: var(--fg-inverse);
+  --color-border: var(--border); --color-border-strong: var(--border-strong); --color-border-focus: var(--border-focus);
+  --color-accent: var(--accent); --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger); --color-danger-soft: var(--danger-soft);
+  --text-2xs: var(--text-2xs); --text-2xs--line-height: var(--leading-2xs);
+  --text-xs: var(--text-xs); --text-xs--line-height: var(--leading-xs);
+  --text-sm: var(--text-sm); --text-sm--line-height: var(--leading-sm);
+  --text-base: var(--text-base); --text-base--line-height: var(--leading-base);
+  --text-md: var(--text-md); --text-md--line-height: var(--leading-md);
+  --text-lg: var(--text-lg); --text-lg--line-height: var(--leading-lg);
+  --text-xl: var(--text-xl); --text-xl--line-height: var(--leading-xl); --text-xl--letter-spacing: var(--tracking-tight);
+  --text-2xl: var(--text-2xl); --text-2xl--line-height: var(--leading-2xl); --text-2xl--letter-spacing: var(--tracking-tight);
+  --text-3xl: var(--text-3xl); --text-3xl--line-height: var(--leading-3xl); --text-3xl--letter-spacing: var(--tracking-tight);
+  --text-4xl: var(--text-4xl); --text-4xl--line-height: var(--leading-4xl); --text-4xl--letter-spacing: -0.03em;
+  --spacing: 4px;
+  --radius-xs: var(--radius-xs); --radius-sm: var(--radius-sm); --radius-md: var(--radius-md); --radius-lg: var(--radius-lg); --radius-full: var(--radius-full);
+  --shadow-focus: var(--focus-ring);
+  --ease: var(--ease);
+}

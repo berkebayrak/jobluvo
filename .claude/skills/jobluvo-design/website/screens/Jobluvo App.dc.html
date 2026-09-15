@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{overflow-x:auto}body{margin:0;background:#ffffff;color:#111214;font-family:"Geist",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:13px;line-height:20px}
+a{color:#111214;text-decoration:none}a:hover{color:#4a4d52}
+button{font:inherit;color:inherit;cursor:pointer}input,select,textarea{font:inherit;color:inherit}
+*{box-sizing:border-box}
+::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#e8e8e6;border-radius:4px}
+@keyframes jlToast{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+<div data-screen-label="App shell" style="display:flex;height:100vh;min-height:760px;width:100%;min-width:1280px;overflow:hidden;background:#fff">
+
+  <!-- Agent panel -->
+  <aside style="width:{{ panelWidth }};flex:none;border-right:1px solid #e8e8e6;display:flex;flex-direction:column;background:#fff;transition:width 200ms cubic-bezier(.2,.8,.2,1);overflow:hidden">
+    <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ true }}">
+      <div style="height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid #e8e8e6">
+        <div style="display:flex;flex:1;background:#f0f0ee;border-radius:6px;padding:2px;gap:2px">
+          <button onClick="{{ pickMaya }}" style="flex:1;height:28px;border:0;border-radius:4px;background:{{ mayaTabBg }};color:{{ mayaTabFg }};font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px"><span style="width:16px;height:16px;border-radius:999px;background:#111214;color:#fff;font-size:9px;font-weight:600;display:grid;place-items:center">M</span>Maya</button>
+          <button onClick="{{ pickDaniel }}" style="flex:1;height:28px;border:0;border-radius:4px;background:{{ danielTabBg }};color:{{ danielTabFg }};font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px"><span style="width:16px;height:16px;border-radius:999px;border:1px solid #111214;color:#111214;font-size:9px;font-weight:600;display:grid;place-items:center">D</span>Daniel</button>
+        </div>
+        <button onClick="{{ togglePanel }}" title="Collapse" style="width:28px;height:28px;border:1px solid #e8e8e6;border-radius:6px;background:#fff;display:grid;place-items:center;color:#4a4d52" style-hover="background:#f7f7f3"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid #e8e8e6;display:flex;flex-direction:column;gap:2px">
+        <div style="font-weight:500">{{ agentName }}</div>
+        <div style="font-size:12px;color:#8a8d93">{{ agentRole }}</div>
+      </div>
+      <div style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ thread }}" as="m" hint-placeholder-count="3">
+          <div style="display:flex;justify-content:{{ m.justify }}">
+            <div style="max-width:86%;padding:8px 12px;border-radius:8px;font-size:13px;line-height:19px;background:{{ m.bg }};border:1px solid {{ m.border }};color:#111214;text-wrap:pretty">{{ m.text }}</div>
+          </div>
+        </sc-for>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:4px">
+          <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="2">
+            <button style="height:26px;padding:0 10px;border:1px solid #d6d6d3;border-radius:999px;background:#fff;font-size:12px;color:#4a4d52" style-hover="border-color:#111214;color:#111214">{{ s }}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex:none;padding:12px;border-top:1px solid #e8e8e6">
+        <div style="display:flex;align-items:center;gap:8px;border:1px solid #d6d6d3;border-radius:6px;padding:0 6px 0 12px;height:36px" style-focus="border-color:#111214">
+          <input placeholder="Ask {{ agentName }}" style="flex:1;border:0;outline:0;background:transparent;font-size:13px;min-width:0"/>
+          <button style="width:26px;height:26px;border:0;border-radius:4px;background:#111214;color:#fff;display:grid;place-items:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7M12 19V5"/></svg></button>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ panelClosed }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0">
+        <button onClick="{{ togglePanel }}" title="Open agents" style="width:28px;height:28px;border:1px solid #e8e8e6;border-radius:6px;background:#fff;display:grid;place-items:center;color:#4a4d52" style-hover="background:#f7f7f3"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+        <button onClick="{{ openMaya }}" title="Maya" style="width:28px;height:28px;border-radius:999px;border:0;background:#111214;color:#fff;font-size:11px;font-weight:600">M</button>
+        <button onClick="{{ openDaniel }}" title="Daniel" style="width:28px;height:28px;border-radius:999px;border:1px solid #111214;background:#fff;color:#111214;font-size:11px;font-weight:600">D</button>
+      </div>
+    </sc-if>
+  </aside>
+
+  <!-- Main -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <!-- Top nav -->
+    <header style="height:52px;flex:none;display:flex;align-items:center;gap:24px;padding:0 24px;border-bottom:1px solid #e8e8e6;position:relative">
+      <a href="#" onClick="{{ goDashboard }}" style="font-weight:600;font-size:13px;letter-spacing:.18em;color:#111214;flex:none">JOBLUVO</a>
+      <nav style="display:flex;gap:2px;height:100%">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+          <button onClick="{{ t.go }}" style="height:100%;padding:0 12px;border:0;border-bottom:1px solid {{ t.underline }};margin-bottom:-1px;background:transparent;color:{{ t.color }};font-weight:500;font-size:13px;white-space:nowrap" style-hover="color:#111214">{{ t.label }}</button>
+        </sc-for>
+      </nav>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex:none;white-space:nowrap">
+        <div style="display:flex;border:1px solid #e8e8e6;border-radius:6px;padding:2px;gap:2px;font-size:12px">
+          <button onClick="{{ setCompact }}" style="height:22px;padding:0 8px;border:0;border-radius:4px;background:{{ compactBg }};color:{{ compactFg }}">Compact</button>
+          <button onClick="{{ setRegular }}" style="height:22px;padding:0 8px;border:0;border-radius:4px;background:{{ regularBg }};color:{{ regularFg }}">Regular</button>
+        </div>
+        <span style="font-size:12px;color:#8a8d93;font-variant-numeric:tabular-nums">Pro. 8 of 10 applications today</span>
+        <button onClick="{{ toggleMenu }}" style="width:28px;height:28px;border-radius:999px;border:1px solid #d6d6d3;background:#fff;font-size:11px;font-weight:500;display:grid;place-items:center" style-hover="background:#f7f7f3">JM</button>
+      </div>
+      <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;right:24px;top:48px;width:200px;background:#fff;border:1px solid #d6d6d3;border-radius:8px;padding:4px;z-index:20;display:flex;flex-direction:column">
+          <div style="padding:8px 10px;border-bottom:1px solid #e8e8e6;margin-bottom:4px"><div style="font-weight:500">Jack Miller</div><div style="font-size:12px;color:#8a8d93">jack.miller@jobluvo.com</div></div>
+          <button onClick="{{ goProfile }}" style="text-align:left;height:32px;padding:0 10px;border:0;border-radius:4px;background:transparent" style-hover="background:#f7f7f3">Profile</button>
+          <button onClick="{{ goSettings }}" style="text-align:left;height:32px;padding:0 10px;border:0;border-radius:4px;background:transparent" style-hover="background:#f7f7f3">Settings</button>
+          <button style="text-align:left;height:32px;padding:0 10px;border:0;border-radius:4px;background:transparent;color:#4a4d52" style-hover="background:#f7f7f3">Sign out</button>
+        </div>
+      </sc-if>
+    </header>
+
+    <main style="flex:1;overflow:auto;padding:24px 32px 48px">
+
+      <!-- DASHBOARD -->
+      <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+        <div data-screen-label="Dashboard" style="display:flex;flex-direction:column;gap:24px;max-width:1400px;margin:0 auto">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div><h1 style="margin:0;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-.02em">Good morning, Jack</h1><div style="color:#8a8d93;margin-top:2px">Monday 15 September. 42 new matches since yesterday.</div></div>
+            <div style="display:flex;gap:8px"><button onClick="{{ goJobsSwipe }}" style="height:32px;padding:0 12px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500" style-hover="background:#f7f7f3">Swipe today's matches</button><button onClick="{{ goAuto }}" style="height:32px;padding:0 12px;border:1px solid #111214;border-radius:6px;background:#111214;color:#fff;font-weight:500" style-hover="background:#2a2c30">Manage lanes</button></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;border:1px solid #111214;border-radius:8px;padding:12px 16px;background:#fff">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+            <div style="flex:1;min-width:0"><span style="font-weight:500">Salesforce needs an answer from you.</span> <span style="color:#4a4d52">The form asks about US work authorization. The application is held until you reply.</span></div>
+            <button onClick="{{ openAnswerModal }}" style="height:28px;padding:0 10px;border:1px solid #111214;border-radius:6px;background:#111214;color:#fff;font-weight:500;font-size:12px" style-hover="background:#2a2c30">Answer</button>
+            <button style="height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-size:12px" style-hover="background:#f7f7f3">Later</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+            <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+              <div style="padding:16px 20px;border-right:1px solid #e8e8e6;display:flex;flex-direction:column;gap:6px" style-hover="background:#f7f7f3">
+                <div style="font-size:12px;color:#8a8d93">{{ s.label }}</div>
+                <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ s.value }}</div>
+                <div style="font-size:12px;color:#4a4d52">{{ s.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:24px">
+            <section style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6"><div style="font-weight:500;color:#111214">Top matches</div><button onClick="{{ goJobs }}" style="border:0;background:transparent;font-size:12px;color:#111214;padding:0;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#b6b7b3" style-hover="text-decoration-color:#111214">All 42 matches</button></div>
+              <sc-for list="{{ topMatches }}" as="j" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:12px;padding:{{ rowPad }} 16px;border-bottom:1px solid #e8e8e6" style-hover="background:#f7f7f3">
+                  <img src="{{ j.logo }}" alt="{{ j.company }}" style="width:24px;height:24px;border-radius:6px;border:1px solid #e8e8e6;object-fit:contain;background:#fff"/>
+                  <div style="flex:1;min-width:0"><div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.title }}</div><div style="font-size:12px;color:#8a8d93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.company }}. {{ j.location }}. {{ j.salary }}</div></div>
+                  <span style="font-size:12px;color:#8a8d93;white-space:nowrap">{{ j.posted }}</span>
+                  <span style="font-variant-numeric:tabular-nums;font-weight:500;width:36px;text-align:right">{{ j.match }}%</span>
+                  <button onClick="{{ toastApplied }}" style="height:26px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-size:12px;font-weight:500" style-hover="border-color:#111214">Apply</button>
+                </div>
+              </sc-for>
+            </section>
+
+            <section style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6"><div style="font-weight:500;color:#111214">Lanes</div><button onClick="{{ goAuto }}" style="border:0;background:transparent;font-size:12px;color:#111214;padding:0;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#b6b7b3" style-hover="text-decoration-color:#111214">Auto Apply</button></div>
+              <sc-for list="{{ lanes }}" as="l" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #e8e8e6">
+                  <button onClick="{{ l.toggle }}" style="width:28px;height:16px;border-radius:999px;border:1px solid {{ l.toggleBorder }};background:{{ l.toggleBg }};position:relative;flex:none;padding:0"><span style="position:absolute;top:2px;left:{{ l.knobLeft }};width:10px;height:10px;border-radius:999px;background:{{ l.knobBg }};transition:left 120ms"></span></button>
+                  <div style="flex:1;min-width:0"><div style="font-weight:500">{{ l.name }}</div><div style="font-size:12px;color:#8a8d93">{{ l.rules }}</div></div>
+                  <div style="width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span style="font-size:12px;color:#4a4d52;font-variant-numeric:tabular-nums">{{ l.used }} of {{ l.cap }} today</span><div style="width:100%;height:3px;background:#e8e8e6;border-radius:2px;overflow:hidden"><div style="height:100%;width:{{ l.pct }};background:#111214"></div></div></div>
+                </div>
+              </sc-for>
+              <div style="padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6"><div style="font-weight:500;color:#111214">Recent activity</div></div>
+              <sc-for list="{{ activity }}" as="a" hint-placeholder-count="5">
+                <div style="display:flex;gap:12px;padding:{{ rowPad }} 16px;border-bottom:1px solid #e8e8e6;align-items:center">
+                  <span style="width:6px;height:6px;border-radius:999px;background:{{ a.dot }};border:1px solid #111214;flex:none"></span>
+                  <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.text }}</span>
+                  <span style="font-size:12px;color:#8a8d93;white-space:nowrap">{{ a.when }}</span>
+                </div>
+              </sc-for>
+            </section>
+          </div>
+
+          <section style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6;gap:12px">
+              <div style="font-weight:500">All applications <span style="color:#8a8d93;font-weight:400">38</span></div>
+              <div style="display:flex;gap:8px"><div style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;color:#8a8d93;font-size:12px;width:200px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search</div><button style="height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-size:12px" style-hover="background:#f7f7f3">Status: All</button><button style="height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-size:12px" style-hover="background:#f7f7f3">Export</button></div>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1.2fr) minmax(0,1fr) 72px minmax(0,1.2fr) 100px;padding:0 16px;height:32px;align-items:center;background:#e8e8e6;border-bottom:1px solid #d6d6d3;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#111214"><span>Role</span><span>Company</span><span>Status</span><span style="text-align:right">Match</span><span>Last event</span><span style="text-align:right">Applied</span></div>
+            <sc-for list="{{ applications }}" as="a" hint-placeholder-count="8">
+              <div onClick="{{ a.select }}" style="display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1.2fr) minmax(0,1fr) 72px minmax(0,1.2fr) 100px;padding:{{ rowPad }} 16px;align-items:center;border-bottom:1px solid #e8e8e6;background:{{ a.rowBg }};cursor:pointer" style-hover="background:#f7f7f3">
+                <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:12px">{{ a.title }}</span>
+                <span style="display:flex;align-items:center;gap:8px;min-width:0"><img src="{{ a.logo }}" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:contain"/><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#4a4d52">{{ a.company }}</span></span>
+                <span><span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 7px 0 6px;border-radius:3px;font-size:11px;font-weight:500;white-space:nowrap;border:1px {{ a.tag.borderStyle }} {{ a.tag.border }};background:{{ a.tag.bg }};color:{{ a.tag.color }}"><svg width="10" height="10" viewBox="0 0 10 10"><path d="{{ a.tag.d }}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="{{ a.tag.dash }}"/><path d="{{ a.tag.f }}" fill="currentColor"/></svg>{{ a.tag.label }}</span></span>
+                <span style="text-align:right;font-variant-numeric:tabular-nums">{{ a.match }}%</span>
+                <span style="color:#4a4d52;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:12px">{{ a.event }}</span>
+                <span style="text-align:right;color:#8a8d93;font-variant-numeric:tabular-nums">{{ a.applied }}</span>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;font-size:12px;color:#8a8d93"><span>1 to 11 of 38</span><div style="display:flex;gap:4px"><button style="height:24px;padding:0 8px;border:1px solid #e8e8e6;border-radius:4px;background:#fff;color:#b6b7b3" disabled>Previous</button><button style="height:24px;padding:0 8px;border:1px solid #d6d6d3;border-radius:4px;background:#fff;color:#111214" style-hover="background:#f7f7f3">Next</button></div></div>
+          </section>
+        </div>
+      </sc-if>
+
+      <!-- JOBS -->
+      <sc-if value="{{ isJobs }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Jobs" style="display:flex;flex-direction:column;gap:20px;max-width:1400px;margin:0 auto">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div><h1 style="margin:0;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-.02em">Jobs</h1><div style="color:#8a8d93;margin-top:2px">42 matches. Sorted by match score. Duplicates folded.</div></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="display:flex;border:1px solid #e8e8e6;border-radius:6px;padding:2px;gap:2px;font-size:12px">
+                <button onClick="{{ setList }}" style="height:26px;padding:0 10px;border:0;border-radius:4px;background:{{ listBg }};color:{{ listFg }};font-weight:500">List</button>
+                <button onClick="{{ setSwipe }}" style="height:26px;padding:0 10px;border:0;border-radius:4px;background:{{ swipeBg }};color:{{ swipeFg }};font-weight:500">Swipe</button>
+              </div>
+              <button style="height:32px;padding:0 12px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500" style-hover="background:#f7f7f3">Filters</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ jobFilters }}" as="f" hint-placeholder-count="5">
+              <span style="height:26px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;border:1px solid {{ f.border }};border-radius:999px;font-size:12px;background:{{ f.bg }};color:{{ f.color }}">{{ f.label }}</span>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ jobsList }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">
+              <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="6">
+                <article style="border:1px solid #e8e8e6;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px;background:#fff" style-hover="border-color:#d6d6d3;background:#f7f7f3">
+                  <div style="display:flex;align-items:flex-start;gap:12px">
+                    <img src="{{ j.logo }}" alt="{{ j.company }}" style="width:32px;height:32px;border-radius:6px;border:1px solid #e8e8e6;object-fit:contain;background:#fff;flex:none"/>
+                    <div style="flex:1;min-width:0"><div style="font-weight:500;font-size:14px;line-height:20px;text-wrap:pretty">{{ j.title }}</div><div style="font-size:12px;color:#8a8d93">{{ j.company }}. {{ j.location }}</div></div>
+                    <div style="text-align:right;flex:none"><div style="font-weight:600;font-size:16px;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ j.match }}%</div><div style="font-size:11px;color:#8a8d93">match</div></div>
+                  </div>
+                  <div style="display:flex;gap:12px;font-size:12px;color:#4a4d52;flex-wrap:wrap"><span>{{ j.salary }}</span><span style="color:#d6d6d3">|</span><span>{{ j.ats }}</span><span style="color:#d6d6d3">|</span><span>{{ j.posted }}</span></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#4a4d52;border-top:1px solid #e8e8e6;padding-top:10px">
+                    <div style="display:flex;gap:6px"><span style="width:12px;flex:none">+</span><span>{{ j.why1 }}</span></div>
+                    <div style="display:flex;gap:6px"><span style="width:12px;flex:none">+</span><span>{{ j.why2 }}</span></div>
+                    <div style="display:flex;gap:6px;color:#8a8d93"><span style="width:12px;flex:none">-</span><span>{{ j.why3 }}</span></div>
+                  </div>
+                  <div style="display:flex;gap:8px;margin-top:auto"><button onClick="{{ toastApplied }}" style="flex:1;height:30px;border:1px solid #111214;border-radius:6px;background:#111214;color:#fff;font-weight:500" style-hover="background:#2a2c30">Apply</button><button style="height:30px;padding:0 12px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500" style-hover="background:#f0f0ee">Save</button><button style="height:30px;padding:0 12px;border:1px solid transparent;border-radius:6px;background:transparent;color:#8a8d93" style-hover="color:#111214;background:#f0f0ee">Skip</button></div>
+                </article>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ jobsSwipe }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 400px minmax(0,1fr);gap:24px;align-items:start;padding-top:8px">
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:#8a8d93;padding-top:40px">
+                <div style="font-weight:500;color:#111214;font-size:13px">Keys</div>
+                <div><kbd style="border:1px solid #d6d6d3;border-radius:3px;padding:0 5px;font-family:inherit">←</kbd> Skip</div>
+                <div><kbd style="border:1px solid #d6d6d3;border-radius:3px;padding:0 5px;font-family:inherit">→</kbd> Apply</div>
+                <div><kbd style="border:1px solid #d6d6d3;border-radius:3px;padding:0 5px;font-family:inherit">S</kbd> Save for later</div>
+                <div><kbd style="border:1px solid #d6d6d3;border-radius:3px;padding:0 5px;font-family:inherit">R</kbd> See tailored resume</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="position:relative;height:440px">
+                  <div style="position:absolute;inset:0;transform:translateY(20px) scale(.92);border:1px solid #e8e8e6;border-radius:12px;background:#f7f7f3"></div>
+                  <div style="position:absolute;inset:0;transform:translateY(10px) scale(.96);border:1px solid #e8e8e6;border-radius:12px;background:#fff"></div>
+                  <article style="position:absolute;inset:0;border:1px solid #d6d6d3;border-radius:12px;background:#fff;padding:20px;display:flex;flex-direction:column;gap:14px;transition:transform 200ms cubic-bezier(.2,.8,.2,1);transform:{{ swipeTransform }}">
+                    <div style="display:flex;align-items:flex-start;gap:12px">
+                      <img src="{{ swipeJob.logo }}" alt="{{ swipeJob.company }}" style="width:40px;height:40px;border-radius:8px;border:1px solid #e8e8e6;object-fit:contain;background:#fff"/>
+                      <div style="flex:1;min-width:0"><div style="font-weight:500;color:#4a4d52">{{ swipeJob.company }}</div><div style="font-size:12px;color:#8a8d93">{{ swipeJob.location }}. {{ swipeJob.posted }}</div></div>
+                      <div style="width:48px;height:48px;border-radius:999px;border:1px solid #e8e8e6;display:grid;place-items:center;font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;background:conic-gradient(#111214 {{ swipeJob.matchDeg }}, #e8e8e6 0)"><span style="width:40px;height:40px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;white-space:nowrap;font-size:12px;letter-spacing:-.02em">{{ swipeJob.match }}<span style="font-size:9px">%</span></span></div>
+                    </div>
+                    <h2 style="margin:0;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-.02em;text-wrap:pretty">{{ swipeJob.title }}</h2>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                      <div style="background:#f7f7f3;border-radius:6px;padding:8px 10px"><div style="font-size:11px;color:#8a8d93">Salary</div><div style="font-weight:500">{{ swipeJob.salary }}</div></div>
+                      <div style="background:#f7f7f3;border-radius:6px;padding:8px 10px"><div style="font-size:11px;color:#8a8d93">Applies via</div><div style="font-weight:500">{{ swipeJob.ats }}</div></div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#4a4d52">
+                      <div style="display:flex;gap:8px"><span style="width:12px;flex:none">+</span><span>{{ swipeJob.why1 }}</span></div>
+                      <div style="display:flex;gap:8px"><span style="width:12px;flex:none">+</span><span>{{ swipeJob.why2 }}</span></div>
+                      <div style="display:flex;gap:8px;color:#8a8d93"><span style="width:12px;flex:none">-</span><span>{{ swipeJob.why3 }}</span></div>
+                    </div>
+                    <div style="margin-top:auto;font-size:12px;color:#8a8d93;border-top:1px solid #e8e8e6;padding-top:10px">Resume Strategy_v3 will be tailored for this role. Nothing is added that is not on your profile.</div>
+                    <div style="position:absolute;top:70px;right:20px;padding:4px 10px;border:2px solid #111214;border-radius:6px;font-weight:600;letter-spacing:.1em;font-size:14px;transform:rotate(-10deg);opacity:{{ applyStampOpacity }};transition:opacity 150ms">APPLY</div>
+                    <div style="position:absolute;top:70px;left:20px;padding:4px 10px;border:2px solid #8a8d93;color:#8a8d93;border-radius:6px;font-weight:600;letter-spacing:.1em;font-size:14px;transform:rotate(10deg);opacity:{{ skipStampOpacity }};transition:opacity 150ms">SKIP</div>
+                  </article>
+                </div>
+                <div style="display:flex;justify-content:center;gap:10px">
+                  <button onClick="{{ swipeSkip }}" style="height:36px;padding:0 18px;border:1px solid #d6d6d3;border-radius:999px;background:#fff;font-weight:500" style-hover="background:#f0f0ee">Skip</button>
+                  <button onClick="{{ swipeSave }}" style="height:36px;padding:0 18px;border:1px solid #d6d6d3;border-radius:999px;background:#fff;font-weight:500" style-hover="background:#f0f0ee">Save</button>
+                  <button onClick="{{ swipeApply }}" style="height:36px;padding:0 22px;border:1px solid #111214;border-radius:999px;background:#111214;color:#fff;font-weight:500" style-hover="background:#2a2c30">Apply</button>
+                </div>
+                <div style="text-align:center;font-size:12px;color:#8a8d93;font-variant-numeric:tabular-nums">{{ swipePos }} of 42 today</div>
+              </div>
+              <div style="padding-top:40px;display:flex;flex-direction:column;gap:12px">
+                <div style="font-weight:500">Applied this session</div>
+                <sc-for list="{{ swipedApplied }}" as="j" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:12px"><img src="{{ j.logo }}" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:contain"/><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.title }}</span><span style="color:#8a8d93">Submitting</span></div>
+                </sc-for>
+                <sc-if value="{{ noSwiped }}" hint-placeholder-val="{{ true }}"><div style="font-size:12px;color:#8a8d93">Nothing yet. Swipe right to apply.</div></sc-if>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- AUTO APPLY -->
+      <sc-if value="{{ isAuto }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Auto Apply" style="display:flex;flex-direction:column;gap:20px;max-width:1400px;margin:0 auto">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div><h1 style="margin:0;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-.02em">Auto Apply</h1><div style="color:#8a8d93;margin-top:2px">Lanes apply for you inside your rules and your daily cap. 8 of 10 used today.</div></div>
+            <button style="height:32px;padding:0 12px;border:1px solid #111214;border-radius:6px;background:#111214;color:#fff;font-weight:500" style-hover="background:#2a2c30">New lane</button>
+          </div>
+          <div style="display:grid;grid-template-columns:360px minmax(0,1fr);gap:24px;align-items:start">
+            <div style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6;font-weight:500;color:#111214">Lanes <span style="color:#4a4d52;font-weight:400">3</span></div>
+              <sc-for list="{{ lanes }}" as="l" hint-placeholder-count="3">
+                <div onClick="{{ l.select }}" style="display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid #e8e8e6;background:{{ l.rowBg }};cursor:pointer;border-left:2px solid {{ l.rowEdge }}" style-hover="background:#f7f7f3">
+                  <button onClick="{{ l.toggle }}" style="width:28px;height:16px;border-radius:999px;border:1px solid {{ l.toggleBorder }};background:{{ l.toggleBg }};position:relative;flex:none;padding:0;margin-top:2px"><span style="position:absolute;top:2px;left:{{ l.knobLeft }};width:10px;height:10px;border-radius:999px;background:{{ l.knobBg }};transition:left 120ms"></span></button>
+                  <div style="flex:1;min-width:0"><div style="font-weight:500">{{ l.name }}</div><div style="font-size:12px;color:#8a8d93;margin-top:2px">{{ l.rules }}</div><div style="font-size:12px;color:#4a4d52;margin-top:6px;font-variant-numeric:tabular-nums">{{ l.status }}. {{ l.used }} of {{ l.cap }} today. {{ l.total }} total</div></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6"><div><span style="font-weight:500;color:#111214">{{ lane.name }}</span> <span style="color:#4a4d52">settings</span></div><div style="display:flex;gap:8px"><button onClick="{{ openPauseModal }}" style="height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-size:12px;font-weight:500" style-hover="background:#f7f7f3">{{ lane.pauseLabel }}</button><button onClick="{{ toastSaved }}" style="height:28px;padding:0 10px;border:1px solid #111214;border-radius:6px;background:#111214;color:#fff;font-size:12px;font-weight:500" style-hover="background:#2a2c30">Save changes</button></div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 24px;padding:20px 16px">
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Lane name</span><input value="{{ lane.name }}" readOnly style="height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:0 10px;outline:0;background:#fff" style-focus="border-color:#111214"/></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Daily cap</span><div style="display:flex;align-items:center;height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:0 4px 0 10px;background:#fff"><span style="flex:1;font-variant-numeric:tabular-nums">{{ lane.cap }} applications</span><div style="display:flex;gap:2px"><button style="width:26px;height:26px;border:1px solid #e8e8e6;border-radius:4px;background:#fff" style-hover="background:#f7f7f3">-</button><button style="width:26px;height:26px;border:1px solid #e8e8e6;border-radius:4px;background:#fff" style-hover="background:#f7f7f3">+</button></div></div></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Titles</span><div style="min-height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:5px 6px;display:flex;gap:4px;flex-wrap:wrap;background:#fff"><sc-for list="{{ lane.titles }}" as="t" hint-placeholder-count="3"><span style="height:24px;padding:0 8px;border:1px solid #e8e8e6;border-radius:4px;background:#f7f7f3;font-size:12px;display:inline-flex;align-items:center;gap:6px">{{ t }}<span style="color:#8a8d93">×</span></span></sc-for></div></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Locations</span><div style="min-height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:5px 6px;display:flex;gap:4px;flex-wrap:wrap;background:#fff"><sc-for list="{{ lane.locations }}" as="t" hint-placeholder-count="2"><span style="height:24px;padding:0 8px;border:1px solid #e8e8e6;border-radius:4px;background:#f7f7f3;font-size:12px;display:inline-flex;align-items:center;gap:6px">{{ t }}<span style="color:#8a8d93">×</span></span></sc-for></div></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Minimum match score</span><div style="display:flex;align-items:center;gap:12px;height:36px"><div style="flex:1;height:2px;background:#e8e8e6;position:relative"><div style="position:absolute;left:0;top:0;height:100%;width:{{ lane.minPct }};background:#111214"></div><span style="position:absolute;left:{{ lane.minPct }};top:-6px;width:14px;height:14px;margin-left:-7px;border-radius:999px;background:#fff;border:1px solid #111214"></span></div><span style="width:36px;text-align:right;font-variant-numeric:tabular-nums;font-weight:500">{{ lane.min }}%</span></div></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Minimum salary</span><div style="display:flex;align-items:center;height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:0 10px;background:#fff;justify-content:space-between"><span>{{ lane.salary }}</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a8d93" stroke-width="1.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></label>
+                <label style="display:flex;flex-direction:column;gap:6px;grid-column:1 / -1"><span style="font-size:12px;font-weight:500">Exclude</span><div style="min-height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:5px 6px;display:flex;gap:4px;flex-wrap:wrap;background:#fff"><sc-for list="{{ lane.excludes }}" as="t" hint-placeholder-count="3"><span style="height:24px;padding:0 8px;border:1px solid #e8e8e6;border-radius:4px;background:#f7f7f3;font-size:12px;display:inline-flex;align-items:center;gap:6px">{{ t }}<span style="color:#8a8d93">×</span></span></sc-for><span style="color:#8a8d93;font-size:12px;align-self:center;padding-left:4px">Add a company, word or title</span></div></label>
+                <div style="grid-column:1 / -1;border-top:1px solid #e8e8e6;padding-top:16px;display:flex;flex-direction:column;gap:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:500">Pause on unknown questions</div><div style="font-size:12px;color:#8a8d93">If a form asks something not on your profile, the application waits for you instead of guessing.</div></div><span style="width:28px;height:16px;border-radius:999px;border:1px solid #111214;background:#111214;position:relative;flex:none"><span style="position:absolute;top:2px;left:13px;width:10px;height:10px;border-radius:999px;background:#fff"></span></span></div>
+                  <div style="display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:500">Send me each tailored resume before submitting</div><div style="font-size:12px;color:#8a8d93">Adds a review step. Applications are held for up to 12 hours.</div></div><span style="width:28px;height:16px;border-radius:999px;border:1px solid #d6d6d3;background:#fff;position:relative;flex:none"><span style="position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:999px;background:#d6d6d3"></span></span></div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;opacity:.5"><div><div style="font-weight:500">Apply on weekends</div><div style="font-size:12px;color:#8a8d93">Available on Max.</div></div><span style="width:28px;height:16px;border-radius:999px;border:1px solid #e8e8e6;background:#f7f7f3;position:relative;flex:none"><span style="position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:999px;background:#e8e8e6"></span></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- TRACKER -->
+      <sc-if value="{{ isTracker }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Tracker" style="display:flex;flex-direction:column;gap:20px;height:100%">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div><h1 style="margin:0;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-.02em">Tracker</h1><div style="color:#8a8d93;margin-top:2px">38 applications. Cards move when an employer reply is linked.</div></div>
+            <div style="display:flex;gap:8px"><button style="height:32px;padding:0 12px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500" style-hover="background:#f7f7f3">Hide empty stages</button><button onClick="{{ goDashboard }}" style="height:32px;padding:0 12px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500" style-hover="background:#f7f7f3">Table view</button></div>
+          </div>
+          <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;align-items:flex-start">
+            <sc-for list="{{ columns }}" as="c" hint-placeholder-count="6">
+              <div style="width:236px;flex:none;background:#f7f7f3;border:1px solid #e8e8e6;border-radius:8px;display:flex;flex-direction:column;min-height:200px">
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #d6d6d3;background:#e8e8e6;border-radius:8px 8px 0 0">
+                  <svg width="10" height="10" viewBox="0 0 10 10" style="color:{{ c.tag.iconColor }}"><path d="{{ c.tag.d }}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="{{ c.tag.dash }}"/><path d="{{ c.tag.f }}" fill="currentColor"/></svg>
+                  <span style="font-weight:500;font-size:12px">{{ c.label }}</span><span style="font-size:12px;color:#8a8d93;font-variant-numeric:tabular-nums">{{ c.count }}</span>
+                </div>
+                <div style="padding:8px;display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ c.cards }}" as="k" hint-placeholder-count="1">
+                    <article style="background:#fff;border:1px solid #e8e8e6;border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;cursor:grab" style-hover="border-color:#111214">
+                      <div style="display:flex;align-items:center;gap:8px"><img src="{{ k.logo }}" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:contain"/><span style="font-size:12px;color:#4a4d52;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ k.company }}</span><span style="font-size:11px;color:#8a8d93;font-variant-numeric:tabular-nums">{{ k.match }}%</span></div>
+                      <div style="font-weight:500;line-height:18px;text-wrap:pretty">{{ k.title }}</div>
+                      <div style="font-size:11px;color:#8a8d93;display:flex;justify-content:space-between;gap:8px"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ k.event }}</span><span style="white-space:nowrap">{{ k.applied }}</span></div>
+                    </article>
+                  </sc-for>
+                  <sc-if value="{{ c.empty }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#8a8d93;padding:6px 4px">Nothing here</div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- INBOX -->
+      <sc-if value="{{ isInbox }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Inbox" style="display:grid;grid-template-columns:200px 380px minmax(0,1fr);border:1px solid #e8e8e6;border-radius:8px;overflow:hidden;height:calc(100vh - 124px);min-height:600px;max-width:1400px;margin:0 auto">
+          <div style="border-right:1px solid #e8e8e6;background:#f7f7f3;display:flex;flex-direction:column;padding:12px 8px;gap:2px">
+            <div style="padding:4px 8px 10px;font-size:12px;color:#8a8d93">jack.miller@jobluvo.com</div>
+            <sc-for list="{{ folders }}" as="f" hint-placeholder-count="6">
+              <button onClick="{{ f.select }}" style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 8px;border:0;border-radius:4px;background:{{ f.bg }};font-weight:{{ f.weight }};text-align:left" style-hover="background:#f0f0ee"><span>{{ f.label }}</span><span style="font-size:12px;color:#8a8d93;font-variant-numeric:tabular-nums">{{ f.count }}</span></button>
+            </sc-for>
+          </div>
+          <div style="border-right:1px solid #e8e8e6;display:flex;flex-direction:column;min-height:0">
+            <div style="height:44px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid #e8e8e6"><div style="flex:1;display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid #e8e8e6;border-radius:6px;color:#8a8d93;font-size:12px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search mail</div></div>
+            <div style="flex:1;overflow:auto">
+              <sc-for list="{{ messages }}" as="m" hint-placeholder-count="6">
+                <div onClick="{{ m.select }}" style="display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid #e8e8e6;background:{{ m.bg }};cursor:pointer;border-left:2px solid {{ m.edge }}" style-hover="background:#f7f7f3">
+                  <img src="{{ m.logo }}" alt="" style="width:24px;height:24px;border-radius:6px;border:1px solid #e8e8e6;object-fit:contain;flex:none;margin-top:2px"/>
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                    <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:{{ m.weight }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.from }}</span><span style="font-size:11px;color:#8a8d93;white-space:nowrap">{{ m.when }}</span></div>
+                    <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:{{ m.weight }}">{{ m.subject }}</div>
+                    <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;gap:5px;height:18px;padding:0 6px 0 5px;border-radius:3px;font-size:11px;font-weight:500;white-space:nowrap;border:1px {{ m.tag.borderStyle }} {{ m.tag.border }};background:{{ m.tag.bg }};color:{{ m.tag.color }}"><svg width="9" height="9" viewBox="0 0 10 10"><path d="{{ m.tag.d }}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="{{ m.tag.dash }}"/><path d="{{ m.tag.f }}" fill="currentColor"/></svg>{{ m.tag.label }}</span><span style="font-size:12px;color:#8a8d93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.preview }}</span></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;min-height:0">
+            <div style="padding:16px 24px;border-bottom:1px solid #e8e8e6;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><h2 style="margin:0;font-size:18px;line-height:26px;font-weight:500;letter-spacing:-.01em;text-wrap:pretty">{{ msg.subject }}</h2><div style="display:flex;gap:6px;flex:none"><button style="height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-size:12px" style-hover="background:#f7f7f3">Archive</button><button style="height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-size:12px" style-hover="background:#f7f7f3">Move</button></div></div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#4a4d52"><img src="{{ msg.logo }}" alt="" style="width:20px;height:20px;border-radius:4px;border:1px solid #e8e8e6;object-fit:contain"/><span style="font-weight:500;color:#111214">{{ msg.from }}</span><span>{{ msg.email }}</span><span style="margin-left:auto;color:#8a8d93">{{ msg.date }}</span></div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#8a8d93;background:#f7f7f3;border:1px solid #e8e8e6;border-radius:6px;padding:6px 10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></svg>Linked to <span style="color:#111214;font-weight:500">{{ msg.linkedTitle }}</span><span>at {{ msg.from }}</span><span style="margin-left:auto">Moved to {{ msg.tag.label }}</span></div>
+            </div>
+            <div style="flex:1;overflow:auto;padding:24px;font-size:14px;line-height:22px;color:#111214;max-width:640px;text-wrap:pretty;white-space:pre-line">{{ msg.body }}</div>
+            <div style="border-top:1px solid #e8e8e6;padding:12px 24px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ msg.replies }}" as="r" hint-placeholder-count="2"><button style="height:26px;padding:0 10px;border:1px solid #d6d6d3;border-radius:999px;background:#fff;font-size:12px;color:#4a4d52" style-hover="border-color:#111214;color:#111214">{{ r }}</button></sc-for></div>
+              <div style="display:flex;align-items:center;gap:8px;border:1px solid #d6d6d3;border-radius:6px;padding:0 6px 0 12px;height:36px"><span style="flex:1;color:#8a8d93">Reply as Jack Miller</span><button style="height:26px;padding:0 10px;border:0;border-radius:4px;background:#111214;color:#fff;font-size:12px;font-weight:500">Send</button></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- PROFILE -->
+      <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Profile" style="display:flex;flex-direction:column;gap:20px;max-width:960px;margin:0 auto">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:16px"><div style="width:48px;height:48px;border-radius:999px;border:1px solid #d6d6d3;display:grid;place-items:center;font-weight:500;font-size:16px">JM</div><div><h1 style="margin:0;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-.02em">Jack Miller</h1><div style="color:#8a8d93;margin-top:2px">jack.miller@jobluvo.com. Head of Strategy and PMO. New York.</div></div></div>
+            <button style="height:32px;padding:0 12px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500" style-hover="background:#f7f7f3">Upload new resume</button>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px">
+            <section style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden;grid-column:1 / -1">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6"><div style="font-weight:500;color:#111214">Confirmed facts <span style="color:#4a4d52;font-weight:400">from Strategy_v3.pdf, 2 September</span></div><span style="font-size:12px;color:#4a4d52">Only what you confirm can appear on a tailored resume.</span></div>
+              <sc-for list="{{ facts }}" as="f" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:180px minmax(0,1fr) 110px;gap:16px;padding:{{ rowPad }} 16px;border-bottom:1px solid #e8e8e6;align-items:center" style-hover="background:#f7f7f3">
+                  <span style="font-size:12px;color:#8a8d93">{{ f.label }}</span>
+                  <span style="text-wrap:pretty">{{ f.value }}</span>
+                  <span style="display:flex;justify-content:flex-end"><span style="display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px 0 6px;border-radius:3px;font-size:11px;font-weight:500;border:1px solid {{ f.border }};color:{{ f.color }};background:#fff"><svg width="10" height="10" viewBox="0 0 10 10"><path d="{{ f.d }}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>{{ f.state }}</span></span>
+                </div>
+              </sc-for>
+            </section>
+            <section style="border:1px solid #e8e8e6;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="font-weight:500">Target roles</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ targetRoles }}" as="t" hint-placeholder-count="3"><span style="height:26px;padding:0 10px;border:1px solid #e8e8e6;border-radius:4px;background:#f7f7f3;font-size:12px;display:inline-flex;align-items:center">{{ t }}</span></sc-for></div>
+              <div style="font-size:12px;color:#8a8d93">Used for match scoring and by Maya. Lanes have their own rules.</div>
+            </section>
+            <section style="border:1px solid #e8e8e6;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="font-weight:500">Screening answers</div>
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+                <div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#4a4d52">Willing to relocate</span><span style="font-weight:500">No</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#4a4d52">Remote preference</span><span style="font-weight:500">Remote or New York</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#4a4d52">Notice period</span><span style="font-weight:500">4 weeks</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#4a4d52">US work authorization</span><span style="display:inline-flex;align-items:center;gap:6px;color:#111214;font-weight:500"><span style="width:6px;height:6px;border-radius:999px;background:#111214"></span>Not answered</span></div>
+              </div>
+              <button onClick="{{ openAnswerModal }}" style="height:30px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500;align-self:flex-start;padding:0 12px" style-hover="background:#f7f7f3">Answer 1 open question</button>
+            </section>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- SETTINGS -->
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Settings" style="display:grid;grid-template-columns:180px minmax(0,1fr);gap:32px;max-width:960px;margin:0 auto;align-items:start">
+          <nav style="display:flex;flex-direction:column;gap:2px;position:sticky;top:0">
+            <sc-for list="{{ settingsNav }}" as="s" hint-placeholder-count="5"><a href="#" style="height:30px;display:flex;align-items:center;padding:0 10px;border-radius:4px;background:{{ s.bg }};color:{{ s.color }};font-weight:{{ s.weight }}" style-hover="background:#f7f7f3">{{ s.label }}</a></sc-for>
+          </nav>
+          <div style="display:flex;flex-direction:column;gap:20px">
+            <h1 style="margin:0;font-size:22px;line-height:28px;font-weight:500;letter-spacing:-.02em">Settings</h1>
+            <section style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6;font-weight:500;color:#111214">Plan</div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr))">
+                <sc-for list="{{ plans }}" as="p" hint-placeholder-count="3">
+                  <div style="padding:16px;border-right:1px solid #e8e8e6;display:flex;flex-direction:column;gap:8px;background:{{ p.bg }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:500">{{ p.name }}</span><sc-if value="{{ p.current }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:500;height:18px;padding:0 6px;border-radius:3px;background:#111214;color:#fff;display:inline-flex;align-items:center">Current</span></sc-if></div>
+                    <div style="font-size:22px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ p.price }}<span style="font-size:12px;color:#8a8d93;font-weight:400;letter-spacing:0"> per month</span></div>
+                    <div style="font-size:12px;color:#4a4d52">{{ p.apps }}</div>
+                    <button style="height:28px;border:1px solid {{ p.btnBorder }};border-radius:6px;background:{{ p.btnBg }};color:{{ p.btnFg }};font-size:12px;font-weight:500;margin-top:4px" style-hover="opacity:.85">{{ p.cta }}</button>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="padding:12px 16px;border-top:1px solid #e8e8e6;display:flex;align-items:center;gap:12px;font-size:12px;color:#4a4d52"><span style="font-variant-numeric:tabular-nums">Usage this month: 212 of 300 applications</span><div style="flex:1;height:3px;background:#e8e8e6;border-radius:2px;overflow:hidden;max-width:240px"><div style="height:100%;width:71%;background:#111214"></div></div><span style="margin-left:auto">Renews 1 October</span></div>
+            </section>
+            <section style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6;font-weight:500;color:#111214">Notifications</div>
+              <sc-for list="{{ notifs }}" as="n" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-bottom:1px solid #e8e8e6">
+                  <div><div style="font-weight:500">{{ n.label }}</div><div style="font-size:12px;color:#8a8d93">{{ n.note }}</div></div>
+                  <button onClick="{{ n.toggle }}" style="width:28px;height:16px;border-radius:999px;border:1px solid {{ n.border }};background:{{ n.bg }};position:relative;flex:none;padding:0"><span style="position:absolute;top:2px;left:{{ n.left }};width:10px;height:10px;border-radius:999px;background:{{ n.knob }};transition:left 120ms"></span></button>
+                </div>
+              </sc-for>
+            </section>
+            <section style="border:1px solid #e8e8e6;border-radius:8px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #d6d6d3;background:#e8e8e6;font-weight:500;color:#111214">Account</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Name</span><input value="Jack Miller" readOnly style="height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:0 10px;outline:0" style-focus="border-color:#111214"/></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Jobluvo address</span><input value="jack.miller@jobluvo.com" readOnly style="height:36px;border:1px solid #e8e8e6;border-radius:6px;padding:0 10px;outline:0;background:#f7f7f3;color:#8a8d93"/></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Forward replies to</span><input value="jack@example.com" readOnly style="height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:0 10px;outline:0" style-focus="border-color:#111214"/></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500">Time zone</span><div style="display:flex;align-items:center;height:36px;border:1px solid #d6d6d3;border-radius:6px;padding:0 10px;justify-content:space-between"><span>America, New York</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a8d93" stroke-width="1.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></label>
+              </div>
+              <div style="padding:12px 16px;border-top:1px solid #e8e8e6;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#8a8d93">Deleting removes your resume, applications and inbox. Employers keep what you sent them.</span><button style="height:28px;padding:0 10px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;color:#b4423f;font-size:12px;font-weight:500" style-hover="border-color:#b4423f">Delete account</button></div>
+            </section>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:fixed;inset:0;background:rgba(17,18,20,.32);display:grid;place-items:center;z-index:50">
+      <div onClick="{{ stop }}" style="width:440px;max-width:calc(100% - 48px);background:#fff;border:1px solid #d6d6d3;border-radius:12px;display:flex;flex-direction:column">
+        <div style="padding:16px 20px;border-bottom:1px solid #e8e8e6;display:flex;justify-content:space-between;align-items:center"><div style="font-weight:500;font-size:16px">{{ modal.title }}</div><button onClick="{{ closeModal }}" style="width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#8a8d93" style-hover="background:#f7f7f3;color:#111214">×</button></div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:12px;color:#4a4d52;font-size:14px;line-height:21px;text-wrap:pretty">
+          <div>{{ modal.body }}</div>
+          <sc-if value="{{ modal.hasOptions }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ modal.options }}" as="o" hint-placeholder-count="3"><label style="display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;border:1px solid {{ o.border }};border-radius:6px;color:#111214;cursor:pointer" style-hover="background:#f7f7f3"><span style="width:14px;height:14px;border-radius:999px;border:1px solid #111214;display:grid;place-items:center"><span style="width:8px;height:8px;border-radius:999px;background:{{ o.dot }}"></span></span>{{ o.label }}</label></sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid #e8e8e6;display:flex;justify-content:flex-end;gap:8px"><button onClick="{{ closeModal }}" style="height:32px;padding:0 12px;border:1px solid #d6d6d3;border-radius:6px;background:#fff;font-weight:500" style-hover="background:#f7f7f3">Cancel</button><button onClick="{{ confirmModal }}" style="height:32px;padding:0 12px;border:1px solid #111214;border-radius:6px;background:#111214;color:#fff;font-weight:500" style-hover="background:#2a2c30">{{ modal.cta }}</button></div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Toast -->
+  <sc-if value="{{ toastOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111214;color:#fff;border-radius:8px;padding:10px 12px 10px 14px;display:flex;align-items:center;gap:12px;font-size:13px;z-index:60;animation:jlToast 200ms cubic-bezier(.2,.8,.2,1)"><span>{{ toastText }}</span><button onClick="{{ closeToast }}" style="border:0;background:transparent;color:#b6b7b3;font-size:12px;padding:0 4px" style-hover="color:#fff">Undo</button></div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;compact&quot;,&quot;regular&quot;],&quot;default&quot;:&quot;compact&quot;,&quot;tsType&quot;:&quot;'compact' | 'regular'&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;panelOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+const TOKEN = 'pk_S5se7z4MRFmirWigT4dW_Q';
+const logo = d => `https://img.logo.dev/${d}?token=${TOKEN}&size=64&format=png`;
+const CIRCLE = 'M5 1a4 4 0 1 0 0 8a4 4 0 1 0 0-8';
+const X = 'M2.5 2.5l5 5M7.5 2.5l-5 5';
+const TAGS = {
+  submitted: {label:'Submitted', d:CIRCLE, f:'', tier:'default'},
+  needs: {label:'Needs you', d:CIRCLE, f:'M4.4 2.6h1.2v3.2H4.4zM4.4 6.6h1.2v1.2H4.4z', tier:'attention'},
+  held: {label:'Held for review', d:'M3.5 2.5v5M6.5 2.5v5', f:'', tier:'attention'},
+  verifying: {label:'Verifying', d:CIRCLE, f:'M5 1a4 4 0 0 1 0 8z', tier:'default'},
+  failed: {label:'Failed', d:X, f:'', tier:'danger'},
+  applied: {label:'Applied', d:CIRCLE, f:CIRCLE, tier:'default'},
+  replied: {label:'Replied', d:'M6 2.5L3 5l3 2.5M3 5h4.5', f:'', tier:'default'},
+  interviewing: {label:'Interviewing', d:'M3.5 2.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5M6.5 2.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5', f:'', tier:'strong'},
+  offer: {label:'Offer', d:'M2.5 5.2l1.8 1.8L7.7 3.5', f:'', tier:'inverse'},
+  rejected: {label:'Rejected', d:X, f:'', tier:'muted-danger'},
+  ghosted: {label:'Ghosted', d:CIRCLE, f:'', tier:'ghost'},
+};
+const TIER = {
+  default: {border:'#d6d6d3', borderStyle:'solid', bg:'#fff', color:'#4a4d52', iconColor:'#4a4d52', dash:'0'},
+  strong: {border:'#111214', borderStyle:'solid', bg:'#fff', color:'#111214', iconColor:'#111214', dash:'0'},
+  attention: {border:'#111214', borderStyle:'solid', bg:'#111214', color:'#fff', iconColor:'#111214', dash:'0'},
+  inverse: {border:'#111214', borderStyle:'solid', bg:'#111214', color:'#fff', iconColor:'#111214', dash:'0'},
+  danger: {border:'#d6d6d3', borderStyle:'solid', bg:'#fff', color:'#b4423f', iconColor:'#b4423f', dash:'0'},
+  'muted-danger': {border:'#e8e8e6', borderStyle:'solid', bg:'#fff', color:'#8a8d93', iconColor:'#8a8d93', dash:'0'},
+  ghost: {border:'#d6d6d3', borderStyle:'dashed', bg:'#fff', color:'#8a8d93', iconColor:'#8a8d93', dash:'1.6 1.6'},
+};
+const tag = k => ({...TAGS[k], ...TIER[TAGS[k].tier], key:k});
+const STAGES = ['submitted','needs','held','verifying','failed','applied','replied','interviewing','offer','rejected','ghosted'];
+
+const JOBS = [
+  {co:'Datadog', dom:'datadoghq.com', title:'Director, Strategy', loc:'New York or remote', sal:'USD 190k to 240k', match:88, posted:'2 h ago', ats:'Greenhouse', why:['Director title matches your target','Cost program experience asked for','Wants SaaS pricing exposure you do not list']},
+  {co:'Spotify', dom:'spotify.com', title:'Head of Strategy and Operations', loc:'New York', sal:'USD 180k to 220k', match:84, posted:'4 h ago', ats:'Lever', why:['Same scope as your current role','Four business units, same as yours','Prefers media background']},
+  {co:'Shopify', dom:'shopify.com', title:'Director, Business Operations', loc:'Remote, US', sal:'USD 170k to 210k', match:81, posted:'yesterday', ats:'Workday', why:['Remote, in your lane rules','PMO leadership listed first','Asks for ecommerce experience']},
+  {co:'Salesforce', dom:'salesforce.com', title:'Senior Manager, Business Strategy', loc:'San Francisco', sal:'USD 165k to 200k', match:79, posted:'yesterday', ats:'Workday', why:['Annual planning, which you own today','Cross functional programs','Senior manager is a step down in title']},
+  {co:'Snowflake', dom:'snowflake.com', title:'Strategy Director, Sales Operations', loc:'Remote, US', sal:'USD 175k to 215k', match:77, posted:'2 days ago', ats:'Workday', why:['Director title','Remote','Sales operations is adjacent to your track']},
+  {co:'Nvidia', dom:'nvidia.com', title:'Strategic Programs Lead', loc:'Santa Clara', sal:'USD 168k to 230k', match:74, posted:'2 days ago', ats:'Workday', why:['Program leadership under cost pressure','Executive reporting','On site, outside your locations']},
+  {co:'Uber', dom:'uber.com', title:'Senior Manager, Strategic Finance', loc:'New York', sal:'USD 160k to 195k', match:72, posted:'3 days ago', ats:'Greenhouse', why:['New York','P&L ownership','Finance heavier than your resume']},
+  {co:'Stripe', dom:'stripe.com', title:'Strategy and Operations Lead', loc:'New York', sal:'USD 175k to 215k', match:71, posted:'3 days ago', ats:'Greenhouse', why:['Operations and strategy split like yours','Written case study valued','Lead title, not director']},
+  {co:'Airbnb', dom:'airbnb.com', title:'Strategy and Planning Lead', loc:'San Francisco', sal:'USD 170k to 205k', match:69, posted:'4 days ago', ats:'Greenhouse', why:['Planning cycle ownership','Board materials','San Francisco only']},
+  {co:'Mistral AI', dom:'mistral.ai', title:'Chief of Staff', loc:'Paris or remote', sal:'EUR 140k to 170k', match:66, posted:'5 days ago', ats:'Ashby', why:['Broad operating role','Remote possible','French preferred']},
+].map(j => ({...j, company:j.co, location:j.loc, salary:j.sal, logo:logo(j.dom), why1:j.why[0], why2:j.why[1], why3:j.why[2], matchDeg:Math.round(j.match*3.6)+'deg'}));
+const J = n => JOBS.find(j => j.co === n);
+
+const APPS = [
+  {j:J('Salesforce'), status:'needs', event:'Form asks about US work authorization', applied:'12 Sep'},
+  {j:J('Datadog'), status:'interviewing', event:'Second round booked for 18 Sep', applied:'3 Sep'},
+  {j:J('Spotify'), status:'offer', event:'Offer letter received', applied:'22 Aug'},
+  {j:J('Stripe'), status:'submitted', event:'Submitted, receipt saved', applied:'Today'},
+  {j:J('Shopify'), status:'verifying', event:'Waiting for confirmation email', applied:'Today'},
+  {j:J('Snowflake'), status:'held', event:'Tailored resume ready for your review', applied:'Today'},
+  {j:J('Nvidia'), status:'applied', event:'Confirmation received', applied:'11 Sep'},
+  {j:J('Uber'), status:'replied', event:'Recruiter asked for a call this week', applied:'8 Sep'},
+  {j:J('Mistral AI'), status:'failed', event:'Portal rejected the file type. Retry queued', applied:'Today'},
+  {j:J('Airbnb'), status:'rejected', event:'Position filled internally', applied:'26 Aug'},
+  {j:{...J('Stripe'), title:'Product Operations Manager', match:64}, status:'ghosted', event:'No reply for 30 days', applied:'14 Aug'},
+];
+
+const MESSAGES = [
+  {app:0, from:'Salesforce', email:'recruiting@salesforce.com', subject:'One more question about your application', when:'09:12', date:'Today, 09:12', folder:'needs', unread:true, preview:'Before we can move forward we need to confirm', body:'Hi Jack,\n\nThank you for applying to the Senior Manager, Business Strategy role. Before we can move forward we need to confirm whether you are authorized to work in the United States without sponsorship.\n\nPlease reply to this email or update your application.\n\nBest,\nSalesforce Talent Team', replies:['Yes, authorized without sponsorship','I will need sponsorship','Ask Maya what to say']},
+  {app:1, from:'Datadog', email:'talent@datadoghq.com', subject:'Second round: Director, Strategy', when:'Yesterday', date:'Sunday 14 September, 17:40', folder:'interviews', unread:true, preview:'We would like to invite you to a second conversation', body:'Hi Jack,\n\nThe team enjoyed your first conversation. We would like to invite you to a second round with our VP of Strategy on Thursday 18 September at 14:00 ET.\n\nThe session runs 45 minutes and will focus on a case about pricing for a new product line.\n\nLet us know if the time works.\n\nKind regards,\nDatadog Talent', replies:['Confirm Thursday 14:00','Propose another time','Prepare with Maya']},
+  {app:7, from:'Uber', email:'recruiting@uber.com', subject:'Quick call this week?', when:'Fri', date:'Friday 12 September, 11:05', folder:'all', unread:false, preview:'I would love to find 20 minutes to talk', body:'Hi Jack,\n\nI saw your application for Senior Manager, Strategic Finance. I would love to find 20 minutes to talk about the role and your background this week.\n\nDo any of these work: Tuesday 10:00, Wednesday 15:00, Thursday 09:30 ET?\n\nThanks,\nPriya, Uber Recruiting', replies:['Tuesday 10:00 works','Send my availability']},
+  {app:2, from:'Spotify', email:'people@spotify.com', subject:'Your offer: Head of Strategy and Operations', when:'Wed', date:'Wednesday 10 September, 16:20', folder:'offers', unread:false, preview:'Please find your offer letter attached', body:'Dear Jack,\n\nPlease find your offer letter attached for the role of Head of Strategy and Operations in New York. The offer is valid until 24 September.\n\nYour recruiter will call tomorrow to walk through the details.\n\nWarm regards,\nSpotify People Team', replies:['Ask Daniel to review the offer','Request a call']},
+  {app:9, from:'Airbnb', email:'no-reply@airbnb.com', subject:'Update on your application', when:'26 Aug', date:'Tuesday 26 August, 08:00', folder:'rejections', unread:false, preview:'We have decided to move forward with an internal candidate', body:'Hi Jack,\n\nThank you for your interest in the Strategy and Planning Lead role. We have decided to move forward with an internal candidate.\n\nWe will keep your profile on file.\n\nAirbnb Recruiting', replies:['Archive']},
+  {app:6, from:'Nvidia', email:'careers@nvidia.com', subject:'We received your application', when:'11 Sep', date:'Thursday 11 September, 21:03', folder:'all', unread:false, preview:'This confirms we received your application for', body:'Hello Jack,\n\nThis confirms we received your application for Strategic Programs Lead. Our team reviews applications on a rolling basis.\n\nNvidia Careers', replies:['Archive']},
+];
+
+class Component extends DCLogic {
+  state = {
+    screen: 'dashboard', jobsView: 'list', density: 'compact', panelOpen: true, agent: 'maya', menuOpen: false,
+    swipeIndex: 0, stamp: null, swiped: [], modal: null, toast: null, folder: 'all', msg: 0, lane: 0, selectedApp: -1,
+    laneOn: [true, true, false], notifs: [true, true, false, true],
+  };
+  go = s => () => this.setState({ screen: s, menuOpen: false, jobsView: s === 'jobs' ? this.state.jobsView : this.state.jobsView });
+  toast(text) { clearTimeout(this._t); this.setState({ toast: text }); this._t = setTimeout(() => this.setState({ toast: null }), 3200); }
+  swipe(kind) {
+    if (this.state.stamp) return;
+    const job = JOBS[this.state.swipeIndex % JOBS.length];
+    this.setState({ stamp: kind });
+    setTimeout(() => {
+      this.setState(s => ({ stamp: null, swipeIndex: s.swipeIndex + 1, swiped: kind === 'apply' ? [job, ...s.swiped] : s.swiped }));
+      if (kind === 'apply') this.toast(`Applying to ${job.company}. Resume tailored, submitting now.`);
+      if (kind === 'save') this.toast(`Saved ${job.title} for later.`);
+    }, 380);
+  }
+  renderVals() {
+    const s = this.state;
+    const p = this.props;
+    const density = p.density ?? s.density;
+    const rowPad = density === 'compact' ? '6px' : '10px';
+    const panelOpen = p.panelOpen ?? s.panelOpen;
+    const agent = s.agent;
+    const seg = on => on ? { bg: '#fff', fg: '#111214' } : { bg: 'transparent', fg: '#8a8d93' };
+    const tabs = [['dashboard','Dashboard'],['jobs','Jobs'],['auto','Auto Apply'],['tracker','Tracker'],['inbox','Inbox']].map(([k,label]) => ({ label, go: this.go(k), underline: s.screen === k ? '#111214' : 'transparent', color: s.screen === k ? '#111214' : '#4a4d52' }));
+    const threads = {
+      maya: [
+        { me: true, text: 'Director roles in strategy, New York or remote. Skip anything mostly pre-sales.' },
+        { me: false, text: 'Done. That rules out 11 of today\u2019s 42 matches. The 6 best are at the top of Jobs, and I added "pre-sales" to your Strategy director lane.' },
+        { me: false, text: 'Datadog booked a second round for Thursday. It is a pricing case. Want a 30 minute mock tonight?' },
+      ],
+      daniel: [
+        { me: false, text: 'Spotify\u2019s offer is at 185k. Your target was 185k and the market 90th percentile for this role is 240k. There is room to ask.' },
+        { me: true, text: 'What would you counter with?' },
+        { me: false, text: '205k base with the same equity. Anchor on the four business unit scope and the cost program you delivered a quarter early. I drafted the note in your inbox.' },
+      ],
+    };
+    const thread = threads[agent].map(m => ({ text: m.text, justify: m.me ? 'flex-end' : 'flex-start', bg: m.me ? '#f0f0ee' : '#fff', border: m.me ? '#f0f0ee' : '#e8e8e6' }));
+    const suggestions = agent === 'maya' ? ['Yes, mock tonight', 'Show the 6 matches', 'Why 88% for Datadog?'] : ['Review the offer', 'Update my plan', 'Practice the counter'];
+    const laneDefs = [
+      { name: 'Strategy director, US remote', rules: 'Director or Head. Remote or New York. 75% match or more. Excludes pre-sales.', cap: 6, used: 5, total: 27, titles: ['Director, Strategy', 'Head of Strategy', 'Director, Business Operations'], locations: ['Remote, US', 'New York'], min: 75, salary: 'USD 170,000', excludes: ['pre-sales', 'consulting', 'Accenture'] },
+      { name: 'Ops lead, New York', rules: 'Strategy and Operations Lead. New York only. 70% or more.', cap: 4, used: 3, total: 9, titles: ['Strategy and Operations Lead', 'Business Operations Lead'], locations: ['New York'], min: 70, salary: 'USD 160,000', excludes: ['agency'] },
+      { name: 'Chief of staff, remote', rules: 'Chief of Staff. Remote. 65% or more. Paused by you on 9 Sep.', cap: 2, used: 0, total: 2, titles: ['Chief of Staff'], locations: ['Remote'], min: 65, salary: 'USD 150,000', excludes: [] },
+    ];
+    const lanes = laneDefs.map((l, i) => {
+      const on = s.laneOn[i];
+      return { ...l, on, status: on ? 'Running' : 'Paused', pct: Math.round(l.used / l.cap * 100) + '%', minPct: l.min + '%',
+        toggleBg: on ? '#111214' : '#fff', toggleBorder: on ? '#111214' : '#d6d6d3', knobLeft: on ? '13px' : '2px', knobBg: on ? '#fff' : '#d6d6d3',
+        rowBg: s.lane === i ? '#f7f7f3' : '#fff', rowEdge: s.lane === i ? '#111214' : 'transparent', pauseLabel: on ? 'Pause lane' : 'Resume lane',
+        toggle: e => { e.stopPropagation(); this.setState(st => { const a = [...st.laneOn]; a[i] = !a[i]; return { laneOn: a }; }); this.toast(`${l.name} ${on ? 'paused' : 'running'}.`); },
+        select: () => this.setState({ lane: i }) };
+    });
+    const lane = lanes[s.lane];
+    const applications = APPS.map((a, i) => ({ ...a.j, title: a.j.title, tag: tag(a.status), event: a.event, applied: a.applied, rowBg: s.selectedApp === i ? '#f0f0ee' : '#fff', select: () => this.setState({ selectedApp: i }) }));
+    const columns = STAGES.map(k => { const cards = applications.filter(a => a.tag.key === k); return { label: TAGS[k].label, tag: tag(k), count: cards.length, cards, empty: cards.length === 0 }; });
+    const folderDefs = [['all', 'All mail'], ['needs', 'Needs you'], ['interviews', 'Interviews'], ['offers', 'Offers'], ['rejections', 'Rejections'], ['archive', 'Archive']];
+    const folders = folderDefs.map(([k, label]) => ({ label, count: k === 'all' ? MESSAGES.length : k === 'archive' ? 14 : MESSAGES.filter(m => m.folder === k).length, bg: s.folder === k ? '#fff' : 'transparent', weight: s.folder === k ? 500 : 400, select: () => this.setState({ folder: k, msg: 0 }) }));
+    const visible = MESSAGES.map((m, i) => ({ ...m, i })).filter(m => s.folder === 'all' || s.folder === 'archive' ? true : m.folder === s.folder);
+    const messages = visible.map((m, vi) => ({ ...m, logo: APPS[m.app].j.logo, tag: tag(APPS[m.app].status), weight: m.unread ? 500 : 400, bg: s.msg === vi ? '#f0f0ee' : '#fff', edge: s.msg === vi ? '#111214' : 'transparent', select: () => this.setState({ msg: vi }) }));
+    const msg0 = messages[s.msg] || messages[0];
+    const msg = { ...msg0, linkedTitle: APPS[msg0.app].j.title };
+    const swipeJob = JOBS[s.swipeIndex % JOBS.length];
+    const swipeTransform = s.stamp === 'apply' ? 'translateX(140%) rotate(12deg)' : s.stamp === 'skip' ? 'translateX(-140%) rotate(-12deg)' : s.stamp === 'save' ? 'translateY(-30px) scale(.97)' : 'none';
+    const modals = {
+      answer: { title: 'Answer for Salesforce', body: 'The form asks: Are you authorized to work in the United States without sponsorship? Your answer is saved to your profile and reused on future forms.', cta: 'Send answer', hasOptions: true, options: ['Yes, without sponsorship', 'Yes, with sponsorship now or in future', 'No'].map((label, i) => ({ label, border: i === 0 ? '#111214' : '#d6d6d3', dot: i === 0 ? '#111214' : 'transparent' })), toast: 'Answer sent to Salesforce. Application resumed.' },
+      pause: { title: `${lane.on ? 'Pause' : 'Resume'} ${lane.name}?`, body: lane.on ? 'Applications already in progress will finish. No new ones start until you resume.' : 'The lane starts applying again inside today\u2019s remaining cap.', cta: lane.on ? 'Pause lane' : 'Resume lane', hasOptions: false, options: [], toast: `${lane.name} ${lane.on ? 'paused' : 'running'}.`, action: () => this.setState(st => { const a = [...st.laneOn]; a[s.lane] = !a[s.lane]; return { laneOn: a }; }) },
+    };
+    const modal = s.modal ? modals[s.modal] : { title: '', body: '', cta: '', hasOptions: false, options: [] };
+    const factDefs = [['Current role', 'Head of Strategy and PMO, Meridian Health. 2021 to now', 'Confirmed'], ['Previous role', 'Senior Manager, Strategy, Deloitte. 2016 to 2021', 'Confirmed'], ['Education', 'MBA, Columbia Business School, 2016', 'Confirmed'], ['Key result', 'Led a three year cost program across four business units. Target reached a quarter early', 'Confirmed'], ['Certification', 'PMP, listed on resume, expiry date missing', 'Check'], ['Languages', 'English, Spanish', 'Confirmed']];
+    const facts = factDefs.map(([label, value, state]) => ({ label, value, state, border: state === 'Check' ? '#111214' : '#d6d6d3', color: state === 'Check' ? '#111214' : '#4a4d52', d: state === 'Check' ? 'M5 2v3.5M5 7.5v.5' : 'M2.5 5.2l1.8 1.8L7.7 3.5' }));
+    const notifDefs = [['Employer replies', 'Email and in app, as they arrive'], ['Questions that need you', 'Email immediately. A held application waits up to 48 hours'], ['Daily digest', 'One email at 08:00 with new matches and lane activity'], ['Interview reminders', '24 hours and 1 hour before']];
+    const notifs = notifDefs.map(([label, note], i) => { const on = s.notifs[i]; return { label, note, bg: on ? '#111214' : '#fff', border: on ? '#111214' : '#d6d6d3', left: on ? '13px' : '2px', knob: on ? '#fff' : '#d6d6d3', toggle: () => this.setState(st => { const a = [...st.notifs]; a[i] = !a[i]; return { notifs: a }; }) }; });
+    return {
+      panelOpen, panelClosed: !panelOpen, panelWidth: panelOpen ? '320px' : '48px', togglePanel: () => this.setState({ panelOpen: !panelOpen }),
+      agentName: agent === 'maya' ? 'Maya' : 'Daniel', agentRole: agent === 'maya' ? 'Job search and interview prep' : 'Career coach',
+      pickMaya: () => this.setState({ agent: 'maya' }), pickDaniel: () => this.setState({ agent: 'daniel' }),
+      openMaya: () => this.setState({ agent: 'maya', panelOpen: true }), openDaniel: () => this.setState({ agent: 'daniel', panelOpen: true }),
+      mayaTabBg: seg(agent === 'maya').bg, mayaTabFg: seg(agent === 'maya').fg, danielTabBg: seg(agent === 'daniel').bg, danielTabFg: seg(agent === 'daniel').fg,
+      thread, suggestions, tabs,
+      compactBg: seg(density === 'compact').bg, compactFg: seg(density === 'compact').fg, regularBg: seg(density === 'regular').bg, regularFg: seg(density === 'regular').fg,
+      setCompact: () => this.setState({ density: 'compact' }), setRegular: () => this.setState({ density: 'regular' }), rowPad,
+      menuOpen: s.menuOpen, toggleMenu: () => this.setState({ menuOpen: !s.menuOpen }),
+      goDashboard: this.go('dashboard'), goJobs: this.go('jobs'), goAuto: this.go('auto'), goTracker: this.go('tracker'), goInbox: this.go('inbox'), goProfile: this.go('profile'), goSettings: this.go('settings'),
+      goJobsSwipe: () => this.setState({ screen: 'jobs', jobsView: 'swipe' }),
+      isDashboard: s.screen === 'dashboard', isJobs: s.screen === 'jobs', isAuto: s.screen === 'auto', isTracker: s.screen === 'tracker', isInbox: s.screen === 'inbox', isProfile: s.screen === 'profile', isSettings: s.screen === 'settings',
+      stats: [
+        { label: 'Applied this week', value: '23', note: '16 by lanes, 7 by you' },
+        { label: 'Replies', value: '4', note: '2 interviews, 1 offer' },
+        { label: 'Needs you', value: '1', note: 'Salesforce, work authorization' },
+        { label: 'New matches', value: '42', note: '6 above 80%' },
+      ],
+      topMatches: JOBS.slice(0, 5), toastApplied: e => { e && e.stopPropagation && e.stopPropagation(); this.toast('Applying. Resume tailored, submitting now.'); },
+      lanes, lane, activity: [
+        { text: 'Stripe application submitted. Receipt saved.', when: '08:41', dot: '#111214' },
+        { text: 'Salesforce asked about work authorization. Held.', when: '09:12', dot: '#fff' },
+        { text: 'Datadog booked a second round for Thursday.', when: 'Yesterday', dot: '#111214' },
+        { text: 'Lane Strategy director applied to Shopify.', when: 'Yesterday', dot: '#111214' },
+        { text: 'Mistral AI portal rejected the file type. Retry queued.', when: 'Yesterday', dot: '#fff' },
+      ],
+      applications,
+      jobs: JOBS, jobsList: s.jobsView === 'list', jobsSwipe: s.jobsView === 'swipe',
+      setList: () => this.setState({ jobsView: 'list' }), setSwipe: () => this.setState({ jobsView: 'swipe' }),
+      listBg: seg(s.jobsView === 'list').bg, listFg: seg(s.jobsView === 'list').fg, swipeBg: seg(s.jobsView === 'swipe').bg, swipeFg: seg(s.jobsView === 'swipe').fg,
+      jobFilters: [['Director or Head', true], ['Remote or New York', true], ['USD 160k+', true], ['Posted this week', false], ['Hide applied', false]].map(([label, on]) => ({ label, border: on ? '#111214' : '#d6d6d3', bg: on ? '#111214' : '#fff', color: on ? '#fff' : '#4a4d52' })),
+      swipeJob, swipeTransform, swipePos: (s.swipeIndex % JOBS.length) + 1, applyStampOpacity: s.stamp === 'apply' ? 1 : 0, skipStampOpacity: s.stamp === 'skip' ? 1 : 0,
+      swipeApply: () => this.swipe('apply'), swipeSkip: () => this.swipe('skip'), swipeSave: () => this.swipe('save'), swipedApplied: s.swiped, noSwiped: s.swiped.length === 0,
+      openPauseModal: () => this.setState({ modal: 'pause' }), openAnswerModal: () => this.setState({ modal: 'answer' }), toastSaved: () => this.toast('Lane settings saved.'),
+      columns, folders, messages, msg,
+      facts, targetRoles: ['Director, Strategy', 'Head of Strategy and Operations', 'Director, Business Operations', 'Chief of Staff'],
+      settingsNav: [['Plan', true], ['Notifications', false], ['Account', false], ['Connected email', false], ['Privacy', false]].map(([label, on]) => ({ label, bg: on ? '#f0f0ee' : 'transparent', color: on ? '#111214' : '#4a4d52', weight: on ? 500 : 400 })),
+      plans: [
+        { name: 'Starter', price: '$19', apps: '100 applications a month. 1 lane.', current: false, bg: '#fff', btnBorder: '#d6d6d3', btnBg: '#fff', btnFg: '#111214', cta: 'Downgrade' },
+        { name: 'Pro', price: '$39', apps: '300 applications a month. 3 lanes. Maya and Daniel.', current: true, bg: '#f7f7f3', btnBorder: '#e8e8e6', btnBg: '#f7f7f3', btnFg: '#8a8d93', cta: 'Your plan' },
+        { name: 'Max', price: '$79', apps: 'Unlimited applications. 10 lanes. Weekend applying.', current: false, bg: '#fff', btnBorder: '#111214', btnBg: '#111214', btnFg: '#fff', cta: 'Upgrade' },
+      ],
+      notifs,
+      modalOpen: !!s.modal, modal, closeModal: () => this.setState({ modal: null }), stop: e => e.stopPropagation(),
+      confirmModal: () => { if (modal.action) modal.action(); this.setState({ modal: null }); this.toast(modal.toast); },
+      toastOpen: !!s.toast, toastText: s.toast || '', closeToast: () => this.setState({ toast: null }),
+    };
+  }
+}
+</script>
+</body>
+</html>

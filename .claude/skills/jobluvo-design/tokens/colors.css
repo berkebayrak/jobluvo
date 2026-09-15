@@ -1,0 +1,41 @@
+:root {
+  /* Base: warm grey ramp, black, white. No hues except logos and one muted red. */
+  --jl-white: #ffffff;
+  --jl-grey-50: #f7f7f3;
+  --jl-grey-100: #f0f0ee;
+  --jl-grey-200: #e8e8e6;
+  --jl-grey-300: #d6d6d3;
+  --jl-grey-400: #b6b7b3;
+  --jl-grey-500: #8a8d93;
+  --jl-grey-700: #4a4d52;
+  --jl-grey-800: #2a2c30;
+  --jl-grey-900: #111214;
+  --jl-red: #b4423f;
+  --jl-red-soft: #f7ecec;
+
+  /* Semantic: surfaces (background steps replace shadows) */
+  --surface-0: var(--jl-white);      /* page, cards */
+  --surface-1: var(--jl-grey-50);    /* hover, sunken areas, kanban columns */
+  --surface-2: var(--jl-grey-100);   /* selected rows, pressed buttons */
+  --surface-3: var(--jl-grey-200);   /* thumb tracks, dividers as fills */
+  --surface-header: var(--jl-grey-200); /* card and table headers, ink text, grey-300 rule below. Two steps above hover so they never blur. */
+  --surface-inverse: var(--jl-grey-900);
+
+  /* Semantic: borders */
+  --border: var(--jl-grey-200);
+  --border-strong: var(--jl-grey-300);
+  --border-focus: var(--jl-grey-900);
+
+  /* Semantic: text */
+  --fg: var(--jl-grey-900);
+  --fg-muted: var(--jl-grey-700);
+  --fg-subtle: var(--jl-grey-500);
+  --fg-disabled: var(--jl-grey-400);
+  --fg-inverse: var(--jl-white);
+
+  /* Semantic: interactive */
+  --accent: var(--jl-grey-900);
+  --accent-hover: var(--jl-grey-800);
+  --danger: var(--jl-red);
+  --danger-soft: var(--jl-red-soft);
+}

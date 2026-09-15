@@ -1,0 +1,66 @@
+[
+ {
+  "alt": "Workday",
+  "file": "assets/ats/workday.png"
+ },
+ {
+  "alt": "Greenhouse",
+  "file": "assets/ats/greenhouse.png"
+ },
+ {
+  "alt": "Lever",
+  "file": "assets/ats/lever.png"
+ },
+ {
+  "alt": "Ashby",
+  "file": "assets/ats/ashby.png"
+ },
+ {
+  "alt": "iCIMS",
+  "file": "assets/ats/icims.png"
+ },
+ {
+  "alt": "SmartRecruiters",
+  "file": "assets/ats/smartrecruiters.png"
+ },
+ {
+  "alt": "Workable",
+  "file": "assets/ats/workable.png"
+ },
+ {
+  "alt": "Oracle",
+  "file": "assets/ats/oracle.png"
+ },
+ {
+  "alt": "ADP",
+  "file": "assets/ats/adp.png"
+ },
+ {
+  "alt": "Rippling",
+  "file": "assets/ats/rippling.png"
+ },
+ {
+  "alt": "BambooHR",
+  "file": "assets/ats/bamboohr.png"
+ },
+ {
+  "alt": "BreezyHR",
+  "file": "assets/ats/breezyhr.png"
+ },
+ {
+  "alt": "JazzHR",
+  "file": "assets/ats/jazzhr.png"
+ },
+ {
+  "alt": "Zoho Recruit",
+  "file": "assets/ats/zoho-recruit.png"
+ },
+ {
+  "alt": "Indeed",
+  "file": "assets/ats/indeed.png"
+ },
+ {
+  "alt": "Glassdoor",
+  "file": "assets/ats/glassdoor.png"
+ }
+]

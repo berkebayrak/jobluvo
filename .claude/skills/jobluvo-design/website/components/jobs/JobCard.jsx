@@ -1,0 +1,18 @@
+import React from "react";
+import { useHover } from "../useHover.js";
+import { Button } from "../core/Button.jsx";
+export function JobCard({ company, logo, title, location, salary, ats, posted, match, reasons = [], onApply, onSave, onSkip }) {
+  const [{ hover }, h] = useHover();
+  return (
+    <article {...h} style={{ border: `1px solid ${hover ? "var(--border-strong)" : "var(--border)"}`, borderRadius: "var(--radius-md)", padding: 16, display: "flex", flexDirection: "column", gap: 12, background: hover ? "var(--surface-1)" : "var(--surface-0)", fontFamily: "var(--font-sans)", fontSize: "var(--text-sm)", lineHeight: "var(--leading-sm)" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+        {logo && <img src={logo} alt={company} style={{ width: 32, height: 32, borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", objectFit: "contain", background: "var(--surface-0)", flex: "none" }} />}
+        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: "var(--text-base)", textWrap: "pretty" }}>{title}</div><div style={{ fontSize: "var(--text-xs)", color: "var(--fg-subtle)" }}>{company}. {location}</div></div>
+        <div style={{ textAlign: "right", flex: "none" }}><div style={{ fontWeight: 600, fontSize: "var(--text-md)", letterSpacing: "var(--tracking-tight)", fontVariantNumeric: "tabular-nums" }}>{match}%</div><div style={{ fontSize: "var(--text-2xs)", color: "var(--fg-subtle)" }}>match</div></div>
+      </div>
+      <div style={{ display: "flex", gap: 12, fontSize: "var(--text-xs)", color: "var(--fg-muted)", flexWrap: "wrap" }}>{[salary, ats, posted].filter(Boolean).map((x, i) => <React.Fragment key={i}>{i > 0 && <span style={{ color: "var(--border-strong)" }}>|</span>}<span>{x}</span></React.Fragment>)}</div>
+      {reasons.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "var(--text-xs)", color: "var(--fg-muted)", borderTop: "1px solid var(--border)", paddingTop: 10 }}>{reasons.map((r, i) => <div key={i} style={{ display: "flex", gap: 6, color: r.startsWith("-") ? "var(--fg-subtle)" : "inherit" }}><span style={{ width: 12, flex: "none" }}>{r.startsWith("-") ? "-" : "+"}</span><span>{r.replace(/^[-+]\s*/, "")}</span></div>)}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: "auto" }}><Button variant="primary" size="sm" style={{ flex: 1 }} onClick={onApply}>Apply</Button><Button size="sm" onClick={onSave}>Save</Button><Button variant="ghost" size="sm" onClick={onSkip}>Skip</Button></div>
+    </article>
+  );
+}

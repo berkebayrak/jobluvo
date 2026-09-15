@@ -1,0 +1,26 @@
+:root {
+  --font-sans: "Geist", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  /* Size / line-height pairs */
+  --text-2xs: 11px; --leading-2xs: 16px;   /* table meta, tag text */
+  --text-xs: 12px;  --leading-xs: 16px;    /* labels, eyebrows, timestamps */
+  --text-sm: 13px;  --leading-sm: 20px;    /* dense UI, table cells */
+  --text-base: 14px; --leading-base: 20px; /* default product body */
+  --text-md: 16px;  --leading-md: 24px;    /* card titles, marketing body */
+  --text-lg: 18px;  --leading-lg: 26px;    /* section titles */
+  --text-xl: 22px;  --leading-xl: 28px;    /* page titles, stat values */
+  --text-2xl: 28px; --leading-2xl: 34px;   /* greeting, large stats */
+  --text-3xl: 36px; --leading-3xl: 40px;   /* marketing h2 */
+  --text-4xl: 52px; --leading-4xl: 56px;   /* marketing hero */
+
+  --weight-regular: 400;
+  --weight-medium: 500;   /* the only emphasis weight in product UI */
+  --weight-semibold: 600; /* wordmark and stat values only */
+
+  --tracking-tight: -0.02em;   /* 22px and up */
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;     /* uppercase labels */
+  --tracking-wordmark: 0.18em; /* JOBLUVO */
+
+  --numeric: tabular-nums;
+}

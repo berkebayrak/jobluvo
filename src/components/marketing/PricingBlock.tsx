@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { Check, X } from "lucide-react";
 import { Button } from "@/components/core/Button";
 import {
   equivalent,
@@ -26,6 +27,13 @@ function Feature({
   const [before, after] = provisional ? text.split("{n}") : [text, ""];
   return (
     <li className={no ? "n" : undefined}>
+      <i className="mk" aria-hidden>
+        {no ? (
+          <X size={11} strokeWidth={1.5} absoluteStrokeWidth />
+        ) : (
+          <Check size={11} strokeWidth={1.5} absoluteStrokeWidth />
+        )}
+      </i>
       <span>
         {provisional ? (
           <>
@@ -87,7 +95,7 @@ export function PricingBlock() {
 
       <div className="plan-grid">
         {plans.map((plan) => (
-          <div key={plan.key} className={`plan${plan.hot ? " hot" : ""}`}>
+          <div key={plan.key} className={`plan${plan.hot ? " hot" : ""} reveal`}>
             {plan.hot && <div className="badge-pop">Most popular</div>}
             <div className="pn">{plan.name}</div>
             <p className="pd">{plan.description}</p>
@@ -97,8 +105,22 @@ export function PricingBlock() {
               <span className="per">{d.per}</span>
             </div>
             <div className="eq">{equivalent(plan.key, period)}</div>
-            <Link href="/signup">
-              <Button style={{ width: "100%" }}>Choose {plan.name}</Button>
+            <Link href="/signup" className="choose">
+              <Button
+                size="lg"
+                style={
+                  plan.hot
+                    ? {
+                        width: "100%",
+                        background: "var(--surface-0)",
+                        color: "var(--fg)",
+                        borderColor: "var(--surface-0)",
+                      }
+                    : { width: "100%", borderColor: "var(--accent)" }
+                }
+              >
+                Choose {plan.name}
+              </Button>
             </Link>
             <ul className="feat">
               {plan.features.map((f) => (

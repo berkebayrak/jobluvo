@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/core/Button";
 import { AtsStrip } from "@/components/marketing/AtsStrip";
 import { Band } from "@/components/marketing/Band";
@@ -8,7 +9,6 @@ import { AgentFace } from "@/components/marketing/AgentFace";
 import { HeroDemo } from "@/components/marketing/HeroDemo";
 import { PricingBlock } from "@/components/marketing/PricingBlock";
 import { faqs } from "@/lib/marketing/faqs";
-import { comparison } from "@/lib/marketing/pricing";
 import { steps } from "@/lib/marketing/content";
 import { logoUrl } from "@/lib/logo";
 
@@ -58,13 +58,13 @@ export default function HomePage() {
       {/* -------------------------------------------------- everything you -- */}
       <section className="m-section tight" id="how">
         <div className="wrap">
-          <h2 className="big">Everything you need to land your next job</h2>
+          <h2 className="big reveal">Everything you need to land your next job</h2>
 
-          <div className="topic">
+          <div className="topic reveal">
             <h3>Jobluvo, your career engine</h3>
           </div>
           <div className="fgrid">
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>New matches</span>
@@ -106,7 +106,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>stripe.com/jobs/apply</span>
@@ -135,7 +135,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Inbox</span>
@@ -183,7 +183,7 @@ export default function HomePage() {
           </div>
 
           {/* ------------------------------------------------------- maya -- */}
-          <div className="topic">
+          <div className="topic reveal">
             <h3>
               <AgentFace
                 src="https://randomuser.me/api/portraits/women/44.jpg"
@@ -194,7 +194,7 @@ export default function HomePage() {
             </h3>
           </div>
           <div className="fgrid">
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2 chat">
                 <div className="mh2">
                   <span>0:04</span>
@@ -219,7 +219,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2 chat">
                 <div className="mh2">
                   <span>0:12</span>
@@ -245,7 +245,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Salary benchmark</span>
@@ -279,7 +279,7 @@ export default function HomePage() {
           </div>
 
           {/* ----------------------------------------------------- daniel -- */}
-          <div className="topic">
+          <div className="topic reveal">
             <h3>
               <AgentFace
                 src="https://randomuser.me/api/portraits/men/32.jpg"
@@ -290,7 +290,7 @@ export default function HomePage() {
             </h3>
           </div>
           <div className="fgrid">
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Career plan</span>
@@ -322,7 +322,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Skills in your target roles</span>
@@ -354,7 +354,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Quarterly review</span>
@@ -380,19 +380,22 @@ export default function HomePage() {
       {/* ----------------------------------------------------------- steps -- */}
       <section className="m-section tight">
         <div className="wrap">
-          <h2 className="big">From resume to offer, in 5 steps.</h2>
+          <h2 className="big reveal">From resume to offer, in 5 steps.</h2>
           <div className="sgrid">
             {steps.map((s) => (
-              <div className="scard" key={s.n}>
+              <div className="scard reveal" key={s.n}>
                 <div className="sn">{s.n}</div>
                 <h4>{s.h}</h4>
                 <p>{s.p}</p>
               </div>
             ))}
-            <div className="scard cta">
+            <div className="scard cta reveal">
               <h4>Ready to get started?</h4>
               <p>Upload a resume and see your first matches in minutes.</p>
-              <Link href="/signup">Sign up free</Link>
+              <Link href="/signup">
+                Sign up free
+                <ChevronRight size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+              </Link>
             </div>
           </div>
         </div>
@@ -401,51 +404,24 @@ export default function HomePage() {
       {/* --------------------------------------------------------- pricing -- */}
       <section className="m-section tight ruled" id="pricing">
         <div className="wrap">
-          <h2 className="big" style={{ marginBottom: 8 }}>
+          <h2 className="big reveal" style={{ marginBottom: 8 }}>
             Start free. Upgrade when it works.
           </h2>
           {/* Fine print from the delivered pricing page, which is now this section. */}
-          <p className="lead" style={{ maxWidth: 640, marginTop: 0, marginBottom: 40 }}>
+          <p className="lead" style={{ maxWidth: 640, marginTop: 0, marginBottom: 28 }}>
             Start with 25 free applications. One verified submission uses one application.
             Failed or withdrawn attempts are never counted.
           </p>
           <PricingBlock />
 
-          {/* "Everything, side by side" from the delivered pricing page. That
-              page is now this section, so the table lives here. */}
-          <div className="sec-head" style={{ margin: "56px 0 24px" }}>
-            <h2 className="display">Everything, side by side</h2>
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table className="cmp">
-              <thead>
-                <tr>
-                  <th />
-                  <th>Starter</th>
-                  <th>Pro</th>
-                  <th>Max</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparison.map((row) => (
-                  <tr key={row.label}>
-                    <td>{row.label}</td>
-                    <td data-provisional={row.provisional || undefined}>{row.starter}</td>
-                    <td data-provisional={row.provisional || undefined}>{row.pro}</td>
-                    <td data-provisional={row.provisional || undefined}>{row.max}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       </section>
 
       {/* ------------------------------------------------------------- faq -- */}
       <section className="m-section tight" id="faq">
         <div className="wrap faqwrap">
-          <h2 className="big">FAQs</h2>
-          <div className="faqbox">
+          <h2 className="big reveal">FAQs</h2>
+          <div className="faqbox reveal">
             <FaqList items={faqs} />
           </div>
         </div>

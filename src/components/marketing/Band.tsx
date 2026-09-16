@@ -16,7 +16,7 @@ export function Band({
   return (
     <section className="m-section">
       <div className="wrap">
-        <div className="band">
+        <div className="band reveal">
           <h2>{title}</h2>
           <p>{body}</p>
           <Link href={href}>

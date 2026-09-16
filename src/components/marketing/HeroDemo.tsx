@@ -3,6 +3,7 @@
 import * as React from "react";
 import { demoJobs, feedLines, companyDomains, type DemoJob } from "@/lib/marketing/content";
 import { logoUrl } from "@/lib/logo";
+import { Check, Minus, Star, X } from "lucide-react";
 
 /**
  * The animated product demo beside the hero.
@@ -63,6 +64,11 @@ function Card({
       <div className="why">
         {job.w.map((x) => (
           <span key={x} className={job.act === "skip" ? "neg" : undefined}>
+            {job.act === "skip" ? (
+              <Minus size={12} strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+            ) : (
+              <Check size={12} strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+            )}
             {x}
           </span>
         ))}
@@ -181,9 +187,18 @@ export function HeroDemo({ withFeed = true }: { withFeed?: boolean }) {
       </div>
 
       <div className="dbtns">
-        <span className={hit === "skip" ? "hit" : undefined}>Skip</span>
-        <span>Save</span>
-        <span className={hit === "apply" ? "hit" : undefined}>Apply</span>
+        <span className={hit === "skip" ? "hit" : undefined}>
+          <X size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+          Skip
+        </span>
+        <span>
+          <Star size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+          Save
+        </span>
+        <span className={hit === "apply" ? "hit" : undefined}>
+          Apply
+          <Check size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+        </span>
       </div>
 
       {withFeed && (

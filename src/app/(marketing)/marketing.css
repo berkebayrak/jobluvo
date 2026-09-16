@@ -76,10 +76,11 @@ html {
 .small {
   font-size: var(--text-sm);
 }
+/* Delivered values: 36px, -0.03em, 1.1 and 28px below, for all four uses. */
 .big {
-  font-size: var(--text-3xl);
-  line-height: var(--leading-3xl);
-  letter-spacing: var(--tracking-tight);
+  font-size: 36px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
   font-weight: 500;
   margin: 0 0 28px;
 }

@@ -112,11 +112,12 @@ export function PricingBlock() {
                   plan.hot
                     ? {
                         width: "100%",
+                        fontSize: 15,
                         background: "var(--surface-0)",
                         color: "var(--fg)",
                         borderColor: "var(--surface-0)",
                       }
-                    : { width: "100%", borderColor: "var(--accent)" }
+                    : { width: "100%", fontSize: 15, borderColor: "var(--accent)" }
                 }
               >
                 Choose {plan.name}

@@ -1,33 +1,15 @@
-import type { Metadata } from "next";
-import { Band } from "@/components/marketing/Band";
 import { aroundIt, willNotDo } from "@/lib/marketing/content";
 
-export const metadata: Metadata = {
-  title: "How it works. Jobluvo",
-  description:
-    "Jobluvo finds the roles, prepares an honest application, submits it and follows the reply.",
-};
-
-export default function HowItWorksPage() {
+/**
+ * The How it works run on the home page: the four stages, "Two ways to drive,
+ * two people to ask" and "What Jobluvo will not do", in the delivered order.
+ * The nav's How it works link lands on the first stage.
+ */
+export function HowItWorks() {
   return (
-    <main>
-      <section className="hero" style={{ paddingBottom: 10 }}>
-        <div className="wrap" style={{ display: "block" }}>
-          <div style={{ maxWidth: 820 }}>
-            <div className="eyebrow">How it works</div>
-            <h1 className="display" style={{ fontSize: "var(--text-4xl)", lineHeight: "var(--leading-4xl)" }}>
-              Four stages. One engine. You stay in control.
-            </h1>
-            <p className="lead" style={{ maxWidth: "none" }}>
-              Jobluvo finds the roles, prepares an honest application, submits it and follows
-              the reply. Here is each stage with what you actually see.
-            </p>
-          </div>
-        </div>
-      </section>
-
+    <>
       {/* -------------------------------------------------------- 01 find -- */}
-      <section className="m-section tight">
+      <section className="m-section tight" id="how">
         <div className="wrap stage reveal">
           <div>
             <div className="sn">01</div>
@@ -232,6 +214,7 @@ export default function HowItWorksPage() {
         </div>
       </section>
 
+      {/* ---------------------------------------------------- will not do -- */}
       <section className="m-section tight ruled">
         <div className="wrap">
           <div className="sec-head reveal">
@@ -249,12 +232,6 @@ export default function HowItWorksPage() {
           </div>
         </div>
       </section>
-
-      <Band
-        title="See it on your own resume."
-        body="Upload once, get scored matches in minutes, send the first 25 applications free."
-        action="Start free"
-      />
-    </main>
+    </>
   );
 }

@@ -7,7 +7,6 @@ import { Band } from "@/components/marketing/Band";
 import { FaqList } from "@/components/marketing/FaqList";
 import { AgentFace } from "@/components/marketing/AgentFace";
 import { HeroDemo } from "@/components/marketing/HeroDemo";
-import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { PricingBlock } from "@/components/marketing/PricingBlock";
 import { faqs } from "@/lib/marketing/faqs";
 import { steps } from "@/lib/marketing/content";
@@ -57,7 +56,7 @@ export default function HomePage() {
       <AtsStrip />
 
       {/* -------------------------------------------------- everything you -- */}
-      <section className="m-section tight">
+      <section className="m-section tight" id="how">
         <div className="wrap">
           <h2 className="big reveal">Everything you need to land your next job</h2>
 
@@ -378,9 +377,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ---------------------------------------------------- how it works -- */}
-      <HowItWorks />
-
       {/* ----------------------------------------------------------- steps -- */}
       <section className="m-section tight">
         <div className="wrap">
@@ -408,7 +404,14 @@ export default function HomePage() {
       {/* --------------------------------------------------------- pricing -- */}
       <section className="m-section tight ruled" id="pricing">
         <div className="wrap">
-          <h2 className="big reveal">Start free. Upgrade when it works.</h2>
+          <h2 className="big reveal" style={{ marginBottom: 8 }}>
+            Start free. Upgrade when it works.
+          </h2>
+          {/* The one approved difference from the delivered home page. */}
+          <p className="lead" style={{ maxWidth: 640, marginTop: 0, marginBottom: 28 }}>
+            Start with 25 free applications. One verified submission uses one application.
+            Failed or withdrawn attempts are never counted.
+          </p>
           <PricingBlock />
 
         </div>

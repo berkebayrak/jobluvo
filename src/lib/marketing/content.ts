@@ -156,39 +156,3 @@ export const steps = [
     p: "Maya preps you for each interview with mock rounds and a salary number you can defend. Daniel keeps the longer plan on track, from the skills to add next to the role after this one.",
   },
 ];
-
-/** "Two ways to drive, two people to ask." */
-export const aroundIt = [
-  {
-    h: "Swipe",
-    p: "One job at a time with everything you need to decide. Right to apply, left to skip.",
-  },
-  {
-    h: "Lanes",
-    p: "Up to five auto apply configurations sharing one daily cap. Jobs above the bar are applied, not shown.",
-  },
-  {
-    h: "Maya",
-    p: "Your job search agent. Tunes the feed, finds companies, checks applications before they go out.",
-  },
-  {
-    h: "Daniel",
-    p: "Your career coach. Skills to add, resume positioning, outreach and interview prep.",
-  },
-];
-
-/** "What Jobluvo will not do." */
-export const willNotDo = [
-  {
-    h: "Invent anything",
-    p: "If a form needs something you have not given, the application waits.",
-  },
-  {
-    h: "Automate LinkedIn",
-    p: "Against LinkedIn's rules and a risk to your account. Saved LinkedIn jobs are resolved to the employer's own page instead.",
-  },
-  {
-    h: "Beat bot checks",
-    p: "CAPTCHAs and phone checks are handed to you to complete.",
-  },
-];

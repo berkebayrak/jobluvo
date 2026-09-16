@@ -501,10 +501,22 @@ html {
   justify-content: center;
   flex: 1;
 }
-.strip .logos img {
+/*
+ * Wordmarks are painted, not shown: the PNG is the mask and the fill is one
+ * token grey, so the strip stays monochrome and no brand shouts over another.
+ * grey-700 rather than grey-500, which leaves the thinner wordmarks legible.
+ */
+.strip .logos .ats-logo {
+  display: block;
   height: 20px;
-  width: auto;
-  object-fit: contain;
+  flex: none;
+  background-color: var(--fg-muted);
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
 }
 .strip .more {
   font-size: var(--text-xs);

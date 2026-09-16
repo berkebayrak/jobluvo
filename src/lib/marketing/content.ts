@@ -14,24 +14,31 @@ export const nav: { href: string; label: string; section?: string }[] = [
   { href: "/blog", label: "Blog" },
 ];
 
-/** The "Applies on" strip. Files live in public/ats, copied from the handoff. */
-export const atsLogos = [
-  { alt: "Workday", file: "/ats/workday.png" },
-  { alt: "Greenhouse", file: "/ats/greenhouse.png" },
-  { alt: "Lever", file: "/ats/lever.png" },
-  { alt: "Ashby", file: "/ats/ashby.png" },
-  { alt: "iCIMS", file: "/ats/icims.png" },
-  { alt: "SmartRecruiters", file: "/ats/smartrecruiters.png" },
-  { alt: "Workable", file: "/ats/workable.png" },
-  { alt: "Oracle", file: "/ats/oracle.png" },
-  { alt: "ADP", file: "/ats/adp.png" },
-  { alt: "Rippling", file: "/ats/rippling.png" },
-  { alt: "BambooHR", file: "/ats/bamboohr.png" },
-  { alt: "BreezyHR", file: "/ats/breezyhr.png" },
-  { alt: "JazzHR", file: "/ats/jazzhr.png" },
-  { alt: "Zoho Recruit", file: "/ats/zoho-recruit.png" },
-  { alt: "Indeed", file: "/ats/indeed.png" },
-  { alt: "Glassdoor", file: "/ats/glassdoor.png" },
+/**
+ * The "Applies on" strip. Files live in public/ats, copied from the handoff.
+ *
+ * These are application system wordmarks, not employer logos, so they are not
+ * the one place colour is allowed. They render as a mask filled with a single
+ * token grey, which needs the intrinsic aspect ratio to size the box. Every
+ * source file is 140px tall, so ratio is width / 140.
+ */
+export const atsLogos: { alt: string; file: string; ratio: number }[] = [
+  { alt: "Workday", file: "/ats/workday.png", ratio: 2.086 },
+  { alt: "Greenhouse", file: "/ats/greenhouse.png", ratio: 4.443 },
+  { alt: "Lever", file: "/ats/lever.png", ratio: 4.221 },
+  { alt: "Ashby", file: "/ats/ashby.png", ratio: 3.057 },
+  { alt: "iCIMS", file: "/ats/icims.png", ratio: 3.271 },
+  { alt: "SmartRecruiters", file: "/ats/smartrecruiters.png", ratio: 5.443 },
+  { alt: "Workable", file: "/ats/workable.png", ratio: 5.886 },
+  { alt: "Oracle", file: "/ats/oracle.png", ratio: 7.693 },
+  { alt: "ADP", file: "/ats/adp.png", ratio: 2.2 },
+  { alt: "Rippling", file: "/ats/rippling.png", ratio: 6.986 },
+  { alt: "BambooHR", file: "/ats/bamboohr.png", ratio: 6.721 },
+  { alt: "BreezyHR", file: "/ats/breezyhr.png", ratio: 4.671 },
+  { alt: "JazzHR", file: "/ats/jazzhr.png", ratio: 3.936 },
+  { alt: "Zoho Recruit", file: "/ats/zoho-recruit.png", ratio: 2.893 },
+  { alt: "Indeed", file: "/ats/indeed.png", ratio: 3.743 },
+  { alt: "Glassdoor", file: "/ats/glassdoor.png", ratio: 5.079 },
 ];
 
 /** Cards in the animated hero deck. */

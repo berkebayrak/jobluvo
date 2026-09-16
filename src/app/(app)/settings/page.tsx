@@ -5,21 +5,7 @@ import { Button } from "@/components/core/Button";
 import { Card } from "@/components/data/Card";
 import { Toggle } from "@/components/core/Toggle";
 import { showToast } from "@/components/feedback/Toaster";
-
-/**
- * Plans and prices from design/docs/01-Product-BRD.md. Kept local to the app so
- * this branch does not depend on the marketing branch.
- */
-const prices = {
-  monthly: { starter: 16, pro: 35, max: 89 },
-  annual: { starter: 149, pro: 269, max: 699 },
-} as const;
-
-const plans = [
-  { key: "starter", name: "Starter", description: "Enough for a real job search." },
-  { key: "pro", name: "Pro", description: "For a serious, full time search." },
-  { key: "max", name: "Max", description: "Hit every match before anyone else." },
-] as const;
+import { plans, prices } from "@/lib/marketing/pricing";
 
 const TABS = [
   "Plan and usage",

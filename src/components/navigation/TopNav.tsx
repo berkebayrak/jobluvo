@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 
 export interface TopNavProps {
   tabs: string[];
@@ -8,13 +9,15 @@ export interface TopNavProps {
   onSelect?: (tab: string) => void;
   /** Right cluster: density toggle, usage text, avatar */
   right?: React.ReactNode;
+  /** Makes the wordmark a link. Plain text when omitted. */
+  href?: string;
 }
 
 /**
  * 52px product header: wordmark, underline tabs, right cluster.
  * Tabs never scroll. Profile and Settings live behind the avatar, not here.
  */
-export function TopNav({ tabs = [], active, onSelect, right }: TopNavProps) {
+export function TopNav({ tabs = [], active, onSelect, right, href }: TopNavProps) {
   return (
     <header
       style={{
@@ -29,15 +32,29 @@ export function TopNav({ tabs = [], active, onSelect, right }: TopNavProps) {
         fontSize: "var(--text-sm)",
       }}
     >
-      <span
-        style={{
-          fontWeight: 600,
-          letterSpacing: "var(--tracking-wordmark)",
-          flex: "none",
-        }}
-      >
-        JOBLUVO
-      </span>
+      {href ? (
+        <Link
+          href={href}
+          style={{
+            fontWeight: 600,
+            letterSpacing: "var(--tracking-wordmark)",
+            flex: "none",
+            color: "var(--fg)",
+          }}
+        >
+          JOBLUVO
+        </Link>
+      ) : (
+        <span
+          style={{
+            fontWeight: 600,
+            letterSpacing: "var(--tracking-wordmark)",
+            flex: "none",
+          }}
+        >
+          JOBLUVO
+        </span>
+      )}
       <nav style={{ display: "flex", gap: 2, height: "100%" }}>
         {tabs.map((t) => {
           const on = t === active;

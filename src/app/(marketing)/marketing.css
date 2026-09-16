@@ -156,6 +156,43 @@ html {
   align-items: center;
   gap: 8px;
 }
+.m-nav .burger {
+  display: none;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: var(--fg);
+  cursor: pointer;
+  flex: none;
+}
+.m-nav .burger:hover {
+  background: var(--surface-1);
+}
+.m-menu {
+  display: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface-0);
+  padding: 12px 24px 16px;
+  flex-direction: column;
+  gap: 2px;
+}
+.m-menu a {
+  padding: 10px 4px;
+  font-size: var(--text-md);
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+}
+.m-menu a:last-child {
+  border-bottom: 0;
+}
+.m-menu a.on {
+  color: var(--fg);
+  font-weight: 500;
+}
+
 
 /* ------------------------------------------------------------------ hero -- */
 
@@ -1549,6 +1586,15 @@ html {
     grid-template-columns: 1fr 1fr;
   }
   .m-nav .links {
+    display: none;
+  }
+  .m-nav .burger {
+    display: grid;
+  }
+  .m-menu {
+    display: flex;
+  }
+  .auth .demo {
     display: none;
   }
 }

@@ -6,6 +6,7 @@ import { KanbanCard } from "@/components/data/KanbanCard";
 import { StatusTag } from "@/components/data/StatusTag";
 import { TableRow } from "@/components/data/TableRow";
 import { showToast } from "@/components/feedback/Toaster";
+import { useDensity } from "@/components/app/density";
 import { domains, pipeline, stageMap, stages } from "@/lib/app/data";
 import { logoUrl } from "@/lib/logo";
 
@@ -15,6 +16,7 @@ export default function TrackerPage() {
   const [mode, setMode] = React.useState<"board" | "list">("board");
   const [query, setQuery] = React.useState("");
   const [hideGhosted, setHideGhosted] = React.useState(false);
+  const { density } = useDensity();
 
   const rows = pipeline.filter(
     (p) =>
@@ -128,6 +130,7 @@ export default function TrackerPage() {
             <TableRow
               key={p.id}
               columns={COLS}
+              density={density}
               onClick={() => showToast({ text: `${p.co}. ${p.t}.` })}
               cells={[
                 p.t,

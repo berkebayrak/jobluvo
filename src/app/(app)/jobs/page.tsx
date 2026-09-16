@@ -12,19 +12,139 @@ import { showToast } from "@/components/feedback/Toaster";
 import { domains, jobs } from "@/lib/app/data";
 import { logoUrl } from "@/lib/logo";
 
-const FILTERS = [
-  "Date",
-  "Location",
-  "Workplace",
-  "Companies",
-  "Seniority",
-  "Sponsors visa",
-  "Employment type",
-  "Exclude keywords",
+/** "8 hours ago" and "2 days ago" both become hours, so Date can compare. */
+function ageHours(age: string): number {
+  const m = /(\d+)\s*(hour|day|week)/.exec(age);
+  if (!m) return 9999;
+  const n = Number(m[1]);
+  return m[2] === "hour" ? n : m[2] === "day" ? n * 24 : n * 168;
+}
+
+const DATE_OPTIONS: { label: string; hours: number }[] = [
+  { label: "Last 24 hours", hours: 24 },
+  { label: "Last 3 days", hours: 72 },
+  { label: "Last week", hours: 168 },
 ];
 
-/** Twelve cards in today's deck, as the delivered app dealt them. */
-const DECK = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3];
+/** Distinct values straight off the job data, so every option matches something. */
+const VALUES = {
+  loc: [...new Set(jobs.map((j) => j.loc))].sort(),
+  mode: [...new Set(jobs.map((j) => j.mode))].sort(),
+  co: [...new Set(jobs.map((j) => j.co))].sort(),
+  level: [...new Set(jobs.map((j) => j.level))].sort(),
+};
+
+function toggle(list: string[], v: string): string[] {
+  return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+}
+
+/** A chip that opens a small panel of options. */
+function FilterChip({
+  label,
+  count,
+  open,
+  onOpen,
+  children,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onOpen: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLSpanElement>(null);
+
+  React.useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (open && ref.current && !ref.current.contains(e.target as Node)) onOpen();
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open, onOpen]);
+
+  return (
+    <span ref={ref} style={{ position: "relative" }}>
+      <button className={`chip${count > 0 ? " on" : ""}`} onClick={onOpen}>
+        {label}
+        {count > 0 ? ` ${count}` : ""}
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: 34,
+            left: 0,
+            zIndex: 30,
+            minWidth: 220,
+            maxHeight: 280,
+            overflowY: "auto",
+            background: "var(--surface-0)",
+            border: "1px solid var(--border-strong)",
+            borderRadius: "var(--radius-sm)",
+            padding: 8,
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </span>
+  );
+}
+
+/** One option row. Checked state is a glyph, never colour. */
+function Opt({
+  label,
+  on,
+  onToggle,
+}: {
+  label: string;
+  on: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        width: "100%",
+        textAlign: "left",
+        border: 0,
+        background: "transparent",
+        padding: "6px 6px",
+        borderRadius: "var(--radius-xs)",
+        font: "inherit",
+        fontSize: "var(--text-sm)",
+        color: "var(--fg)",
+        cursor: "pointer",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 14,
+          height: 14,
+          flex: "none",
+          display: "grid",
+          placeItems: "center",
+          border: `1px solid ${on ? "var(--accent)" : "var(--border-strong)"}`,
+          borderRadius: "var(--radius-xs)",
+          background: on ? "var(--accent)" : "var(--surface-0)",
+          color: "var(--fg-inverse)",
+          fontSize: 10,
+          lineHeight: 1,
+        }}
+      >
+        {on ? "+" : ""}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+/** One card per job, dealt once. */
+const DECK = jobs.map((_, i) => i);
 
 function JobsScreen() {
   const router = useRouter();
@@ -32,18 +152,59 @@ function JobsScreen() {
   const [mode, setMode] = React.useState(params.get("mode") === "swipe" ? "swipe" : "list");
   const [autoApply, setAutoApply] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [active, setActive] = React.useState<string[]>([]);
   const [saved, setSaved] = React.useState<number[]>([]);
+
+  const [date, setDate] = React.useState<number | null>(null);
+  const [loc, setLoc] = React.useState<string[]>([]);
+  const [workplace, setWorkplace] = React.useState<string[]>([]);
+  const [co, setCo] = React.useState<string[]>([]);
+  const [level, setLevel] = React.useState<string[]>([]);
+  const [sponsor, setSponsor] = React.useState(false);
+  const [exclude, setExclude] = React.useState("");
+  const [open, setOpen] = React.useState<string | null>(null);
+
+  const activeCount =
+    (date !== null ? 1 : 0) +
+    loc.length +
+    workplace.length +
+    co.length +
+    level.length +
+    (sponsor ? 1 : 0) +
+    (exclude.trim() ? 1 : 0);
+
+  function clearAll() {
+    setDate(null);
+    setLoc([]);
+    setWorkplace([]);
+    setCo([]);
+    setLevel([]);
+    setSponsor(false);
+    setExclude("");
+    setOpen(null);
+  }
 
   const [di, setDi] = React.useState(0);
   const [stamp, setStamp] = React.useState<"apply" | "skip" | null>(null);
   const [counts, setCounts] = React.useState({ apply: 0, save: 0, skip: 0 });
 
-  const list = jobs.filter(
-    (j) =>
-      !query ||
-      (j.title + j.co + j.summary).toLowerCase().includes(query.toLowerCase()),
-  );
+  const words = exclude
+    .toLowerCase()
+    .split(",")
+    .map((w) => w.trim())
+    .filter(Boolean);
+
+  const list = jobs.filter((j) => {
+    const hay = (j.title + " " + j.co + " " + j.summary).toLowerCase();
+    if (query && !hay.includes(query.toLowerCase())) return false;
+    if (date !== null && ageHours(j.age) > date) return false;
+    if (loc.length && !loc.includes(j.loc)) return false;
+    if (workplace.length && !workplace.includes(j.mode)) return false;
+    if (co.length && !co.includes(j.co)) return false;
+    if (level.length && !level.includes(j.level)) return false;
+    if (sponsor && j.sponsor !== "Yes") return false;
+    if (words.some((w) => hay.includes(w))) return false;
+    return true;
+  });
 
   const job = jobs[DECK[di] ?? 0];
 
@@ -74,7 +235,9 @@ function JobsScreen() {
         <div>
           <h1>Jobs</h1>
           <p className="sub">
-            42 fresh matches. 18 above your Strategy lane&apos;s bar.
+            {activeCount > 0 || query
+              ? `${list.length} of ${jobs.length} matches shown.`
+              : "42 fresh matches. 18 above your Strategy lane\u2019s bar."}
           </p>
         </div>
         <div className="row">
@@ -107,19 +270,117 @@ function JobsScreen() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            className={`chip${active.includes(f) ? " on" : ""}`}
-            onClick={() =>
-              setActive((a) => (a.includes(f) ? a.filter((x) => x !== f) : [...a, f]))
-            }
+        <FilterChip
+          label="Date"
+          count={date !== null ? 1 : 0}
+          open={open === "date"}
+          onOpen={() => setOpen(open === "date" ? null : "date")}
+        >
+          {DATE_OPTIONS.map((d) => (
+            <Opt
+              key={d.label}
+              label={d.label}
+              on={date === d.hours}
+              onToggle={() => setDate(date === d.hours ? null : d.hours)}
+            />
+          ))}
+        </FilterChip>
+
+        <FilterChip
+          label="Location"
+          count={loc.length}
+          open={open === "loc"}
+          onOpen={() => setOpen(open === "loc" ? null : "loc")}
+        >
+          {VALUES.loc.map((v) => (
+            <Opt key={v} label={v} on={loc.includes(v)} onToggle={() => setLoc(toggle(loc, v))} />
+          ))}
+        </FilterChip>
+
+        <FilterChip
+          label="Workplace"
+          count={workplace.length}
+          open={open === "mode"}
+          onOpen={() => setOpen(open === "mode" ? null : "mode")}
+        >
+          {VALUES.mode.map((v) => (
+            <Opt
+              key={v}
+              label={v}
+              on={workplace.includes(v)}
+              onToggle={() => setWorkplace(toggle(workplace, v))}
+            />
+          ))}
+        </FilterChip>
+
+        <FilterChip
+          label="Companies"
+          count={co.length}
+          open={open === "co"}
+          onOpen={() => setOpen(open === "co" ? null : "co")}
+        >
+          {VALUES.co.map((v) => (
+            <Opt key={v} label={v} on={co.includes(v)} onToggle={() => setCo(toggle(co, v))} />
+          ))}
+        </FilterChip>
+
+        <FilterChip
+          label="Seniority"
+          count={level.length}
+          open={open === "level"}
+          onOpen={() => setOpen(open === "level" ? null : "level")}
+        >
+          {VALUES.level.map((v) => (
+            <Opt
+              key={v}
+              label={v}
+              on={level.includes(v)}
+              onToggle={() => setLevel(toggle(level, v))}
+            />
+          ))}
+        </FilterChip>
+
+        <button className={`chip${sponsor ? " on" : ""}`} onClick={() => setSponsor(!sponsor)}>
+          Sponsors visa
+        </button>
+
+        <FilterChip
+          label="Exclude keywords"
+          count={exclude.trim() ? 1 : 0}
+          open={open === "excl"}
+          onOpen={() => setOpen(open === "excl" ? null : "excl")}
+        >
+          <input
+            placeholder="pre-sales, clearance"
+            value={exclude}
+            onChange={(e) => setExclude(e.target.value)}
+            style={{
+              width: "100%",
+              height: "var(--control-sm)",
+              padding: "0 8px",
+              border: "1px solid var(--border-strong)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--surface-0)",
+              font: "inherit",
+              fontSize: "var(--text-sm)",
+              color: "var(--fg)",
+              outline: 0,
+            }}
+          />
+          <span
+            style={{
+              fontSize: "var(--text-2xs)",
+              color: "var(--fg-subtle)",
+              display: "block",
+              marginTop: 6,
+            }}
           >
-            {f}
-          </button>
-        ))}
-        {active.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => setActive([])}>
+            Comma separated. A job matching any of these drops out.
+          </span>
+        </FilterChip>
+
+        {activeCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearAll}>
             Clear filters
           </Button>
         )}

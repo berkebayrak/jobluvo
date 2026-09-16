@@ -666,6 +666,22 @@
   color: var(--fg-muted);
   margin: 0 0 12px;
 }
+.prep {
+  margin-top: 20px;
+  background: var(--surface-1);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.prep b {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.prep p {
+  margin: 6px 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--fg-muted);
+}
 .linked {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

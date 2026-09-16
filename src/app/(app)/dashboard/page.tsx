@@ -40,13 +40,26 @@ export default function DashboardPage() {
             Saturday, 12 September. Two lanes ran overnight and one application needs you.
           </p>
         </div>
-        <div className="row">
-          <Button onClick={() => router.push("/jobs?mode=swipe")}>
-            Swipe today&apos;s picks
-          </Button>
-          <Button variant="primary" onClick={() => router.push("/auto-apply")}>
-            Manage lanes
-          </Button>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: 8,
+          }}
+        >
+          {/* Quiet, not a highlight: grey-500 rather than the grey-700 body tone. */}
+          <span style={{ fontSize: "var(--text-xs)", color: "var(--fg-subtle)" }}>
+            Max. 1,412 applications left
+          </span>
+          <div className="row">
+            <Button onClick={() => router.push("/jobs?mode=swipe")}>
+              Swipe today&apos;s picks
+            </Button>
+            <Button variant="primary" onClick={() => router.push("/auto-apply")}>
+              Manage lanes
+            </Button>
+          </div>
         </div>
       </div>
 

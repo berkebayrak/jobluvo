@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { TopNav } from "@/components/navigation/TopNav";
-import { Toggle } from "@/components/core/Toggle";
 import { AgentPanel } from "@/components/app/AgentPanel";
 
 /** Tabs never scroll. Profile and Settings live behind the avatar. */
@@ -18,7 +17,6 @@ const TABS: { label: string; href: string }[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [dense, setDense] = React.useState(true);
   const [menu, setMenu] = React.useState(false);
 
   const active = TABS.find((t) => pathname.startsWith(t.href))?.label ?? "Dashboard";
@@ -34,17 +32,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }}
         right={
           <>
-            <Toggle on={dense} onChange={setDense} label={undefined} />
-            <span style={{ fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}>
-              Max. 1,412 applications left
-            </span>
             <span style={{ position: "relative" }}>
               <button
                 onClick={() => setMenu((m) => !m)}
                 aria-label="Account"
                 style={{
-                  width: 24,
                   height: 24,
+                  padding: "0 12px",
                   display: "grid",
                   placeItems: "center",
                   border: "1px solid var(--border-strong)",

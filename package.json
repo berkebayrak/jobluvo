@@ -15,7 +15,9 @@
     "db:status": "node --env-file=.env.local --import tsx scripts/status.ts",
     "db:sql": "node --env-file=.env.local --import tsx scripts/sql.ts",
     "probe": "node --env-file=.env.local --import tsx scripts/probe.ts",
-    "db:reset": "node --env-file=.env.local --import tsx scripts/reset.ts"
+    "db:reset": "node --env-file=.env.local --import tsx scripts/reset.ts",
+    "db:backfill-locations": "node --env-file=.env.local --import tsx scripts/backfill-locations.ts",
+    "pass-rate": "node --env-file=.env.local --import tsx scripts/pass-rate.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

@@ -74,62 +74,99 @@ const US_STATES = new Set(
     " ",
   ),
 );
-const US_WORDS = /\b(united states|usa|u\.s\.a?\.?|us)\b/i;
+const US_WORDS = /^(?:the\s+)?(united states(?: of america)?|usa|u\.s\.a?\.?|us)$/i;
 const COUNTRY_CODES: Record<string, string> = {
-  us: "US",
-  usa: "US",
-  "united states": "US",
-  gb: "GB",
-  uk: "GB",
-  "united kingdom": "GB",
-  ca: "CA",
-  canada: "CA",
-  de: "DE",
-  germany: "DE",
-  fr: "FR",
-  france: "FR",
-  ie: "IE",
-  ireland: "IE",
-  nl: "NL",
-  netherlands: "NL",
-  se: "SE",
-  sweden: "SE",
-  es: "ES",
-  spain: "ES",
-  in: "IN",
-  india: "IN",
-  au: "AU",
-  australia: "AU",
-  sg: "SG",
-  singapore: "SG",
-  br: "BR",
-  brazil: "BR",
-  jp: "JP",
-  japan: "JP",
-  pl: "PL",
-  poland: "PL",
+  us: "US", usa: "US", "united states": "US",
+  gb: "GB", uk: "GB", "united kingdom": "GB",
+  ca: "CA", canada: "CA",
+  de: "DE", germany: "DE",
+  fr: "FR", france: "FR",
+  ie: "IE", ireland: "IE",
+  nl: "NL", netherlands: "NL",
+  se: "SE", sweden: "SE",
+  es: "ES", spain: "ES",
+  in: "IN", india: "IN",
+  au: "AU", australia: "AU",
+  sg: "SG", singapore: "SG",
+  br: "BR", brazil: "BR",
+  jp: "JP", japan: "JP",
+  pl: "PL", poland: "PL",
 };
+const US_STATE_NAMES: Record<string, string> = {
+  alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT",
+  delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA",
+  kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI",
+  minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH",
+  "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH",
+  oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD",
+  tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV",
+  wisconsin: "WI", wyoming: "WY", "district of columbia": "DC",
+};
+/*
+ * Cities that read as US on their own. Only names whose US reading is the
+ * dominant one: no Cambridge, London, Richmond, Vancouver, Birmingham,
+ * Manchester or Paris. A city not in this table keeps no country.
+ */
+const US_CITIES = new Set([
+  "new york", "new york city", "nyc", "brooklyn", "manhattan", "jersey city", "san francisco", "sf", "los angeles",
+  "san diego", "san jose", "oakland", "palo alto", "menlo park", "mountain view", "sunnyvale", "santa clara",
+  "redwood city", "cupertino", "santa monica", "culver city", "irvine", "sacramento", "chicago", "seattle", "bellevue",
+  "redmond", "boston", "austin", "denver", "boulder", "atlanta", "dallas", "houston", "phoenix", "philadelphia", "miami",
+  "washington", "minneapolis", "detroit", "ann arbor", "nashville", "charlotte", "raleigh", "pittsburgh", "baltimore",
+  "salt lake city", "las vegas", "columbus", "indianapolis", "kansas city", "st. louis", "st louis", "saint louis",
+  "cincinnati", "cleveland", "milwaukee", "madison", "orlando", "tampa", "new orleans", "reston", "arlington",
+  "portland", "san antonio", "fort worth", "tucson", "albuquerque", "omaha", "louisville", "memphis", "oklahoma city",
+]);
+const METRO = /^(?:greater\s+)?(.+?)\s+(?:bay\s+area|metropolitan\s+area|metro(?:politan)?\s+area|metro|area)$/i;
+const NOT_A_PLACE = /^(n\/?a|tbd|tba|various|multiple(?: locations)?|flexible|global|worldwide|other|none|any|anywhere|nationwide|international)$/i;
+const REMOTE_WORDS = /\b(remote|work from home|wfh|distributed|telecommute|home[- ]based)\b/i;
+
+function canonicalCity(key: string): string | undefined {
+  if (key === "nyc" || key === "new york city") return "New York";
+  if (key === "sf") return "San Francisco";
+  return undefined;
+}
 
 /**
  * Best effort parse of the free text location strings the boards hand out.
- * "New York, NY", "Remote - US", "London, United Kingdom", "San Francisco, CA
- * (HQ)" and "Remote" all come through. Whatever cannot be read stays in `raw`
- * with nothing invented.
+ * "New York, NY", "New York, New York", "St. Louis, Missouri", "Washington,
+ * D.C.", "Greater Boston Area", "Remote - US", "US Remote", "Remote (United
+ * States)", "Chicago" and "London, United Kingdom" all come through. Whatever
+ * cannot be read stays in `raw` with nothing invented: "N/A" gets no city, and
+ * a city outside the US table gets no country.
  */
 export function parseLocation(raw: string, hint?: { country?: string; remote?: boolean }): JobLocation {
   const loc: JobLocation = { raw: raw.trim() };
-  const text = raw.replace(/\((hq|headquarters)\)/i, "").trim();
-  if (/\bremote\b|\bwork from home\b|\bwfh\b|\bdistributed\b/i.test(text) || hint?.remote) loc.remote = true;
+  let text = raw.replace(/\((hq|headquarters)\)/i, "").trim();
+  if (REMOTE_WORDS.test(text) || hint?.remote) loc.remote = true;
+  if (NOT_A_PLACE.test(text)) return loc;
+  text = text
+    .replace(/\bd\.\s?c\.?(?=\W|$)/gi, "DC")
+    .replace(/\bwashington\s+dc\b/i, "Washington, DC")
+    .replace(/[()]/g, ",");
   const parts = text
     .split(/[,|/–—-]/)
-    .map((p) => p.trim())
-    .filter((p) => p && !/^remote$/i.test(p));
+    .map((p) =>
+      p
+        .replace(REMOTE_WORDS, " ")
+        .replace(/\b(hybrid|on[- ]?site|based|only|eligible|friendly|option(?:al)?|first)\b/gi, " ")
+        .replace(/^\s*(?:anywhere|any|all)?\s*(?:in|within|from|across)\b(?:\s+the)?\s*/i, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter((p) => p && !/^the$/i.test(p));
+  let cityIsUs = false;
   for (const p of parts) {
-    const key = p.toLowerCase();
+    const key = p.toLowerCase().replace(/\.$/, "");
+    if (NOT_A_PLACE.test(key)) continue;
+    if (US_WORDS.test(key)) {
+      loc.country = "US";
+      continue;
+    }
     // "San Francisco, CA" is California, not Canada: a two letter US state
     // code after a city wins over the country table. "CA" on its own or
     // "Canada" spelled out still reads as the country.
-    if (US_STATES.has(key) && key.length === 2 && loc.city) {
+    if (loc.city && key.length === 2 && US_STATES.has(key)) {
       loc.region = key.toUpperCase();
       loc.country = "US";
       continue;
@@ -138,9 +175,22 @@ export function parseLocation(raw: string, hint?: { country?: string; remote?: b
       loc.country = COUNTRY_CODES[key];
       continue;
     }
-    if (!loc.city && !/^\d/.test(p)) loc.city = p;
+    if (US_STATE_NAMES[key] && (loc.city || !US_CITIES.has(key))) {
+      // "New York, New York" is a city then a state; "California" alone or
+      // "Remote - Texas" is a state with no city. Both are in the US. A name
+      // that is both a city and a state, "New York" or "Washington", is the
+      // city when nothing precedes it.
+      loc.region = US_STATE_NAMES[key];
+      loc.country = "US";
+      continue;
+    }
+    if (loc.city || /^\d/.test(p)) continue;
+    const metro = METRO.exec(p);
+    const cityKey = (metro ? metro[1] : p).toLowerCase().replace(/\.$/, "");
+    loc.city = canonicalCity(cityKey) ?? (metro ? metro[1] : p);
+    if (US_CITIES.has(cityKey)) cityIsUs = true;
   }
-  if (!loc.country && US_WORDS.test(text)) loc.country = "US";
+  if (!loc.country && cityIsUs) loc.country = "US";
   if (!loc.country && hint?.country) {
     const c = COUNTRY_CODES[hint.country.toLowerCase()] ?? hint.country.toUpperCase();
     if (c.length === 2) loc.country = c;

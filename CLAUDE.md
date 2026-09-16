@@ -157,6 +157,8 @@ npm run seed         # demo user and the source registry, verifies each feed fir
 npm run ingest       # one ingest batch against the live feeds, prints a line per source
 npm run db:generate  # migration from src/db/schema.ts
 npm run db:migrate   # apply migrations over the direct Neon host
+npm run db:backfill-locations  # re-parse stored locations with the current parser, safe to repeat
+npm run pass-rate    # hard filter pass rate across ingested jobs, by family and reason
 ```
 
 ## Layout

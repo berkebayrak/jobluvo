@@ -30,11 +30,70 @@ describe("parseLocation", () => {
     expect(parseLocation("Remote - US")).toMatchObject({ remote: true, country: "US" });
     expect(parseLocation("Remote (United States)")).toMatchObject({ remote: true, country: "US" });
   });
-  it("reads other countries and leaves the unknown alone", () => {
-    expect(parseLocation("London, United Kingdom")).toMatchObject({ city: "London", country: "GB" });
+  it("reads full state names, after a city or alone", () => {
+    expect(parseLocation("San Francisco, California")).toMatchObject({ city: "San Francisco", region: "CA", country: "US" });
+    expect(parseLocation("New York, New York")).toMatchObject({ city: "New York", region: "NY", country: "US" });
+    expect(parseLocation("St. Louis, Missouri")).toMatchObject({ city: "St. Louis", region: "MO", country: "US" });
+    expect(parseLocation("Remote - Texas")).toMatchObject({ remote: true, region: "TX", country: "US" });
+    expect(parseLocation("California")).toMatchObject({ region: "CA", country: "US" });
+    expect(parseLocation("California").city).toBeUndefined();
+  });
+  it("reads punctuated cities and Washington DC in its forms", () => {
+    expect(parseLocation("St. Louis, MO")).toMatchObject({ city: "St. Louis", region: "MO", country: "US" });
+    expect(parseLocation("Washington, DC")).toMatchObject({ city: "Washington", region: "DC", country: "US" });
+    expect(parseLocation("Washington, D.C.")).toMatchObject({ city: "Washington", region: "DC", country: "US" });
+    expect(parseLocation("Washington DC")).toMatchObject({ city: "Washington", region: "DC", country: "US" });
+    expect(parseLocation("Ft. Lauderdale, FL")).toMatchObject({ city: "Ft. Lauderdale", region: "FL", country: "US" });
+  });
+  it("reads metro strings down to the city", () => {
+    expect(parseLocation("Greater Boston Area")).toMatchObject({ city: "Boston", country: "US" });
+    expect(parseLocation("San Francisco Bay Area")).toMatchObject({ city: "San Francisco", country: "US" });
+    expect(parseLocation("New York City Metropolitan Area")).toMatchObject({ city: "New York", country: "US" });
+    expect(parseLocation("Greater Seattle Area")).toMatchObject({ city: "Seattle", country: "US" });
+  });
+  it("reads every Remote US variant as remote in the US, with no city", () => {
+    const variants = [
+      "Remote, US",
+      "Remote - USA",
+      "US Remote",
+      "Remote (US)",
+      "United States - Remote",
+      "Remote, United States",
+      "Remote in the USA",
+      "Remote - Anywhere in the US",
+      "US - Remote",
+    ];
+    for (const s of variants) {
+      const l = parseLocation(s);
+      expect(l, s).toMatchObject({ remote: true, country: "US" });
+      expect(l.city, s).toBeUndefined();
+    }
     expect(parseLocation("Remote")).toMatchObject({ remote: true });
     expect(parseLocation("Remote").country).toBeUndefined();
+  });
+  it("reads a well known US city on its own, and no other city", () => {
+    expect(parseLocation("Chicago")).toMatchObject({ city: "Chicago", country: "US" });
+    expect(parseLocation("NYC")).toMatchObject({ city: "New York", country: "US" });
+    expect(parseLocation("Cambridge").country).toBeUndefined();
+    expect(parseLocation("London").country).toBeUndefined();
+    expect(parseLocation("Dublin")).toMatchObject({ city: "Dublin" });
+    expect(parseLocation("Dublin").country).toBeUndefined();
+  });
+  it("reads other countries and leaves the unknown alone", () => {
+    expect(parseLocation("London, United Kingdom")).toMatchObject({ city: "London", country: "GB" });
+    expect(parseLocation("Paris, France")).toMatchObject({ city: "Paris", country: "FR" });
+    expect(parseLocation("Remote (Canada)")).toMatchObject({ remote: true, country: "CA" });
+    expect(parseLocation("Toronto, ON")).toMatchObject({ city: "Toronto" });
+    expect(parseLocation("Toronto, ON").country).toBeUndefined();
     expect(parseLocation("Campinas, SP", { country: "br" })).toMatchObject({ city: "Campinas", country: "BR" });
+  });
+  it("invents nothing for a string it cannot read", () => {
+    for (const s of ["N/A", "TBD", "Multiple locations", "Various"]) {
+      const l = parseLocation(s);
+      expect(l.raw, s).toBe(s);
+      expect(l.city, s).toBeUndefined();
+      expect(l.country, s).toBeUndefined();
+    }
   });
 });
 

@@ -134,6 +134,7 @@ added that is not on your profile."
   it in `.claude/skills/jobluvo-design/tokens/` too so the design system and the code
   agree.
 - Verify UI changes in the browser, not only in tests.
+- Never remove, merge, simplify or replace a page, section, animation or interaction that exists in the delivered design (.claude/skills/jobluvo-design/uploads/05-Website.html and the app screens) on your own. If you think something should change, ask first and wait for an answer. Never describe an unapproved change as a deliberate deviation after the fact.
 
 ## Commands
 

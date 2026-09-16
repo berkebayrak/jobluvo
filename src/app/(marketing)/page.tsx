@@ -82,7 +82,7 @@ export default function HomePage() {
                   </div>
                   <em className="pct">74%</em>
                 </div>
-                <div className="jrow">
+                <div className="jrow d2">
                   {/* eslint-disable-next-line @next/next/no-img-element -- remote Logo.dev URLs */}
                   <img src={logoUrl("stripe.com")} alt="Stripe" />
                   <div>
@@ -91,7 +91,7 @@ export default function HomePage() {
                   </div>
                   <em className="pct">71%</em>
                 </div>
-                <div className="jrow">
+                <div className="jrow d3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- remote Logo.dev URLs */}
                   <img src={logoUrl("spotify.com")} alt="Spotify" />
                   <div>
@@ -117,15 +117,15 @@ export default function HomePage() {
                 </div>
                 <div className="fld2">
                   <label>Name</label>
-                  <span className="typed">Jack Miller</span>
+                  <span className="typed t1">Jack Miller</span>
                 </div>
                 <div className="fld2">
                   <label>Email</label>
-                  <span className="typed">jack.miller@jobluvo.com</span>
+                  <span className="typed t2">jack.miller@jobluvo.com</span>
                 </div>
                 <div className="fld2">
                   <label>Resume</label>
-                  <span className="typed">Strategy_v3_Stripe.pdf</span>
+                  <span className="typed t3">Strategy_v3_Stripe.pdf</span>
                 </div>
                 <div className="sub2">Submit application</div>
                 <div className="done2">Submitted. Receipt saved</div>
@@ -153,7 +153,7 @@ export default function HomePage() {
                   </div>
                   <em>Interview</em>
                 </div>
-                <div className="env2">
+                <div className="env2 e2">
                   {/* eslint-disable-next-line @next/next/no-img-element -- remote Logo.dev URLs */}
                   <img src={logoUrl("snowflake.com")} alt="Snowflake" />
                   <div>
@@ -194,7 +194,7 @@ export default function HomePage() {
           </div>
           <div className="fgrid">
             <div className="fcard">
-              <div className="mock2">
+              <div className="mock2 chat">
                 <div className="mh2">
                   <span>0:04</span>
                   <span>Maya</span>
@@ -207,7 +207,7 @@ export default function HomePage() {
                   Got it. That rules out 11 of today&apos;s 42 matches. Here are the 6 that
                   fit best, and I added &quot;pre-sales&quot; to your lane&apos;s exclusions.
                 </div>
-                <div className="bub a">
+                <div className="bub a c3">
                   Datadog and Stripe are new since this morning. Want me to prepare both?
                 </div>
               </div>
@@ -219,7 +219,7 @@ export default function HomePage() {
             </div>
 
             <div className="fcard">
-              <div className="mock2">
+              <div className="mock2 chat">
                 <div className="mh2">
                   <span>0:12</span>
                   <span>Maya</span>
@@ -227,13 +227,14 @@ export default function HomePage() {
                 <div className="bub a">
                   Tell me about a program you led under cost pressure.
                 </div>
-                <div className="bub u">
+                <div className="bub u c2">
                   I led a three year cost program across four business units. We hit the
                   target a quarter early.
                 </div>
                 <div className="score">
                   <span>Confidence score</span>
                   <b>87%</b>
+                  <i />
                 </div>
               </div>
               <h4>Mock interviews</h4>
@@ -295,15 +296,15 @@ export default function HomePage() {
                     <b>Now</b>
                     <span>Head of Strategy and PMO</span>
                   </div>
-                  <div className="tick">
+                  <div className="tick t2">
                     <b>Q1 2027</b>
                     <span>Program certification, case study written</span>
                   </div>
-                  <div className="tick">
+                  <div className="tick t3">
                     <b>Q4 2027</b>
                     <span>Senior manager, strategy, at a US software company</span>
                   </div>
-                  <div className="tick">
+                  <div className="tick t4">
                     <b>2028</b>
                     <span>Director of Strategy</span>
                   </div>
@@ -355,9 +356,9 @@ export default function HomePage() {
                   <span>Q3 2026</span>
                 </div>
                 <div className="chk">38 applications, 6 replies, 2 interviews</div>
-                <div className="chk">Case study drafted, 2 rounds of edits</div>
-                <div className="chk">Summary rewritten for director roles</div>
-                <div className="chk next">
+                <div className="chk c2">Case study drafted, 2 rounds of edits</div>
+                <div className="chk c3">Summary rewritten for director roles</div>
+                <div className="chk c4 next">
                   Next quarter: certification exam, 3 outreach messages a week
                 </div>
               </div>
@@ -395,7 +396,14 @@ export default function HomePage() {
       {/* --------------------------------------------------------- pricing -- */}
       <section className="m-section tight ruled" id="pricing">
         <div className="wrap">
-          <h2 className="big">Start free. Upgrade when it works.</h2>
+          <h2 className="big" style={{ marginBottom: 8 }}>
+            Start free. Upgrade when it works.
+          </h2>
+          {/* Fine print from the delivered pricing page, which is now this section. */}
+          <p className="lead" style={{ maxWidth: 640, marginTop: 0, marginBottom: 40 }}>
+            Start with 25 free applications. One verified submission uses one application.
+            Failed or withdrawn attempts are never counted.
+          </p>
           <PricingBlock />
 
           {/* "Everything, side by side" from the delivered pricing page. That

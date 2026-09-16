@@ -469,6 +469,154 @@ html {
 .fitem i.strong {
   background: var(--accent);
 }
+/* ===========================================================================
+   Home card motion, ported from the delivered site. Timings, easing, order and
+   looping are the delivered values; only the colours are swapped for tokens.
+   Base styles are the settled state, so switching the animations off under
+   prefers-reduced-motion leaves every card readable.
+   ======================================================================== */
+
+@keyframes jin {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  8%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes type2 {
+  0%,
+  6% {
+    max-width: 0;
+  }
+  28%,
+  88% {
+    max-width: 200px;
+    border-color: transparent;
+  }
+  100% {
+    max-width: 0;
+  }
+}
+@keyframes press2 {
+  0%,
+  44% {
+    opacity: 1;
+    transform: none;
+  }
+  47% {
+    transform: scale(0.97);
+  }
+  52%,
+  88% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes done2 {
+  0%,
+  52% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  58%,
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes envin2 {
+  0% {
+    transform: translateX(-110%);
+    opacity: 0;
+  }
+  10%,
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes hot {
+  0%,
+  35% {
+    background: var(--surface-0);
+    color: var(--fg-subtle);
+  }
+  45%,
+  100% {
+    background: var(--accent);
+    color: var(--fg-inverse);
+  }
+}
+@keyframes hotb {
+  0%,
+  35% {
+    color: var(--fg);
+  }
+  45%,
+  100% {
+    color: var(--fg-inverse);
+  }
+}
+@keyframes bub {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  8%,
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes scorefill {
+  0% {
+    width: 0;
+  }
+  10%,
+  100% {
+    width: 87%;
+  }
+}
+@keyframes barfill {
+  0% {
+    width: 0;
+  }
+  25%,
+  90% {
+    width: var(--w);
+  }
+  100% {
+    width: 0;
+  }
+}
+@keyframes tickon {
+  0%,
+  10% {
+    opacity: 0.35;
+  }
+  20%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.35;
+  }
+}
 @keyframes rise {
   from {
     opacity: 0;
@@ -606,6 +754,7 @@ html {
 }
 .jrow,
 .env2 {
+  animation: jin 8s infinite;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -645,6 +794,18 @@ html {
   text-overflow: ellipsis;
   display: block;
 }
+.jrow.d2 {
+  animation-delay: 1.2s;
+}
+.jrow.d3 {
+  animation-delay: 2.4s;
+}
+.env2 {
+  animation-name: envin2;
+}
+.env2.e2 {
+  animation-delay: 1.4s;
+}
 .jrow .pct {
   font-style: normal;
   font-weight: 500;
@@ -674,8 +835,21 @@ html {
 }
 .fld2 .typed {
   font-weight: 500;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  /* The caret. Transparent once the line finishes typing. */
+  border-right: 2px solid var(--accent);
+  animation: type2 8s steps(26) infinite;
+}
+.fld2 .t2 {
+  animation-delay: 0.8s;
+}
+.fld2 .t3 {
+  animation-delay: 1.6s;
 }
 .sub2 {
+  animation: press2 8s infinite;
   background: var(--accent);
   color: var(--fg-inverse);
   border-radius: var(--radius-xs);
@@ -685,6 +859,7 @@ html {
   font-weight: 500;
 }
 .done2 {
+  animation: done2 8s infinite;
   font-size: var(--text-2xs);
   color: var(--fg);
   font-weight: 500;
@@ -705,8 +880,32 @@ html {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
+/*
+ * The Interviewing step settles as a filled inverse pill, which is the state
+ * the animation ends on. Monochrome, so no colour rule is bent.
+ */
+.pipe3 .hot {
+  animation: hot 8s infinite;
+  background: var(--accent);
+  color: var(--fg-inverse);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+}
 .pipe3 .hot b {
-  border-bottom: 1px solid var(--accent);
+  animation: hotb 8s infinite;
+  color: var(--fg-inverse);
+}
+.chat .bub {
+  animation: bub 9s infinite;
+}
+.chat .bub.a {
+  animation-delay: 1.5s;
+}
+.chat .bub.c2 {
+  animation-delay: 1.5s;
+}
+.chat .bub.c3 {
+  animation-delay: 3s;
 }
 .bub {
   font-size: var(--text-2xs);
@@ -750,6 +949,7 @@ html {
   width: var(--w);
   background: var(--fg-subtle);
   border-radius: var(--radius-full);
+  animation: barfill 6s infinite;
 }
 .brow2.you i::after,
 .brow2.have i::after {
@@ -768,9 +968,12 @@ html {
   margin-top: auto;
 }
 .score {
-  display: flex;
+  animation: bub 9s infinite;
+  animation-delay: 3.4s;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
   align-items: center;
-  gap: 8px;
   font-size: var(--text-2xs);
   border-top: 1px solid var(--border);
   padding-top: 6px;
@@ -780,12 +983,32 @@ html {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.score i {
+  grid-column: 1 / 3;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  position: relative;
+  overflow: hidden;
+}
+.score i::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 87%;
+  background: var(--accent);
+  animation: scorefill 9s infinite;
+  animation-delay: 3.6s;
+}
 .tl {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .tick {
+  animation: tickon 9s infinite;
   display: flex;
   gap: 8px;
   font-size: var(--text-2xs);
@@ -806,6 +1029,18 @@ html {
 .tick.on::before {
   background: var(--accent);
 }
+.tick.on {
+  animation: none;
+}
+.tick.t2 {
+  animation-delay: 1s;
+}
+.tick.t3 {
+  animation-delay: 2.5s;
+}
+.tick.t4 {
+  animation-delay: 4s;
+}
 .tick b {
   width: 52px;
   flex: none;
@@ -815,8 +1050,18 @@ html {
   color: var(--fg-muted);
 }
 .chk {
+  animation: bub 9s infinite;
   font-size: var(--text-2xs);
   color: var(--fg-muted);
+}
+.chk.c2 {
+  animation-delay: 1s;
+}
+.chk.c3 {
+  animation-delay: 2s;
+}
+.chk.c4 {
+  animation-delay: 3.2s;
 }
 .chk.next {
   color: var(--fg);
@@ -1644,5 +1889,35 @@ html {
   }
   .band {
     padding: 32px 20px;
+  }
+}
+
+/*
+ * Reduced motion: every card holds its settled state. The base styles already
+ * are that state, so the animations only need switching off. The two that
+ * start from a dimmed or empty base are pinned to their finished value.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .jrow,
+  .env2,
+  .fld2 .typed,
+  .sub2,
+  .done2,
+  .pipe3 .hot,
+  .pipe3 .hot b,
+  .chat .bub,
+  .score,
+  .score i::after,
+  .brow2 i::after,
+  .tick,
+  .chk,
+  .fitem {
+    animation: none;
+  }
+  .fld2 .typed {
+    border-color: transparent;
+  }
+  .tick {
+    opacity: 1;
   }
 }

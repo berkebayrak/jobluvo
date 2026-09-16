@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/core/Button";
 import { showToast } from "@/components/feedback/Toaster";
 import { HeroDemo } from "@/components/marketing/HeroDemo";
@@ -43,6 +44,7 @@ export function addrFrom(n: string): string {
 }
 
 export function SignInForm() {
+  const router = useRouter();
   const [email, setEmail] = React.useState("jack.miller@gmail.com");
   const [pass, setPass] = React.useState("");
   const [err, setErr] = React.useState(false);
@@ -51,9 +53,10 @@ export function SignInForm() {
     const ok = email.trim() && pass;
     setErr(!ok);
     if (ok) {
-      // The product lives on the app branch. Until that merges, signing in
-      // confirms and stops here rather than linking to a route that 404s.
+      // Placeholder until real auth exists: nothing is checked, any filled in
+      // form opens the product.
       showToast({ text: "Signing you in." });
+      router.push("/dashboard");
     }
   }
 
@@ -65,9 +68,10 @@ export function SignInForm() {
         <div className="box">
           <Button
             style={{ width: "100%" }}
-            onClick={() =>
-              showToast({ text: "Google sign in would open here. Continuing to the dashboard." })
-            }
+            onClick={() => {
+              showToast({ text: "Google sign in would open here. Continuing to the dashboard." });
+              router.push("/dashboard");
+            }}
           >
             <GoogleMark />
             Continue with Google
@@ -104,6 +108,7 @@ export function SignInForm() {
 }
 
 export function SignUpForm() {
+  const router = useRouter();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [pass, setPass] = React.useState("");
@@ -114,7 +119,9 @@ export function SignUpForm() {
     const ok = name.trim() && email.trim() && pass;
     setErr(!ok);
     if (ok) {
+      // Placeholder until real auth exists: no account is created.
       showToast({ text: `Account created. Your address is ${addr}.` });
+      router.push("/dashboard");
     }
   }
 
@@ -126,9 +133,10 @@ export function SignUpForm() {
         <div className="box">
           <Button
             style={{ width: "100%" }}
-            onClick={() =>
-              showToast({ text: "Google sign in would open here. Continuing to the dashboard." })
-            }
+            onClick={() => {
+              showToast({ text: "Google sign in would open here. Continuing to the dashboard." });
+              router.push("/dashboard");
+            }}
           >
             <GoogleMark />
             Continue with Google

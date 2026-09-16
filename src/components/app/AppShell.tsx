@@ -70,6 +70,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {[
                     { label: "Profile and resumes", href: "/profile" },
                     { label: "Settings", href: "/settings" },
+                    // Log out leaves the product for the marketing home. A
+                    // placeholder until real auth exists: there is no session
+                    // to end, so it only navigates. A rule separates it from
+                    // the two that stay inside the product.
+                    { label: "Log out", href: "/", separated: true },
                   ].map((m) => (
                     <button
                       key={m.href}
@@ -82,6 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         width: "100%",
                         textAlign: "left",
                         border: 0,
+                        borderTop: m.separated ? "1px solid var(--border)" : undefined,
                         background: "transparent",
                         padding: "8px 12px",
                         fontSize: "var(--text-sm)",

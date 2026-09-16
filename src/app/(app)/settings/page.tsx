@@ -66,11 +66,6 @@ export default function SettingsPage() {
                 <div className="progress">
                   <i style={{ width: `${((5000 - 1412) / 5000) * 100}%` }} />
                 </div>
-                <p className="sub" style={{ marginTop: 8 }}>
-                  One verified submission uses one application. Failed or withdrawn attempts
-                  are never counted. Allowances are provisional while execution costs are
-                  measured.
-                </p>
               </Card>
 
               <div style={{ marginTop: 12 }}>

@@ -39,12 +39,14 @@ export default function HomePage() {
             </p>
             <div className="ctas">
               <Link href="/signup">
-                <Button variant="primary" size="lg">
+                <Button variant="primary" size="lg" style={{ fontSize: 16 }}>
                   Start free
                 </Button>
               </Link>
               <Link href="/#how">
-                <Button size="lg">See how it works</Button>
+                <Button size="lg" style={{ fontSize: 16 }}>
+                  See how it works
+                </Button>
               </Link>
             </div>
             <div className="fine">No card needed. Your first 25 applications are free.</div>

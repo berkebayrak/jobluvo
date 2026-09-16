@@ -41,7 +41,7 @@ export default function AutoApplyPage() {
           <h1>Auto Apply</h1>
           <p className="sub">
             Set each lane once. Jobluvo checks new matches several times a day and applies
-            within your rules.
+            within your rules. Sample data until lanes run.
           </p>
         </div>
         <div className="row">

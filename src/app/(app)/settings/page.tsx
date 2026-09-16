@@ -5,6 +5,7 @@ import { Button } from "@/components/core/Button";
 import { Card } from "@/components/data/Card";
 import { Toggle } from "@/components/core/Toggle";
 import { showToast } from "@/components/feedback/Toaster";
+import { SourcesCard } from "@/components/app/SourcesCard";
 import { plans, prices } from "@/lib/marketing/pricing";
 
 const TABS = [
@@ -67,6 +68,10 @@ export default function SettingsPage() {
                   <i style={{ width: `${((5000 - 1412) / 5000) * 100}%` }} />
                 </div>
               </Card>
+
+              <div style={{ marginTop: 12 }}>
+                <SourcesCard />
+              </div>
 
               <div style={{ marginTop: 12 }}>
                 <Card title="Plans">

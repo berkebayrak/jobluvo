@@ -58,9 +58,13 @@ The 19 systems in the competitor disclosure are Workday, Greenhouse, Lever, Ashb
 Rippling, iCIMS, BambooHR, Workable, JazzHR, Jobvite, BreezyHR, Oracle Cloud,
 SmartRecruiters, Paylocity, UltiPro, ADP, Dover, Gem and Zoho Recruit.
 
-This is a competitor research list, not a Jobluvo launch coverage commitment. First
-adapters target Greenhouse, Lever and Ashby, with Workday developed early and enabled
-only for validated configurations.
+This is a competitor research list, not a Jobluvo launch coverage commitment. Phase 0
+discovers jobs on the six families with unauthenticated JSON feeds: Greenhouse, Lever,
+Ashby, SmartRecruiters, Workable and Gem. Adapters live in `src/server/sources`, one
+file per family, seeded from `registry.ts`. The other thirteen, Workday, iCIMS, Oracle
+Cloud, BambooHR, BreezyHR, JazzHR, Jobvite, Paylocity, UltiPro, ADP, Dover, Rippling
+and Zoho Recruit, are next phases. Workday is developed early and enabled only for
+validated configurations. Submission is not built yet on any family.
 
 Discovery and execution are separate capabilities with different constraints. A platform
 can be easy for one and hard for the other. Coverage is tiered A to D; state both tiers
@@ -132,8 +136,8 @@ added that is not on your profile."
 - Never push to `main` directly. Every change lands through a pull request.
 - Open pull requests with `gh pr create`. On Windows `gh` is not on the bash PATH; use
   `"C:\Program Files\GitHub CLI\gh.exe"` or run it from PowerShell.
-- Before every push, all three must pass: `npx tsc --noEmit`, `npx eslint .` and
-  `npm run build`. Do not push a red build.
+- Before every push, all four must pass: `npx tsc --noEmit`, `npx eslint .`, `npm test`
+  and `npm run build`. Do not push a red build.
 - Ask before adding a dependency. Say what it buys and what it costs.
 - Ask before changing a design token. Tokens come from the handoff; if one is wrong, fix
   it in `.claude/skills/jobluvo-design/tokens/` too so the design system and the code
@@ -148,6 +152,11 @@ npm run dev          # dev server on port 3000
 npm run build        # production build
 npx tsc --noEmit     # typecheck
 npx eslint .         # lint
+npm test             # unit tests (vitest)
+npm run seed         # demo user and the source registry, verifies each feed first
+npm run ingest       # one ingest batch against the live feeds, prints a line per source
+npm run db:generate  # migration from src/db/schema.ts
+npm run db:migrate   # apply migrations over the direct Neon host
 ```
 
 ## Layout

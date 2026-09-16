@@ -81,7 +81,7 @@ html {
   line-height: var(--leading-3xl);
   letter-spacing: var(--tracking-tight);
   font-weight: 500;
-  margin: 0 0 28px;
+  margin: 0 0 40px;
 }
 .sec-head {
   max-width: 640px;
@@ -354,18 +354,14 @@ html {
   flex-direction: column;
   gap: 5px;
 }
-/* Check for a reason that fits, minus for one that does not. Lucide, not text. */
-.dcard .why span {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-.dcard .why span svg {
-  flex: none;
-  margin-top: 2px;
+.dcard .why span::before {
+  content: "+";
   color: var(--fg);
+  font-weight: 500;
+  margin-right: 6px;
 }
-.dcard .why span.neg svg {
+.dcard .why span.neg::before {
+  content: "-";
   color: var(--fg-subtle);
 }
 /*
@@ -454,9 +450,6 @@ html {
   margin-top: 34px;
 }
 .dbtns span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   background: var(--surface-0);
   border: 1px solid var(--border);
   padding: 8px 16px;

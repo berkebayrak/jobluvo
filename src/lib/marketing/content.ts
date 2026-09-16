@@ -10,8 +10,8 @@
 export const nav: { href: string; label: string; section?: string }[] = [
   { href: "/how-it-works", label: "How it works" },
   { href: "/#pricing", label: "Pricing", section: "pricing" },
-  { href: "/blog", label: "Blog" },
   { href: "/#faq", label: "FAQ", section: "faq" },
+  { href: "/blog", label: "Blog" },
 ];
 
 /**

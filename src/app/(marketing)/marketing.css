@@ -2021,7 +2021,7 @@ html {
     font-size: var(--text-3xl);
     line-height: var(--leading-3xl);
   }
-  .big,
+  /* .big keeps 36px at every width, as delivered. */
   .sec-head h2,
   .stage h2,
   .auth h1,

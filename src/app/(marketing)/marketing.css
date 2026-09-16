@@ -369,6 +369,13 @@ html {
   background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--surface-3) 0);
   position: relative;
   flex: none;
+  /*
+   * Unitless, so each line scales to its own font size. The token leadings are
+   * fixed px and body inherits 20px, which gave the 12px value and the 8px
+   * label a 20px line box each: a 40px stack inside the 42px inner circle,
+   * crowding MATCH against the ring. 1.55 restores the delivered proportions.
+   */
+  line-height: 1.55;
 }
 .ring::before {
   content: "";
@@ -501,10 +508,22 @@ html {
   justify-content: center;
   flex: 1;
 }
-.strip .logos img {
+/*
+ * Wordmarks are painted, not shown: the PNG is the mask and the fill is one
+ * token grey, so the strip stays monochrome and no brand shouts over another.
+ * grey-700 rather than grey-500, which leaves the thinner wordmarks legible.
+ */
+.strip .logos .ats-logo {
+  display: block;
   height: 20px;
-  width: auto;
-  object-fit: contain;
+  flex: none;
+  background-color: var(--fg-muted);
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
 }
 .strip .more {
   font-size: var(--text-xs);

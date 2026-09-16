@@ -43,9 +43,14 @@ export const smartrecruiters: Adapter = {
     let offset = 0;
     const limit = 100;
     let etag: string | undefined;
+    // A 304 returns before any detail fetch, so while a known job is still
+    // waiting for its body the list is fetched unconditionally: the etag would
+    // otherwise keep the backlog pending, and hidden from the feed, for as long
+    // as the list itself is unchanged.
+    const draining = [...opts.known.values()].some((k) => k.detailPending);
     for (;;) {
       const url = `https://api.smartrecruiters.com/v1/companies/${company}/postings?limit=${limit}&offset=${offset}`;
-      const res = await fetchJson<{ totalFound: number; content: SrListItem[] }>(url, offset === 0 ? source.etag : undefined);
+      const res = await fetchJson<{ totalFound: number; content: SrListItem[] }>(url, offset === 0 && !draining ? source.etag : undefined);
       if (!res) return { notModified: true };
       if (offset === 0) etag = res.etag;
       items.push(...res.json.content);

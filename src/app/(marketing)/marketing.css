@@ -188,6 +188,10 @@ html {
 .m-menu a:last-child {
   border-bottom: 0;
 }
+/* Sign in only belongs in the menu once it has left the bar, below 560px. */
+.m-menu .menu-signin {
+  display: none;
+}
 .m-menu a.on {
   color: var(--fg);
   font-weight: 500;
@@ -1944,5 +1948,19 @@ html {
   }
   .tick {
     opacity: 1;
+  }
+}
+
+/*
+ * Below 560px the bar keeps one action, as the delivered site did: Sign in
+ * drops out and Start free stays. Unlike the delivered site, Sign in is not
+ * lost, it moves into the burger menu.
+ */
+@media (max-width: 560px) {
+  .m-nav .bar-signin {
+    display: none;
+  }
+  .m-menu .menu-signin {
+    display: block;
   }
 }

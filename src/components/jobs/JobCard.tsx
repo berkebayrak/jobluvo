@@ -13,7 +13,8 @@ export interface JobCardProps {
   /** Application system, e.g. Greenhouse */
   ats?: string;
   posted?: string;
-  match: number;
+  /** Absent until the job has been scored; the card then shows "New" in place of the number. */
+  match?: number;
   /** Prefix with "-" for a reason against. Others read as for. */
   reasons?: string[];
   onApply?: () => void;
@@ -97,10 +98,10 @@ export function JobCard({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {match}%
+            {match == null ? "New" : `${match}%`}
           </div>
           <div style={{ fontSize: "var(--text-2xs)", color: "var(--fg-subtle)" }}>
-            match
+            {match == null ? "not scored" : "match"}
           </div>
         </div>
       </div>

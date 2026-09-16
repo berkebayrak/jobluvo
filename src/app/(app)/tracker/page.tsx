@@ -31,7 +31,8 @@ export default function TrackerPage() {
           <h1>Tracker</h1>
           <p className="sub">
             Where each application stands with the employer. Execution status lives on the
-            dashboard; this board is about hiring stages.
+            dashboard; this board is about hiring stages. Sample data until submissions
+            exist.
           </p>
         </div>
         <div className="row">

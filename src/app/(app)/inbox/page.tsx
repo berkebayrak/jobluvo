@@ -51,7 +51,7 @@ export default function InboxPage() {
           <h1>Inbox</h1>
           <p className="sub">
             Everything employers send to your Jobluvo address, sorted and linked to the
-            right application.
+            right application. Sample data until the address is live.
           </p>
         </div>
         <div className="row">

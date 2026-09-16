@@ -8,7 +8,8 @@ export interface SwipeCardProps {
   posted?: string;
   salary?: string;
   ats?: string;
-  match: number;
+  /** Absent until the job has been scored; the ring stays empty and reads "New". */
+  match?: number;
   reasons?: string[];
   /** Small print at the bottom, e.g. which resume will be tailored */
   footnote?: string;
@@ -91,7 +92,7 @@ export function SwipeCard({
             borderRadius: "var(--radius-full)",
             display: "grid",
             placeItems: "center",
-            background: `conic-gradient(var(--accent) ${match * 3.6}deg, var(--surface-3) 0)`,
+            background: `conic-gradient(var(--accent) ${(match ?? 0) * 3.6}deg, var(--surface-3) 0)`,
           }}
         >
           <span
@@ -108,7 +109,7 @@ export function SwipeCard({
               whiteSpace: "nowrap",
             }}
           >
-            {match}%
+            {match == null ? "New" : `${match}%`}
           </span>
         </div>
       </div>

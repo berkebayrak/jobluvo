@@ -205,8 +205,6 @@ export const pipeline: PipelineItem[] = [
   {co:'Zillow',t:'Strategy Manager',stage:'Ghosted',note:'No reply in 47 days',lane:'Strategy and planning',resume:'Strategy v3',days:47},
   {co:'Databricks',t:'Senior Strategy Analyst',stage:'Ghosted',note:'No reply in 62 days',lane:'Manual',resume:'Strategy v3',days:62},
 ];
-apps.filter(a=>a.st==='Submitted').slice(4,27).forEach((a,k)=>pipeline.push({co:a.co,t:a.t,stage:'Applied',note:a.d,tag:'Confirmed',cls:'ok',lane:a.l,resume:a.r,days:5+k}));
-pipeline.forEach((p,i)=>p.id=i);
 apps
   .filter((a) => a.st === "Submitted")
   .slice(4, 27)

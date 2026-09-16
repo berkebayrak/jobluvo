@@ -9,16 +9,8 @@ import { JobCard } from "@/components/jobs/JobCard";
 import { SwipeCard } from "@/components/jobs/SwipeCard";
 import { Toggle } from "@/components/core/Toggle";
 import { showToast } from "@/components/feedback/Toaster";
-import { domains, jobs } from "@/lib/app/data";
+import { ageHoursOf, cardFields, locationLabel, type FeedJob } from "@/lib/app/jobs-client";
 import { logoUrl } from "@/lib/logo";
-
-/** "8 hours ago" and "2 days ago" both become hours, so Date can compare. */
-function ageHours(age: string): number {
-  const m = /(\d+)\s*(hour|day|week)/.exec(age);
-  if (!m) return 9999;
-  const n = Number(m[1]);
-  return m[2] === "hour" ? n : m[2] === "day" ? n * 24 : n * 168;
-}
 
 const DATE_OPTIONS: { label: string; hours: number }[] = [
   { label: "Last 24 hours", hours: 24 },
@@ -26,12 +18,11 @@ const DATE_OPTIONS: { label: string; hours: number }[] = [
   { label: "Last week", hours: 168 },
 ];
 
-/** Distinct values straight off the job data, so every option matches something. */
-const VALUES = {
-  loc: [...new Set(jobs.map((j) => j.loc))].sort(),
-  mode: [...new Set(jobs.map((j) => j.mode))].sort(),
-  co: [...new Set(jobs.map((j) => j.co))].sort(),
-  level: [...new Set(jobs.map((j) => j.level))].sort(),
+const WORKPLACE_LABEL: Record<string, string> = {
+  remote: "Remote",
+  hybrid: "Hybrid",
+  onsite: "On site",
+  unknown: "Not stated",
 };
 
 function toggle(list: string[], v: string): string[] {
@@ -92,15 +83,7 @@ function FilterChip({
 }
 
 /** One option row. Checked state is a glyph, never colour. */
-function Opt({
-  label,
-  on,
-  onToggle,
-}: {
-  label: string;
-  on: boolean;
-  onToggle: () => void;
-}) {
+function Opt({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
   return (
     <button
       onClick={onToggle}
@@ -143,8 +126,21 @@ function Opt({
   );
 }
 
-/** One card per job, dealt once. */
-const DECK = jobs.map((_, i) => i);
+type Decision = "apply" | "save" | "skip";
+
+async function postDecision(jobId: string, decision: Decision): Promise<boolean> {
+  const r = await fetch("/api/swipe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jobId, decision }),
+  });
+  return r.ok;
+}
+
+async function undoDecision(jobId: string): Promise<boolean> {
+  const r = await fetch(`/api/swipe?jobId=${encodeURIComponent(jobId)}`, { method: "DELETE" });
+  return r.ok;
+}
 
 function JobsScreen() {
   const router = useRouter();
@@ -152,7 +148,27 @@ function JobsScreen() {
   const [mode, setMode] = React.useState(params.get("mode") === "swipe" ? "swipe" : "list");
   const [autoApply, setAutoApply] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [saved, setSaved] = React.useState<number[]>([]);
+
+  const [all, setAll] = React.useState<FeedJob[] | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  /** Jobs swiped this session, removed from view without a refetch. */
+  const [gone, setGone] = React.useState<Set<string>>(new Set());
+  const [savedCount, setSavedCount] = React.useState(0);
+
+  React.useEffect(() => {
+    let alive = true;
+    fetch("/api/jobs")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { jobs: FeedJob[] }) => {
+        if (!alive) return;
+        setAll(d.jobs);
+        setLoadError(null);
+      })
+      .catch((e: unknown) => alive && setLoadError(e instanceof Error ? e.message : String(e)));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const [date, setDate] = React.useState<number | null>(null);
   const [loc, setLoc] = React.useState<string[]>([]);
@@ -163,14 +179,21 @@ function JobsScreen() {
   const [exclude, setExclude] = React.useState("");
   const [open, setOpen] = React.useState<string | null>(null);
 
+  const jobs = React.useMemo(() => (all ?? []).filter((j) => !gone.has(j.id)), [all, gone]);
+
+  /** Distinct values straight off the live data, so every option matches something. */
+  const values = React.useMemo(
+    () => ({
+      loc: [...new Set(jobs.map(locationLabel))].sort(),
+      workplace: [...new Set(jobs.map((j) => j.workplace))].sort(),
+      co: [...new Set(jobs.map((j) => j.companyName))].sort(),
+      level: [...new Set(jobs.map((j) => j.seniority).filter((s): s is string => !!s))].sort(),
+    }),
+    [jobs],
+  );
+
   const activeCount =
-    (date !== null ? 1 : 0) +
-    loc.length +
-    workplace.length +
-    co.length +
-    level.length +
-    (sponsor ? 1 : 0) +
-    (exclude.trim() ? 1 : 0);
+    (date !== null ? 1 : 0) + loc.length + workplace.length + co.length + level.length + (sponsor ? 1 : 0) + (exclude.trim() ? 1 : 0);
 
   function clearAll() {
     setDate(null);
@@ -183,10 +206,6 @@ function JobsScreen() {
     setOpen(null);
   }
 
-  const [di, setDi] = React.useState(0);
-  const [stamp, setStamp] = React.useState<"apply" | "skip" | null>(null);
-  const [counts, setCounts] = React.useState({ apply: 0, save: 0, skip: 0 });
-
   const words = exclude
     .toLowerCase()
     .split(",")
@@ -194,68 +213,95 @@ function JobsScreen() {
     .filter(Boolean);
 
   const list = jobs.filter((j) => {
-    const hay = (j.title + " " + j.co + " " + j.summary).toLowerCase();
+    const hay = `${j.title} ${j.companyName} ${j.locations.map((l) => l.raw).join(" ")}`.toLowerCase();
     if (query && !hay.includes(query.toLowerCase())) return false;
-    if (date !== null && ageHours(j.age) > date) return false;
-    if (loc.length && !loc.includes(j.loc)) return false;
-    if (workplace.length && !workplace.includes(j.mode)) return false;
-    if (co.length && !co.includes(j.co)) return false;
-    if (level.length && !level.includes(j.level)) return false;
-    if (sponsor && j.sponsor !== "Yes") return false;
+    if (date !== null && ageHoursOf(j.postedAt ?? j.firstSeenAt) > date) return false;
+    if (loc.length && !loc.includes(locationLabel(j))) return false;
+    if (workplace.length && !workplace.includes(j.workplace)) return false;
+    if (co.length && !co.includes(j.companyName)) return false;
+    if (level.length && !level.includes(j.seniority ?? "")) return false;
+    if (sponsor && j.sponsorship !== "offered") return false;
     if (words.some((w) => hay.includes(w))) return false;
     return true;
   });
 
-  const job = jobs[DECK[di] ?? 0];
+  const [stamp, setStamp] = React.useState<"apply" | "skip" | null>(null);
+  const [counts, setCounts] = React.useState({ apply: 0, save: 0, skip: 0 });
+  const deck = list;
+  const job = deck[0];
 
-  function swipe(action: "apply" | "skip" | "save") {
-    if (action === "save") {
-      setCounts((c) => ({ ...c, save: c.save + 1 }));
-      showToast({ text: `Saved ${job.co}.`, actionLabel: "Undo" });
+  async function decide(j: FeedJob, decision: Decision) {
+    const ok = await postDecision(j.id, decision);
+    if (!ok) {
+      showToast({ text: "Could not save that. Try again." });
       return;
     }
-    setStamp(action);
-    setCounts((c) => ({ ...c, [action]: c[action] + 1 }));
+    setGone((g) => new Set(g).add(j.id));
+    setCounts((c) => ({ ...c, [decision]: c[decision] + 1 }));
+    if (decision === "save") setSavedCount((n) => n + 1);
     showToast({
       text:
-        action === "apply"
-          ? `Applying to ${job.co}. Resume tailored, submitting now.`
-          : `Skipped ${job.co}. You will not see this again.`,
+        decision === "apply"
+          ? `Queued ${j.companyName}. Tailoring arrives with the next release.`
+          : decision === "save"
+            ? `Saved ${j.companyName}.`
+            : `Skipped ${j.companyName}. You will not see this again.`,
       actionLabel: "Undo",
+      onAction: async () => {
+        if (await undoDecision(j.id)) {
+          setGone((g) => {
+            const n = new Set(g);
+            n.delete(j.id);
+            return n;
+          });
+          setCounts((c) => ({ ...c, [decision]: Math.max(0, c[decision] - 1) }));
+          if (decision === "save") setSavedCount((n) => Math.max(0, n - 1));
+        }
+      },
     });
+  }
+
+  function swipe(decision: Decision) {
+    if (!job) return;
+    if (decision === "save") {
+      void decide(job, decision);
+      return;
+    }
+    setStamp(decision);
     window.setTimeout(() => {
       setStamp(null);
-      setDi((n) => (n + 1) % DECK.length);
+      void decide(job, decision);
     }, 220);
   }
+
+  const total = all?.length ?? 0;
+  const subline =
+    loadError
+      ? `Could not load jobs. ${loadError}`
+      : all === null
+        ? "Loading jobs."
+        : activeCount > 0 || query
+          ? `${list.length} of ${jobs.length} jobs shown.`
+          : `${jobs.length} open jobs from ${new Set(jobs.map((j) => j.companyName)).size} companies. Scores arrive once your profile is confirmed.`;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Jobs</h1>
-          <p className="sub">
-            {activeCount > 0 || query
-              ? `${list.length} of ${jobs.length} matches shown.`
-              : "42 fresh matches. 18 above your Strategy lane\u2019s bar."}
-          </p>
+          <p className="sub">{subline}</p>
         </div>
         <div className="row">
           <div className="row" style={{ gap: 8, marginRight: 8 }}>
             <span style={{ fontSize: "var(--text-sm)", fontWeight: 500 }}>Auto Apply</span>
             <Toggle on={autoApply} onChange={setAutoApply} />
           </div>
-          <Button onClick={() => showToast({ text: "Paste a job link to add it." })}>
-            Add a job link
-          </Button>
+          <Button onClick={() => showToast({ text: "Paste a job link to add it." })}>Add a job link</Button>
           <div className="seg">
             <button className={mode === "list" ? "on" : undefined} onClick={() => setMode("list")}>
               List
             </button>
-            <button
-              className={mode === "swipe" ? "on" : undefined}
-              onClick={() => setMode("swipe")}
-            >
+            <button className={mode === "swipe" ? "on" : undefined} onClick={() => setMode("swipe")}>
               Swipe
             </button>
           </div>
@@ -265,78 +311,38 @@ function JobsScreen() {
       <div className="toolbar">
         <div className="search">
           <input
-            placeholder="Search by title, company or keyword"
+            placeholder="Search by title, company or location"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <FilterChip
-          label="Date"
-          count={date !== null ? 1 : 0}
-          open={open === "date"}
-          onOpen={() => setOpen(open === "date" ? null : "date")}
-        >
+        <FilterChip label="Date" count={date !== null ? 1 : 0} open={open === "date"} onOpen={() => setOpen(open === "date" ? null : "date")}>
           {DATE_OPTIONS.map((d) => (
-            <Opt
-              key={d.label}
-              label={d.label}
-              on={date === d.hours}
-              onToggle={() => setDate(date === d.hours ? null : d.hours)}
-            />
+            <Opt key={d.label} label={d.label} on={date === d.hours} onToggle={() => setDate(date === d.hours ? null : d.hours)} />
           ))}
         </FilterChip>
 
-        <FilterChip
-          label="Location"
-          count={loc.length}
-          open={open === "loc"}
-          onOpen={() => setOpen(open === "loc" ? null : "loc")}
-        >
-          {VALUES.loc.map((v) => (
+        <FilterChip label="Location" count={loc.length} open={open === "loc"} onOpen={() => setOpen(open === "loc" ? null : "loc")}>
+          {values.loc.map((v) => (
             <Opt key={v} label={v} on={loc.includes(v)} onToggle={() => setLoc(toggle(loc, v))} />
           ))}
         </FilterChip>
 
-        <FilterChip
-          label="Workplace"
-          count={workplace.length}
-          open={open === "mode"}
-          onOpen={() => setOpen(open === "mode" ? null : "mode")}
-        >
-          {VALUES.mode.map((v) => (
-            <Opt
-              key={v}
-              label={v}
-              on={workplace.includes(v)}
-              onToggle={() => setWorkplace(toggle(workplace, v))}
-            />
+        <FilterChip label="Workplace" count={workplace.length} open={open === "mode"} onOpen={() => setOpen(open === "mode" ? null : "mode")}>
+          {values.workplace.map((v) => (
+            <Opt key={v} label={WORKPLACE_LABEL[v] ?? v} on={workplace.includes(v)} onToggle={() => setWorkplace(toggle(workplace, v))} />
           ))}
         </FilterChip>
 
-        <FilterChip
-          label="Companies"
-          count={co.length}
-          open={open === "co"}
-          onOpen={() => setOpen(open === "co" ? null : "co")}
-        >
-          {VALUES.co.map((v) => (
+        <FilterChip label="Companies" count={co.length} open={open === "co"} onOpen={() => setOpen(open === "co" ? null : "co")}>
+          {values.co.map((v) => (
             <Opt key={v} label={v} on={co.includes(v)} onToggle={() => setCo(toggle(co, v))} />
           ))}
         </FilterChip>
 
-        <FilterChip
-          label="Seniority"
-          count={level.length}
-          open={open === "level"}
-          onOpen={() => setOpen(open === "level" ? null : "level")}
-        >
-          {VALUES.level.map((v) => (
-            <Opt
-              key={v}
-              label={v}
-              on={level.includes(v)}
-              onToggle={() => setLevel(toggle(level, v))}
-            />
+        <FilterChip label="Seniority" count={level.length} open={open === "level"} onOpen={() => setOpen(open === "level" ? null : "level")}>
+          {values.level.map((v) => (
+            <Opt key={v} label={v} on={level.includes(v)} onToggle={() => setLevel(toggle(level, v))} />
           ))}
         </FilterChip>
 
@@ -344,12 +350,7 @@ function JobsScreen() {
           Sponsors visa
         </button>
 
-        <FilterChip
-          label="Exclude keywords"
-          count={exclude.trim() ? 1 : 0}
-          open={open === "excl"}
-          onOpen={() => setOpen(open === "excl" ? null : "excl")}
-        >
+        <FilterChip label="Exclude keywords" count={exclude.trim() ? 1 : 0} open={open === "excl"} onOpen={() => setOpen(open === "excl" ? null : "excl")}>
           <input
             placeholder="pre-sales, clearance"
             value={exclude}
@@ -367,14 +368,7 @@ function JobsScreen() {
               outline: 0,
             }}
           />
-          <span
-            style={{
-              fontSize: "var(--text-2xs)",
-              color: "var(--fg-subtle)",
-              display: "block",
-              marginTop: 6,
-            }}
-          >
+          <span style={{ fontSize: "var(--text-2xs)", color: "var(--fg-subtle)", display: "block", marginTop: 6 }}>
             Comma separated. A job matching any of these drops out.
           </span>
         </FilterChip>
@@ -385,14 +379,14 @@ function JobsScreen() {
           </Button>
         )}
         <span className="spacer" />
-        <Button size="sm">Saved {saved.length}</Button>
+        <Button size="sm">Saved {savedCount}</Button>
       </div>
 
       {autoApply && (
         <div style={{ marginBottom: 16 }}>
           <Banner
             title="Auto Apply is on. Matches above your bar are applied for you."
-            body="You are seeing what is left: jobs below your lanes' bar, jobs on unsupported sites, and jobs a lane held for your review. 11 applied today across 2 lanes."
+            body="You are seeing what is left: jobs below your lanes' bar, jobs on unsupported sites, and jobs a lane held for your review."
             primary={
               <Button size="sm" onClick={() => router.push("/tracker")}>
                 See what was sent
@@ -404,31 +398,28 @@ function JobsScreen() {
 
       {mode === "list" ? (
         <div className="jobs-grid">
-          {list.map((j, i) => (
-            <JobCard
-              key={`${j.co}-${i}`}
-              company={j.co}
-              logo={logoUrl(domains[j.co] ?? "example.com")}
-              title={j.title}
-              location={`${j.loc}. ${j.mode}`}
-              salary={j.salary}
-              ats={j.level}
-              posted={j.age}
-              match={j.p}
-              reasons={j.why.map(([k, t]) => (k === "y" ? t : `- ${t}`))}
-              onApply={() =>
-                showToast({
-                  text: `Applying to ${j.co}. Resume tailored, submitting now.`,
-                  actionLabel: "Undo",
-                })
-              }
-              onSave={() => {
-                setSaved((s) => (s.includes(i) ? s : [...s, i]));
-                showToast({ text: `Saved ${j.co}.` });
-              }}
-              onSkip={() => showToast({ text: `Skipped ${j.co}.` })}
-            />
-          ))}
+          {list.map((j) => {
+            const f = cardFields(j);
+            return (
+              <JobCard
+                key={j.id}
+                company={f.company}
+                logo={f.logoDomain ? logoUrl(f.logoDomain) : undefined}
+                title={f.title}
+                location={f.location}
+                salary={f.salary}
+                ats={f.ats}
+                posted={f.posted}
+                reasons={f.reasons}
+                onApply={() => decide(j, "apply")}
+                onSave={() => decide(j, "save")}
+                onSkip={() => decide(j, "skip")}
+              />
+            );
+          })}
+          {all && list.length === 0 && (
+            <p className="sub">{total === 0 ? "No open jobs yet. The first ingest fills this in." : "Nothing matches these filters."}</p>
+          )}
         </div>
       ) : (
         <div className="swipe-wrap">
@@ -436,45 +427,53 @@ function JobsScreen() {
             <div className="deck-hold">
               <div className="stack" style={{ transform: "scale(.92)" }} />
               <div className="stack" style={{ transform: "scale(.96)" }} />
-              <SwipeCard
-                company={job.co}
-                logo={logoUrl(domains[job.co] ?? "example.com")}
-                title={job.title}
-                location={`${job.loc}. ${job.mode}`}
-                posted={job.age}
-                salary={job.salary}
-                ats={job.level}
-                match={job.p}
-                reasons={job.why.map(([k, t]) => (k === "y" ? t : `- ${t}`))}
-                footnote="Resume Strategy v3 will be tailored for this role."
-                stamp={stamp}
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-              />
+              {job ? (
+                (() => {
+                  const f = cardFields(job);
+                  return (
+                    <SwipeCard
+                      company={f.company}
+                      logo={f.logoDomain ? logoUrl(f.logoDomain) : undefined}
+                      title={f.title}
+                      location={f.location}
+                      posted={f.posted}
+                      salary={f.salary}
+                      ats={f.ats}
+                      reasons={f.reasons}
+                      footnote="Resume Strategy v3 will be tailored for this role."
+                      stamp={stamp}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                    />
+                  );
+                })()
+              ) : (
+                <p className="sub" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", margin: 0 }}>
+                  {all === null ? "Loading." : "Deck is empty."}
+                </p>
+              )}
             </div>
             <div className="swipe-actions">
-              <Button onClick={() => swipe("skip")}>Skip</Button>
-              <Button onClick={() => swipe("save")}>Save</Button>
-              <Button variant="primary" onClick={() => swipe("apply")}>
+              <Button onClick={() => swipe("skip")} disabled={!job}>
+                Skip
+              </Button>
+              <Button onClick={() => swipe("save")} disabled={!job}>
+                Save
+              </Button>
+              <Button variant="primary" onClick={() => swipe("apply")} disabled={!job}>
                 Apply
               </Button>
             </div>
-            <p
-              className="sub"
-              style={{ textAlign: "center", marginTop: 10, maxWidth: 400 }}
-            >
-              Apply queues the job under your active mode. You get a 20 second window to
-              undo before anything is prepared.
+            <p className="sub" style={{ textAlign: "center", marginTop: 10, maxWidth: 400 }}>
+              Apply queues the job under your active mode. Undo from the toast reverses it.
             </p>
           </div>
 
           <div>
             <Card title="Today's deck">
               <div className="side-stats">
-                <span className="sub">
-                  {di + 1} of {DECK.length}
-                </span>
+                <span className="sub">{deck.length} left</span>
                 <div className="progress">
-                  <i style={{ width: `${((di + 1) / DECK.length) * 100}%` }} />
+                  <i style={{ width: `${jobs.length ? ((jobs.length - deck.length) / jobs.length) * 100 : 0}%` }} />
                 </div>
                 <div style={{ marginTop: 12 }}>
                   <div className="item">
@@ -499,9 +498,8 @@ function JobsScreen() {
             <div style={{ marginTop: 12 }}>
               <Card title="Deck rules">
                 <p className="sub" style={{ margin: 0 }}>
-                  Only jobs posted in the last 48 hours that pass your hard filters. Jobs
-                  your lanes already applied to never appear here. Skips teach the ranking;
-                  they never loosen your filters.
+                  One card per job, even when it is listed on several systems. Skips teach the
+                  ranking; they never loosen your filters.
                 </p>
               </Card>
             </div>

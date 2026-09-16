@@ -1458,12 +1458,9 @@ html {
 
 /* ---------------------------------------------------------------- blog -- */
 
-/* Full width wrap so the list aligns with the page heading; each child is capped, as delivered. */
+/* The list spans the full wrap, like the home page. The delivered 820px cap on each child is dropped. */
 .blogwrap {
   max-width: 1180px;
-}
-.blogwrap > * {
-  max-width: 820px;
 }
 .bfeat {
   border: 1px solid var(--border-strong);

@@ -67,7 +67,7 @@ export function SignInForm() {
         <p className="lead">Your lanes kept running. Let us see what came in.</p>
         <div className="box">
           <Button
-            style={{ width: "100%" }}
+            style={{ width: "100%", fontSize: 15 }}
             onClick={() => {
               showToast({ text: "Google sign in would open here. Continuing to the dashboard." });
               router.push("/dashboard");
@@ -91,7 +91,7 @@ export function SignInForm() {
             onKeyDown={(e) => e.key === "Enter" && submit()}
           />
           {err && <div className="err">Enter your email and password.</div>}
-          <Button variant="primary" style={{ width: "100%" }} onClick={submit}>
+          <Button variant="primary" style={{ width: "100%", fontSize: 15 }} onClick={submit}>
             Continue
           </Button>
           <div className="fine">
@@ -132,7 +132,7 @@ export function SignUpForm() {
         <p className="lead">25 applications free. No card needed.</p>
         <div className="box">
           <Button
-            style={{ width: "100%" }}
+            style={{ width: "100%", fontSize: 15 }}
             onClick={() => {
               showToast({ text: "Google sign in would open here. Continuing to the dashboard." });
               router.push("/dashboard");
@@ -167,7 +167,7 @@ export function SignUpForm() {
             onKeyDown={(e) => e.key === "Enter" && submit()}
           />
           {err && <div className="err">Fill in your name, email and a password.</div>}
-          <Button variant="primary" style={{ width: "100%" }} onClick={submit}>
+          <Button variant="primary" style={{ width: "100%", fontSize: 15 }} onClick={submit}>
             Create account
           </Button>
           <div className="fine">

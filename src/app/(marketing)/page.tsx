@@ -39,12 +39,14 @@ export default function HomePage() {
             </p>
             <div className="ctas">
               <Link href="/signup">
-                <Button variant="primary" size="lg">
+                <Button variant="primary" size="lg" style={{ fontSize: 16 }}>
                   Start free
                 </Button>
               </Link>
               <Link href="/#how">
-                <Button size="lg">See how it works</Button>
+                <Button size="lg" style={{ fontSize: 16 }}>
+                  See how it works
+                </Button>
               </Link>
             </div>
             <div className="fine">No card needed. Your first 25 applications are free.</div>
@@ -404,14 +406,7 @@ export default function HomePage() {
       {/* --------------------------------------------------------- pricing -- */}
       <section className="m-section tight ruled" id="pricing">
         <div className="wrap">
-          <h2 className="big reveal" style={{ marginBottom: 8 }}>
-            Start free. Upgrade when it works.
-          </h2>
-          {/* The one approved difference from the delivered home page. */}
-          <p className="lead" style={{ maxWidth: 640, marginTop: 0, marginBottom: 28 }}>
-            Start with 25 free applications. One verified submission uses one application.
-            Failed or withdrawn attempts are never counted.
-          </p>
+          <h2 className="big reveal">Start free. Upgrade when it works.</h2>
           <PricingBlock />
 
         </div>

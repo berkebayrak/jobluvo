@@ -283,6 +283,11 @@ html {
 .dcard.p2 {
   transform: translateY(24px) scale(0.92);
 }
+/* The incoming card is painted here for two frames, then transitions to p2. */
+.dcard.p2.enter {
+  transform: translateY(36px) scale(0.88);
+  opacity: 0;
+}
 .dcard.out-r {
   transform: translateX(140%) rotate(14deg);
   opacity: 0;
@@ -365,7 +370,8 @@ html {
   justify-content: center;
   font-weight: 600;
   font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
+  /* Proportional figures, as delivered. Nothing lines up under a centred
+     percentage, so tabular only widens the digits here. */
   background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--surface-3) 0);
   position: relative;
   flex: none;
@@ -391,34 +397,41 @@ html {
 .ring small {
   font-size: 8px;
   color: var(--fg-subtle);
-  font-weight: 400;
+  /* The delivered label is 700, which the system does not allow. 600 is the
+     nearest weight we ship. */
+  font-weight: 600;
 }
 .stamp {
   position: absolute;
   top: 64px;
   padding: 6px 12px;
   border: 2px solid;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-weight: 600;
   font-size: var(--text-md);
   letter-spacing: 0.1em;
   opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease);
+  transition: 0.25s;
 }
 .stamp.apply {
   right: 18px;
   color: var(--fg);
   border-color: var(--accent);
-  transform: rotate(-10deg);
+  transform: rotate(-12deg) scale(0.8);
 }
 .stamp.skip {
   left: 18px;
   color: var(--fg-subtle);
   border-color: var(--fg-subtle);
-  transform: rotate(10deg);
+  transform: rotate(12deg) scale(0.8);
 }
-.stamp.show {
+.stamp.apply.show {
   opacity: 1;
+  transform: rotate(-12deg) scale(1);
+}
+.stamp.skip.show {
+  opacity: 1;
+  transform: rotate(12deg) scale(1);
 }
 .dbtns {
   display: flex;
@@ -468,6 +481,12 @@ html {
 }
 .fitem i.strong {
   background: var(--accent);
+}
+.fitem .t {
+  margin-left: auto;
+  color: var(--fg-subtle);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
 }
 /* ===========================================================================
    Home card motion, ported from the delivered site. Timings, easing, order and

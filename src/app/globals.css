@@ -184,6 +184,18 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /*
+   * Preflight sets b and strong to `bolder`, which resolves relative to the
+   * parent: 600 becomes 900. We ship Geist at 400, 500 and 600 only, so the
+   * browser synthesises the rest and the text renders as smeared faux bold.
+   * 500 is the design system's single emphasis weight, and the delivered site
+   * carries the same rule.
+   */
+  b,
+  strong {
+    font-weight: 500;
+  }
+
   body {
     background: var(--surface-0);
     color: var(--fg);

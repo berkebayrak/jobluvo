@@ -360,7 +360,13 @@ html {
   content: "-";
   color: var(--fg-subtle);
 }
-.ring {
+/*
+ * Named match-ring, not ring: `ring` is a Tailwind utility, and having both
+ * meant Tailwind's `box-shadow: 0 0 0 1px` painted a hard outline around the
+ * whole circle. The system bans shadows outright, so that was a bug twice
+ * over.
+ */
+.match-ring {
   width: 50px;
   height: 50px;
   border-radius: var(--radius-full);
@@ -383,18 +389,18 @@ html {
    */
   line-height: 1.55;
 }
-.ring::before {
+.match-ring::before {
   content: "";
   position: absolute;
   inset: 4px;
   background: var(--surface-0);
   border-radius: var(--radius-full);
 }
-.ring b,
-.ring small {
+.match-ring b,
+.match-ring small {
   position: relative;
 }
-.ring small {
+.match-ring small {
   font-size: 8px;
   color: var(--fg-subtle);
   /* The delivered label is 700, which the system does not allow. 600 is the

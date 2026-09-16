@@ -45,7 +45,7 @@ function Card({
           <img src={logoUrl(companyDomains[job.co] ?? "example.com")} alt="" />
           {job.co}
         </div>
-        <div className="ring" style={{ ["--p" as string]: job.p }}>
+        <div className="match-ring" style={{ ["--p" as string]: job.p }}>
           <b>{job.p}%</b>
           <small>MATCH</small>
         </div>

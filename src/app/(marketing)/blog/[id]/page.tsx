@@ -31,7 +31,6 @@ export default async function PostPage({ params }: PageProps<"/blog/[id]">) {
               All posts
             </Link>
             <div className="bmeta">
-              <span className="cat">{post.cat}</span>
               <span>{post.date}</span>
             </div>
             <h1 className="display">{post.title}</h1>
@@ -56,7 +55,6 @@ export default async function PostPage({ params }: PageProps<"/blog/[id]">) {
             {more.map((q) => (
               <Link href={`/blog/${q.id}`} className="brow" key={q.id}>
                 <div className="bmeta">
-                  <span className="cat">{q.cat}</span>
                   <span>{q.date}</span>
                 </div>
                 <h3>{q.title}</h3>

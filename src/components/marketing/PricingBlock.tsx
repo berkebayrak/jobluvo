@@ -111,9 +111,9 @@ export function PricingBlock() {
                 style={
                   plan.hot
                     ? {
+                        /* No background here: the Button's own hover tint stays. */
                         width: "100%",
                         fontSize: 15,
-                        background: "var(--surface-0)",
                         color: "var(--fg)",
                         borderColor: "var(--surface-0)",
                       }

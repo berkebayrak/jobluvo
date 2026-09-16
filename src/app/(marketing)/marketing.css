@@ -1959,7 +1959,7 @@ html {
 
 /* --------------------------------------------------------- responsive -- */
 
-@media (max-width: 1000px) {
+@media (max-width: 980px) {
   .hero .wrap,
   .stage,
   .auth {
@@ -2009,7 +2009,8 @@ html {
   }
 }
 
-@media (max-width: 680px) {
+/* Delivered breakpoint. Section padding stays 88px at every width, as delivered. */
+@media (max-width: 560px) {
   .fgrid,
   .sgrid,
   .plan-grid,
@@ -2028,9 +2029,6 @@ html {
   .article h1 {
     font-size: var(--text-2xl);
     line-height: var(--leading-2xl);
-  }
-  .m-section {
-    padding: 56px 0;
   }
 }
 

@@ -22,7 +22,7 @@ export function Band({
           <Link href={href}>
             <Button
               size="lg"
-              style={{ fontSize: 16, background: "var(--surface-0)", borderColor: "var(--surface-0)" }}
+              style={{ fontSize: 16, borderColor: "var(--surface-0)" }}
             >
               {action}
             </Button>

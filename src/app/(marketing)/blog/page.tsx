@@ -12,7 +12,7 @@ export default function BlogPage() {
     <main>
       <section className="hero" style={{ paddingBottom: 0 }}>
         <div className="wrap" style={{ display: "block" }}>
-          <div style={{ maxWidth: 820 }}>
+          <div>
             <h1
               className="display"
               style={{ fontSize: "var(--text-4xl)", lineHeight: "var(--leading-4xl)" }}

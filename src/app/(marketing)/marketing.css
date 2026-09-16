@@ -1535,7 +1535,6 @@ html {
   color: var(--fg-muted);
   font-size: var(--text-sm);
   margin: 0 0 8px;
-  max-width: 70ch;
 }
 .brow .rm {
   font-size: var(--text-sm);

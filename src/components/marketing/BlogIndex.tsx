@@ -16,7 +16,6 @@ export function BlogIndex() {
     <>
       <Link href={`/blog/${featured.id}`} className="bfeat">
         <div className="bmeta">
-          <span className="cat">Featured</span>
           <span>{featured.date}</span>
         </div>
         <h2>{featured.title}</h2>
@@ -41,7 +40,6 @@ export function BlogIndex() {
         {list.map((p) => (
           <Link href={`/blog/${p.id}`} className="brow" key={p.id}>
             <div className="bmeta">
-              <span className="cat">{p.cat}</span>
               <span>{p.date}</span>
             </div>
             <h3>{p.title}</h3>

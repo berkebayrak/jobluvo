@@ -1492,12 +1492,6 @@ html {
   font-size: var(--text-xs);
   color: var(--fg-subtle);
 }
-.bmeta .cat {
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs);
-  padding: 1px 7px;
-  color: var(--fg-muted);
-}
 .bcats {
   display: flex;
   gap: 6px;

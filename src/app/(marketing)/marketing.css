@@ -369,6 +369,13 @@ html {
   background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--surface-3) 0);
   position: relative;
   flex: none;
+  /*
+   * Unitless, so each line scales to its own font size. The token leadings are
+   * fixed px and body inherits 20px, which gave the 12px value and the 8px
+   * label a 20px line box each: a 40px stack inside the 42px inner circle,
+   * crowding MATCH against the ring. 1.55 restores the delivered proportions.
+   */
+  line-height: 1.55;
 }
 .ring::before {
   content: "";

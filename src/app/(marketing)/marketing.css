@@ -722,16 +722,26 @@ html {
   font-weight: 500;
   margin: 0;
 }
+/*
+ * The agents are shown as portraits here, as the delivered marketing site
+ * does. The readme's no-portraits rule describes the product; the marketing
+ * site is the source this system was drawn from, not a target of it.
+ */
 .topic .face {
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-full);
-  border: 1px solid var(--border-strong);
-  display: grid;
+  object-fit: cover;
+  flex: none;
+}
+/* Shown only if the portrait fails to load. */
+.topic .face.ph {
+  display: inline-grid;
   place-items: center;
-  font-size: var(--text-xs);
+  background: var(--accent);
+  color: var(--fg-inverse);
+  font-size: var(--text-base);
   font-weight: 500;
-  color: var(--fg-muted);
 }
 .fgrid {
   display: grid;
@@ -768,6 +778,10 @@ html {
   flex-direction: column;
   gap: 6px;
   min-height: 168px;
+  /* The envelopes slide in from off their own left edge, so the card has to
+     clip them. Without this they travel in from outside the card. */
+  position: relative;
+  overflow: hidden;
 }
 .mh2 {
   display: flex;

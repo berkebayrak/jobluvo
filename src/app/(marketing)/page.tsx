@@ -4,6 +4,7 @@ import { Button } from "@/components/core/Button";
 import { AtsStrip } from "@/components/marketing/AtsStrip";
 import { Band } from "@/components/marketing/Band";
 import { FaqList } from "@/components/marketing/FaqList";
+import { AgentFace } from "@/components/marketing/AgentFace";
 import { HeroDemo } from "@/components/marketing/HeroDemo";
 import { PricingBlock } from "@/components/marketing/PricingBlock";
 import { faqs } from "@/lib/marketing/faqs";
@@ -16,10 +17,6 @@ export const metadata: Metadata = {
   description:
     "Jobluvo scans career pages, applies to the roles that fit you with a resume that stays truthful, and coaches you toward the ones you want next.",
 };
-
-function Face({ initial }: { initial: string }) {
-  return <span className="face">{initial}</span>;
-}
 
 export default function HomePage() {
   return (
@@ -188,7 +185,11 @@ export default function HomePage() {
           {/* ------------------------------------------------------- maya -- */}
           <div className="topic">
             <h3>
-              <Face initial="M" />
+              <AgentFace
+                src="https://randomuser.me/api/portraits/women/44.jpg"
+                alt="Maya"
+                initial="M"
+              />
               Maya, your job preparation coach
             </h3>
           </div>
@@ -280,7 +281,11 @@ export default function HomePage() {
           {/* ----------------------------------------------------- daniel -- */}
           <div className="topic">
             <h3>
-              <Face initial="D" />
+              <AgentFace
+                src="https://randomuser.me/api/portraits/men/32.jpg"
+                alt="Daniel"
+                initial="D"
+              />
               Daniel, your career coach
             </h3>
           </div>

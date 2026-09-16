@@ -103,6 +103,10 @@ Depth comes from 1px borders and background steps, never shadows. Company logos 
 only colour, plus one muted red for error, failed and rejected. No orange, yellow, blue
 or green anywhere.
 
+When the delivered design and the design system disagree: on the marketing site the
+delivered file wins; in the product app the tokens win. The design system readme states
+that the marketing site is the source of this system, not a target of it.
+
 ## Copy rules
 
 Plain language, short sentences, no hype. Facts first, then the one thing the user can
@@ -134,6 +138,7 @@ added that is not on your profile."
   it in `.claude/skills/jobluvo-design/tokens/` too so the design system and the code
   agree.
 - Verify UI changes in the browser, not only in tests.
+- Never remove, merge, simplify or replace a page, section, animation or interaction that exists in the delivered design (.claude/skills/jobluvo-design/uploads/05-Website.html and the app screens) on your own. If you think something should change, ask first and wait for an answer. Never describe an unapproved change as a deliberate deviation after the fact.
 
 ## Commands
 

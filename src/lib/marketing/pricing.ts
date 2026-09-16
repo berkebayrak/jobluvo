@@ -1,5 +1,5 @@
 /**
- * Plans, prices and the comparison table, ported from the delivered marketing
+ * Plans and prices, ported from the delivered marketing
  * site (.claude/skills/jobluvo-design/uploads/05-Website.html) and matching
  * design/docs/01-Product-BRD.md.
  *
@@ -90,21 +90,6 @@ export const plans: Plan[] = [
       { text: "Priority support" },
     ],
   },
-];
-
-/** "Everything, side by side" on the pricing page. */
-export const comparison: { label: string; starter: string; pro: string; max: string; provisional?: boolean }[] = [
-  { label: "Applications a month", starter: "750", pro: "1,750", max: "5,000", provisional: true },
-  { label: "Swipe and List views", starter: "Yes", pro: "Yes", max: "Yes" },
-  { label: "Tailored resumes and cover letters", starter: "Yes", pro: "Yes", max: "Yes" },
-  { label: "Maya and Daniel", starter: "Yes", pro: "Yes", max: "Yes" },
-  { label: "Jobluvo inbox and address", starter: "Yes", pro: "Yes", max: "Yes" },
-  { label: "Priority on fresh jobs", starter: "No", pro: "Yes", max: "Yes" },
-  { label: "Auto Apply lanes", starter: "No", pro: "No", max: "Up to 5" },
-  { label: "Review before submit", starter: "No", pro: "No", max: "Yes" },
-  { label: "Standing instructions per lane", starter: "No", pro: "No", max: "Yes" },
-  { label: "Agent tuning of lanes", starter: "No", pro: "No", max: "Yes" },
-  { label: "Support", starter: "Email", pro: "Email", max: "Priority" },
 ];
 
 /** Per month equivalent and saving against paying monthly. */

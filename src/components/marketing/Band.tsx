@@ -16,11 +16,14 @@ export function Band({
   return (
     <section className="m-section">
       <div className="wrap">
-        <div className="band">
+        <div className="band reveal">
           <h2>{title}</h2>
           <p>{body}</p>
           <Link href={href}>
-            <Button size="lg" style={{ background: "var(--surface-0)", borderColor: "var(--surface-0)" }}>
+            <Button
+              size="lg"
+              style={{ fontSize: 16, borderColor: "var(--surface-0)" }}
+            >
               {action}
             </Button>
           </Link>

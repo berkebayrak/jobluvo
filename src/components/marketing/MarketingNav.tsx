@@ -76,7 +76,7 @@ export function MarketingNav() {
         <span className="spacer" />
 
         <div className="right">
-          <Link href="/signin">
+          <Link href="/signin" className="bar-signin">
             <Button variant="ghost">Sign in</Button>
           </Link>
           <Link href="/signup">
@@ -123,6 +123,10 @@ export function MarketingNav() {
               {n.label}
             </Link>
           ))}
+          {/* Only shown below 560px, where Sign in leaves the bar. */}
+          <Link href="/signin" className="menu-signin" onClick={() => setMenu(false)}>
+            Sign in
+          </Link>
         </div>
       )}
     </nav>

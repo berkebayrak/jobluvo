@@ -28,7 +28,7 @@ export default function HowItWorksPage() {
 
       {/* -------------------------------------------------------- 01 find -- */}
       <section className="m-section tight">
-        <div className="wrap stage">
+        <div className="wrap stage reveal">
           <div>
             <div className="sn">01</div>
             <h2 className="display">Find</h2>
@@ -71,7 +71,7 @@ export default function HowItWorksPage() {
 
       {/* -------------------------------------------------------- 02 prep -- */}
       <section className="m-section tight sunken">
-        <div className="wrap stage rev">
+        <div className="wrap stage rev reveal">
           <div>
             <div className="sn">02</div>
             <h2 className="display">Prep</h2>
@@ -110,7 +110,7 @@ export default function HowItWorksPage() {
 
       {/* ------------------------------------------------------- 03 apply -- */}
       <section className="m-section tight">
-        <div className="wrap stage">
+        <div className="wrap stage reveal">
           <div>
             <div className="sn">03</div>
             <h2 className="display">Apply</h2>
@@ -160,7 +160,7 @@ export default function HowItWorksPage() {
 
       {/* ------------------------------------------------------- 04 track -- */}
       <section className="m-section tight sunken">
-        <div className="wrap stage rev">
+        <div className="wrap stage rev reveal">
           <div>
             <div className="sn">04</div>
             <h2 className="display">Track</h2>
@@ -215,13 +215,13 @@ export default function HowItWorksPage() {
       {/* ---------------------------------------------------- and around -- */}
       <section className="m-section tight">
         <div className="wrap">
-          <div className="sec-head">
+          <div className="sec-head reveal">
             <div className="eyebrow">And around it</div>
             <h2 className="display">Two ways to drive, two people to ask.</h2>
           </div>
           <div className="m-grid g4">
             {aroundIt.map((c) => (
-              <div className="m-card" key={c.h}>
+              <div className="m-card reveal" key={c.h}>
                 <h3>{c.h}</h3>
                 <p className="muted small" style={{ margin: 0 }}>
                   {c.p}
@@ -234,12 +234,12 @@ export default function HowItWorksPage() {
 
       <section className="m-section tight ruled">
         <div className="wrap">
-          <div className="sec-head">
+          <div className="sec-head reveal">
             <h2 className="display">What Jobluvo will not do</h2>
           </div>
           <div className="m-grid g3">
             {willNotDo.map((c) => (
-              <div className="m-card" key={c.h}>
+              <div className="m-card reveal" key={c.h}>
                 <h3>{c.h}</h3>
                 <p className="muted small" style={{ margin: 0 }}>
                   {c.p}

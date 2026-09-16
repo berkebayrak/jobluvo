@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/core/Button";
 import { AtsStrip } from "@/components/marketing/AtsStrip";
 import { Band } from "@/components/marketing/Band";
 import { FaqList } from "@/components/marketing/FaqList";
+import { AgentFace } from "@/components/marketing/AgentFace";
 import { HeroDemo } from "@/components/marketing/HeroDemo";
 import { PricingBlock } from "@/components/marketing/PricingBlock";
 import { faqs } from "@/lib/marketing/faqs";
-import { comparison } from "@/lib/marketing/pricing";
 import { steps } from "@/lib/marketing/content";
 import { logoUrl } from "@/lib/logo";
 
@@ -16,10 +17,6 @@ export const metadata: Metadata = {
   description:
     "Jobluvo scans career pages, applies to the roles that fit you with a resume that stays truthful, and coaches you toward the ones you want next.",
 };
-
-function Face({ initial }: { initial: string }) {
-  return <span className="face">{initial}</span>;
-}
 
 export default function HomePage() {
   return (
@@ -61,13 +58,13 @@ export default function HomePage() {
       {/* -------------------------------------------------- everything you -- */}
       <section className="m-section tight" id="how">
         <div className="wrap">
-          <h2 className="big">Everything you need to land your next job</h2>
+          <h2 className="big reveal">Everything you need to land your next job</h2>
 
-          <div className="topic">
+          <div className="topic reveal">
             <h3>Jobluvo, your career engine</h3>
           </div>
           <div className="fgrid">
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>New matches</span>
@@ -82,7 +79,7 @@ export default function HomePage() {
                   </div>
                   <em className="pct">74%</em>
                 </div>
-                <div className="jrow">
+                <div className="jrow d2">
                   {/* eslint-disable-next-line @next/next/no-img-element -- remote Logo.dev URLs */}
                   <img src={logoUrl("stripe.com")} alt="Stripe" />
                   <div>
@@ -91,7 +88,7 @@ export default function HomePage() {
                   </div>
                   <em className="pct">71%</em>
                 </div>
-                <div className="jrow">
+                <div className="jrow d3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- remote Logo.dev URLs */}
                   <img src={logoUrl("spotify.com")} alt="Spotify" />
                   <div>
@@ -109,7 +106,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>stripe.com/jobs/apply</span>
@@ -117,15 +114,15 @@ export default function HomePage() {
                 </div>
                 <div className="fld2">
                   <label>Name</label>
-                  <span className="typed">Jack Miller</span>
+                  <span className="typed t1">Jack Miller</span>
                 </div>
                 <div className="fld2">
                   <label>Email</label>
-                  <span className="typed">jack.miller@jobluvo.com</span>
+                  <span className="typed t2">jack.miller@jobluvo.com</span>
                 </div>
                 <div className="fld2">
                   <label>Resume</label>
-                  <span className="typed">Strategy_v3_Stripe.pdf</span>
+                  <span className="typed t3">Strategy_v3_Stripe.pdf</span>
                 </div>
                 <div className="sub2">Submit application</div>
                 <div className="done2">Submitted. Receipt saved</div>
@@ -138,7 +135,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Inbox</span>
@@ -153,7 +150,7 @@ export default function HomePage() {
                   </div>
                   <em>Interview</em>
                 </div>
-                <div className="env2">
+                <div className="env2 e2">
                   {/* eslint-disable-next-line @next/next/no-img-element -- remote Logo.dev URLs */}
                   <img src={logoUrl("snowflake.com")} alt="Snowflake" />
                   <div>
@@ -186,15 +183,19 @@ export default function HomePage() {
           </div>
 
           {/* ------------------------------------------------------- maya -- */}
-          <div className="topic">
+          <div className="topic reveal">
             <h3>
-              <Face initial="M" />
+              <AgentFace
+                src="https://randomuser.me/api/portraits/women/44.jpg"
+                alt="Maya"
+                initial="M"
+              />
               Maya, your job preparation coach
             </h3>
           </div>
           <div className="fgrid">
-            <div className="fcard">
-              <div className="mock2">
+            <div className="fcard reveal">
+              <div className="mock2 chat">
                 <div className="mh2">
                   <span>0:04</span>
                   <span>Maya</span>
@@ -207,7 +208,7 @@ export default function HomePage() {
                   Got it. That rules out 11 of today&apos;s 42 matches. Here are the 6 that
                   fit best, and I added &quot;pre-sales&quot; to your lane&apos;s exclusions.
                 </div>
-                <div className="bub a">
+                <div className="bub a c3">
                   Datadog and Stripe are new since this morning. Want me to prepare both?
                 </div>
               </div>
@@ -218,8 +219,8 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
-              <div className="mock2">
+            <div className="fcard reveal">
+              <div className="mock2 chat">
                 <div className="mh2">
                   <span>0:12</span>
                   <span>Maya</span>
@@ -227,13 +228,14 @@ export default function HomePage() {
                 <div className="bub a">
                   Tell me about a program you led under cost pressure.
                 </div>
-                <div className="bub u">
+                <div className="bub u c2">
                   I led a three year cost program across four business units. We hit the
                   target a quarter early.
                 </div>
                 <div className="score">
                   <span>Confidence score</span>
                   <b>87%</b>
+                  <i />
                 </div>
               </div>
               <h4>Mock interviews</h4>
@@ -243,7 +245,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Salary benchmark</span>
@@ -277,14 +279,18 @@ export default function HomePage() {
           </div>
 
           {/* ----------------------------------------------------- daniel -- */}
-          <div className="topic">
+          <div className="topic reveal">
             <h3>
-              <Face initial="D" />
+              <AgentFace
+                src="https://randomuser.me/api/portraits/men/32.jpg"
+                alt="Daniel"
+                initial="D"
+              />
               Daniel, your career coach
             </h3>
           </div>
           <div className="fgrid">
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Career plan</span>
@@ -295,15 +301,15 @@ export default function HomePage() {
                     <b>Now</b>
                     <span>Head of Strategy and PMO</span>
                   </div>
-                  <div className="tick">
+                  <div className="tick t2">
                     <b>Q1 2027</b>
                     <span>Program certification, case study written</span>
                   </div>
-                  <div className="tick">
+                  <div className="tick t3">
                     <b>Q4 2027</b>
                     <span>Senior manager, strategy, at a US software company</span>
                   </div>
-                  <div className="tick">
+                  <div className="tick t4">
                     <b>2028</b>
                     <span>Director of Strategy</span>
                   </div>
@@ -316,7 +322,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Skills in your target roles</span>
@@ -348,16 +354,16 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="fcard">
+            <div className="fcard reveal">
               <div className="mock2">
                 <div className="mh2">
                   <span>Quarterly review</span>
                   <span>Q3 2026</span>
                 </div>
                 <div className="chk">38 applications, 6 replies, 2 interviews</div>
-                <div className="chk">Case study drafted, 2 rounds of edits</div>
-                <div className="chk">Summary rewritten for director roles</div>
-                <div className="chk next">
+                <div className="chk c2">Case study drafted, 2 rounds of edits</div>
+                <div className="chk c3">Summary rewritten for director roles</div>
+                <div className="chk c4 next">
                   Next quarter: certification exam, 3 outreach messages a week
                 </div>
               </div>
@@ -374,19 +380,22 @@ export default function HomePage() {
       {/* ----------------------------------------------------------- steps -- */}
       <section className="m-section tight">
         <div className="wrap">
-          <h2 className="big">From resume to offer, in 5 steps.</h2>
+          <h2 className="big reveal">From resume to offer, in 5 steps.</h2>
           <div className="sgrid">
             {steps.map((s) => (
-              <div className="scard" key={s.n}>
+              <div className="scard reveal" key={s.n}>
                 <div className="sn">{s.n}</div>
                 <h4>{s.h}</h4>
                 <p>{s.p}</p>
               </div>
             ))}
-            <div className="scard cta">
+            <div className="scard cta reveal">
               <h4>Ready to get started?</h4>
               <p>Upload a resume and see your first matches in minutes.</p>
-              <Link href="/signup">Sign up free</Link>
+              <Link href="/signup">
+                Sign up free
+                <ChevronRight size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+              </Link>
             </div>
           </div>
         </div>
@@ -395,44 +404,17 @@ export default function HomePage() {
       {/* --------------------------------------------------------- pricing -- */}
       <section className="m-section tight ruled" id="pricing">
         <div className="wrap">
-          <h2 className="big">Start free. Upgrade when it works.</h2>
+          <h2 className="big reveal">Start free. Upgrade when it works.</h2>
           <PricingBlock />
 
-          {/* "Everything, side by side" from the delivered pricing page. That
-              page is now this section, so the table lives here. */}
-          <div className="sec-head" style={{ margin: "56px 0 24px" }}>
-            <h2 className="display">Everything, side by side</h2>
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table className="cmp">
-              <thead>
-                <tr>
-                  <th />
-                  <th>Starter</th>
-                  <th>Pro</th>
-                  <th>Max</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparison.map((row) => (
-                  <tr key={row.label}>
-                    <td>{row.label}</td>
-                    <td data-provisional={row.provisional || undefined}>{row.starter}</td>
-                    <td data-provisional={row.provisional || undefined}>{row.pro}</td>
-                    <td data-provisional={row.provisional || undefined}>{row.max}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       </section>
 
       {/* ------------------------------------------------------------- faq -- */}
       <section className="m-section tight" id="faq">
         <div className="wrap faqwrap">
-          <h2 className="big">FAQs</h2>
-          <div className="faqbox">
+          <h2 className="big reveal">FAQs</h2>
+          <div className="faqbox reveal">
             <FaqList items={faqs} />
           </div>
         </div>

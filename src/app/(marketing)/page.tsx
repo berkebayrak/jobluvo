@@ -45,7 +45,7 @@ export default function HomePage() {
                   Start free
                 </Button>
               </Link>
-              <Link href="/how-it-works">
+              <Link href="/#how">
                 <Button size="lg">See how it works</Button>
               </Link>
             </div>
@@ -58,7 +58,7 @@ export default function HomePage() {
       <AtsStrip />
 
       {/* -------------------------------------------------- everything you -- */}
-      <section className="m-section tight">
+      <section className="m-section tight" id="how">
         <div className="wrap">
           <h2 className="big">Everything you need to land your next job</h2>
 
@@ -392,7 +392,7 @@ export default function HomePage() {
       </section>
 
       {/* --------------------------------------------------------- pricing -- */}
-      <section className="m-section tight ruled">
+      <section className="m-section tight ruled" id="pricing">
         <div className="wrap">
           <h2 className="big">Start free. Upgrade when it works.</h2>
           <PricingBlock />
@@ -400,7 +400,7 @@ export default function HomePage() {
       </section>
 
       {/* ------------------------------------------------------------- faq -- */}
-      <section className="m-section tight">
+      <section className="m-section tight" id="faq">
         <div className="wrap faqwrap">
           <h2 className="big">FAQs</h2>
           <div className="faqbox">

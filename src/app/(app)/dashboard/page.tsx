@@ -10,6 +10,7 @@ import { StatTile } from "@/components/data/StatTile";
 import { StatusTag } from "@/components/data/StatusTag";
 import { TableRow } from "@/components/data/TableRow";
 import { showToast } from "@/components/feedback/Toaster";
+import { useDensity } from "@/components/app/density";
 import { apps, domains, jobs, lanes, statusFilters, statusMap } from "@/lib/app/data";
 import { logoUrl } from "@/lib/logo";
 
@@ -22,6 +23,7 @@ export default function DashboardPage() {
   const [query, setQuery] = React.useState("");
   const [showAll, setShowAll] = React.useState(false);
   const [answerOpen, setAnswerOpen] = React.useState(false);
+  const { density } = useDensity();
 
   const rows = apps.filter(
     (a) =>
@@ -195,7 +197,7 @@ export default function DashboardPage() {
           <TableRow
             key={`${a.co}-${a.t}-${i}`}
             columns={COLS}
-            density="compact"
+            density={density}
             onClick={() => showToast({ text: `${a.co}. ${a.t}.` })}
             cells={[
               <span key="c">

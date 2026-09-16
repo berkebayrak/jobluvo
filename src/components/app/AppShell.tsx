@@ -3,7 +3,9 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { TopNav } from "@/components/navigation/TopNav";
+import { Toggle } from "@/components/core/Toggle";
 import { AgentPanel } from "@/components/app/AgentPanel";
+import { DensityProvider, useDensity } from "@/components/app/density";
 
 /** Tabs never scroll. Profile and Settings live behind the avatar. */
 const TABS: { label: string; href: string }[] = [
@@ -14,16 +16,37 @@ const TABS: { label: string; href: string }[] = [
   { label: "Inbox", href: "/inbox" },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [menu, setMenu] = React.useState(false);
+  const { density, setDensity } = useDensity();
+  const menuRef = React.useRef<HTMLSpanElement>(null);
+
+  // The account menu closes on Escape and on a click outside it.
+  React.useEffect(() => {
+    function onPointerDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenu(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenu(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
   const active = TABS.find((t) => pathname.startsWith(t.href))?.label ?? "Dashboard";
 
   return (
     <div className="shell">
       <TopNav
+        href="/dashboard"
         tabs={TABS.map((t) => t.label)}
         active={active}
         onSelect={(label) => {
@@ -32,7 +55,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }}
         right={
           <>
-            <span style={{ position: "relative" }}>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: "var(--text-xs)",
+                color: "var(--fg-subtle)",
+              }}
+            >
+              Regular rows
+              <Toggle
+                on={density === "regular"}
+                onChange={(on) => setDensity(on ? "regular" : "compact")}
+              />
+            </span>
+            <span ref={menuRef} style={{ position: "relative" }}>
               <button
                 onClick={() => setMenu((m) => !m)}
                 aria-label="Account"
@@ -112,5 +150,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <DensityProvider>
+      <Shell>{children}</Shell>
+    </DensityProvider>
   );
 }

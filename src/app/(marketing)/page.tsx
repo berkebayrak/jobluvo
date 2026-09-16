@@ -7,6 +7,7 @@ import { FaqList } from "@/components/marketing/FaqList";
 import { HeroDemo } from "@/components/marketing/HeroDemo";
 import { PricingBlock } from "@/components/marketing/PricingBlock";
 import { faqs } from "@/lib/marketing/faqs";
+import { comparison } from "@/lib/marketing/pricing";
 import { steps } from "@/lib/marketing/content";
 import { logoUrl } from "@/lib/logo";
 
@@ -396,6 +397,34 @@ export default function HomePage() {
         <div className="wrap">
           <h2 className="big">Start free. Upgrade when it works.</h2>
           <PricingBlock />
+
+          {/* "Everything, side by side" from the delivered pricing page. That
+              page is now this section, so the table lives here. */}
+          <div className="sec-head" style={{ margin: "56px 0 24px" }}>
+            <h2 className="display">Everything, side by side</h2>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table className="cmp">
+              <thead>
+                <tr>
+                  <th />
+                  <th>Starter</th>
+                  <th>Pro</th>
+                  <th>Max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparison.map((row) => (
+                  <tr key={row.label}>
+                    <td>{row.label}</td>
+                    <td data-provisional={row.provisional || undefined}>{row.starter}</td>
+                    <td data-provisional={row.provisional || undefined}>{row.pro}</td>
+                    <td data-provisional={row.provisional || undefined}>{row.max}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 

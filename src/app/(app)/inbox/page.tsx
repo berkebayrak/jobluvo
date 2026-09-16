@@ -172,9 +172,37 @@ export default function InboxPage() {
         <div className="reader">
           {mail ? (
             <>
+              <div
+                className="row"
+                style={{ justifyContent: "space-between", marginBottom: 10 }}
+              >
+                <span className="tag">{mail.label}</span>
+                <div className="row">
+                  {mail.cal && (
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        showToast({
+                          text: "Added to your calendar with the video link.",
+                          actionLabel: "Undo",
+                        })
+                      }
+                    >
+                      Add to calendar
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => showToast({ text: "Marked unread." })}
+                  >
+                    Mark unread
+                  </Button>
+                </div>
+              </div>
+
               <h2>{mail.subj}</h2>
               <div className="rmeta">
-                {mail.from} &lt;{mail.addr}&gt; . {mail.time}
+                {mail.from} &lt;{mail.addr}&gt; . to jack.miller@jobluvo.com, {mail.time}
               </div>
 
               {mail.linked && (
@@ -198,12 +226,36 @@ export default function InboxPage() {
                 ))}
               </div>
 
+              {mail.prep && (
+                <div className="prep">
+                  <div className="row" style={{ justifyContent: "space-between" }}>
+                    <b>Prep from Daniel</b>
+                    <Button
+                      size="sm"
+                      onClick={() => showToast({ text: "Opening the prep plan." })}
+                    >
+                      Open prep plan
+                    </Button>
+                  </div>
+                  <p>
+                    A 25 minute plan: one case walkthrough on roadmap prioritisation,
+                    three stories from your cost program mapped to their questions, and
+                    two questions to ask the panel.
+                  </p>
+                </div>
+              )}
+
               <div className="row" style={{ marginTop: 20 }}>
                 <Button
                   variant="primary"
                   onClick={() => showToast({ text: "Reply. This is a mock." })}
                 >
                   Reply
+                </Button>
+                <Button
+                  onClick={() => showToast({ text: "Draft a reply with Daniel. Mock." })}
+                >
+                  Draft a reply with Daniel
                 </Button>
                 <Button onClick={() => showToast({ text: "Archived.", actionLabel: "Undo" })}>
                   Archive

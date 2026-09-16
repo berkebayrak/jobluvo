@@ -82,8 +82,8 @@ export interface Mail {
   stage: string | null;
   body: string[];
   folder: string;
+  /** The message carries an invite, so the reader offers Add to calendar. */
   cal?: boolean;
-  code?: string;
   /** Daniel has a prep plan ready for this one. */
   prep?: boolean;
 }

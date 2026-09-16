@@ -4,12 +4,11 @@
  */
 
 /**
- * How it works, Pricing and FAQ are sections of the home page, not pages of
- * their own. `section` is the element id the link scrolls to; Blog is the only
- * tab that navigates.
+ * How it works and Blog are pages. Pricing and FAQ are sections of the home
+ * page; `section` is the element id those links scroll to.
  */
 export const nav: { href: string; label: string; section?: string }[] = [
-  { href: "/#how", label: "How it works", section: "how" },
+  { href: "/how-it-works", label: "How it works" },
   { href: "/#pricing", label: "Pricing", section: "pricing" },
   { href: "/#faq", label: "FAQ", section: "faq" },
   { href: "/blog", label: "Blog" },

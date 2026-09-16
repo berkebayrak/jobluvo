@@ -1960,9 +1960,11 @@ html {
 /* --------------------------------------------------------- responsive -- */
 
 @media (max-width: 980px) {
+  /* Plans go to one column here, steps and cards to two, as delivered. */
   .hero .wrap,
   .stage,
-  .auth {
+  .auth,
+  .plan-grid {
     grid-template-columns: 1fr;
   }
   .stage.rev > div:first-child {
@@ -1970,7 +1972,6 @@ html {
   }
   .fgrid,
   .sgrid,
-  .plan-grid,
   .m-grid.g3,
   .m-grid.g4 {
     grid-template-columns: 1fr 1fr;

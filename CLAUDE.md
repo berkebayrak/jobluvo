@@ -103,6 +103,10 @@ Depth comes from 1px borders and background steps, never shadows. Company logos 
 only colour, plus one muted red for error, failed and rejected. No orange, yellow, blue
 or green anywhere.
 
+When the delivered design and the design system disagree: on the marketing site the
+delivered file wins; in the product app the tokens win. The design system readme states
+that the marketing site is the source of this system, not a target of it.
+
 ## Copy rules
 
 Plain language, short sentences, no hype. Facts first, then the one thing the user can

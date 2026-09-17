@@ -6,6 +6,29 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-023. A posting noun is held only in a claim position; the live held rate is the fresh one, about one in four; the tailoring term is back under the published figure; the sample population blocks the cost function
+
+The fresh samples under D-022 held 15 of 20 and 13 of 20, and the posting word alone held 8 of 13. A validator that holds the model's normal output is not a safety net, it is the pipeline, and the signal doing the holding was the one already suspected of firing on tailoring working as intended: the posting's vocabulary used in a rewording. So the narrowing logged in D-022 became the next work.
+
+**The rule.** A posting noun is held only where it stands in a claim position: inside the object of a responsibility or creation verb, "set up feedback loops" claims loops, or after a summary claim opener, "experience in", "experienced in", "expertise in", "skilled in", which is the summary's verb. Third person forms count, "who builds operating systems, develops teams"; the particle after a verb is skipped, "set up". Outside a claim position the posting's word passes, "with attention to detail", "partnering with senior leaders". The form, capital and sentence start signals are not narrowed and fire anywhere, because form and capitalisation are what catch most real tool names. The object rule is unchanged.
+
+**Measured on fresh generation**, four 20 job samples, changes mode, no packets stored, the narrowed rule driving the retry loop and every answer re-read under both scopes so the before and after are the same answers. One user, the current uploaded profile, all four samples in Ashby.
+
+| Final answers, 80 packets | Ready | Held | Invalid |
+|---|---|---|---|
+| Posting noun anywhere, the D-022 rule | 14 | 64 | 2 |
+| Posting noun in claim position | 58 | 20 | 2 |
+
+Eight in ten to one in four on the same answers. Released, by word: "experience" 38 and "leader" 29, the summary's frame; then operations, execution, partners, turns, stories, improves, guides, develops, automation, feedback, workflows, analytics, issue resolution, trust, mechanisms, governance, once or twice each. No tool, employer, qualification or number among them; that was the test, and it passed. Four are generic claims in summaries whose verb is not on the responsibility list, "improving workflows", "analytics leader", "issue resolution", "governance"; the summary rule is not settled by this entry, see below. The retry under the narrowed rule: held first answers came back ready 8 of 9 and 6 of 11; rejected first answers 2 of 5 and 1 of 6, the rest held, none invalid. The stored packets, replayed and restamped: 37 held to 29.
+
+**The live held rate is the fresh one.** In a sentence about what Jobluvo does, the held rate is about one in four. The stored packets' figure describes history. Both live in the cost summary, and the fresh one is the one quoted.
+
+**The tailoring term.** Retry inclusive, on the four samples: USD 0.00070 to 0.00077 per packet, each sample's total over its 20, against USD 0.00078 published. The narrowing put the term back under the published figure, so item 1 of the closing list may be a confirmation rather than a revision. It is not computed yet, because of the population.
+
+**The sample population blocks the cost function.** Every fresh sample so far fell entirely in Ashby, finding 17 arriving for the fourth time in a number being acted on. That is the draw: `stratifiedSample` sorts its cells alphabetically and takes one job per cell per round, so a 20 job draw over 67 cells is the first 20 cells, and those are Ashby's. The phase 0 tailoring term came from a stratified sample across families; replacing it with an Ashby only term would mix populations inside one published number. So item 1 is computed only from a sample that spans the families the phase 0 sample did, or it states Ashby only and not comparable. The draw is fixed first.
+
+**Open from this entry.** The lexicon was retired against the broad posting signal; that justification has to be redone against the narrowed one, with a lowercase tool outside a claim position as the case. The summary as entirely claim position is measured on saved samples before the summary rule is settled; the openers are not the final answer.
+
 ### D-022. The non numeric check holds a new entity, posting noun or responsibility and passes a rewording; the lexicon did not ship; a held answer earns one retry that substitutes; the held rate is a product fact and DOC-03 is a primary flow
 
 Review three finding 3, and the second design of rule 1. The first design held every content word not in a cited fact and measured 67 of 90 ready packets held: it measured rewording as a category, and tailoring is rewording. Withdrawn before it shipped on that number. The reviewer's examples, "salesforce" in lower case, "C++", "recruitment of analysts", are none of them rewordings; each asserts a new entity, qualification or responsibility. That is the line.

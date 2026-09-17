@@ -38,6 +38,9 @@ const FIXTURES: Fixture[] = [
   { name: "contract US", workplace: "onsite", employmentType: "Contract", locations: [{ raw: "Boston, MA", city: "Boston", region: "MA", country: "US" }] },
   { name: "blocked company US", workplace: "onsite", companyName: "Acme Blocked", locations: [{ raw: "Miami, FL", city: "Miami", region: "FL", country: "US" }] },
   { name: "blocked word US", workplace: "onsite", title: "Pre-sales Engineer", locations: [{ raw: "Miami, FL", city: "Miami", region: "FL", country: "US" }] },
+  { name: "no sponsorship US or DE", workplace: "onsite", sponsorship: "not_offered", locations: [{ raw: "Seattle, WA", city: "Seattle", region: "WA", country: "US" }, { raw: "Berlin, Germany", city: "Berlin", country: "DE" }] },
+  { name: "citizen or resident US", workplace: "onsite", eligibility: "citizenship", eligibilityOptions: [["citizenship"], ["permanent_residency"]], eligibilityCountry: "US", locations: [{ raw: "Austin, TX", city: "Austin", region: "TX", country: "US" }] },
+  { name: "citizen and clearance US", workplace: "onsite", eligibility: "citizenship", eligibilityOptions: [["citizenship", "clearance"]], eligibilityCountry: "US", locations: [{ raw: "Reston, VA", city: "Reston", region: "VA", country: "US" }] },
 ];
 
 const BASE_PREFS: PreferenceFact = { targetCountries: ["US"], relocation: "yes", remote: "remote_ok", employmentTypes: ["Full time"] };
@@ -75,6 +78,7 @@ async function withFixtures(fn: (evaluate: (f: FilterFacts) => Promise<Record<st
             employmentType: f.employmentType ?? "Full time",
             sponsorship: f.sponsorship ?? "unknown",
             eligibility: f.eligibility ?? null,
+            eligibilityOptions: f.eligibilityOptions ?? null,
             eligibilityCountry: f.eligibilityCountry ?? null,
             eligibilityEvidence: f.eligibility ? "fixture sentence" : null,
             descriptionText: "",
@@ -222,6 +226,38 @@ describe.skipIf(!hasDb)("hardFilterSql against fixture rows", () => {
 
       const anyType = await evaluate(facts({ employmentTypes: undefined }));
       expect(anyType["contract US"]).toBeNull();
+    });
+  });
+
+  it("judges a multi country authorisation against the country the user targeted", async () => {
+    await withFixtures(async (evaluate) => {
+      const permitDe = { country: "DE", basis: "work_permit" as const, statedOn: "2026-09-17" };
+      // Listed in the US and Germany; the user targets the US and holds a German permit: that permit does not reach the US role.
+      const usOnly = await evaluate(facts({ targetCountries: ["US"] }, [permitDe], NEED_NOW));
+      expect(usOnly["no sponsorship US or DE"]).toBe("sponsorship not offered");
+      // Targeting Germany too, the German permit makes the German location a fit.
+      const usDe = await evaluate(facts({ targetCountries: ["US", "DE"] }, [permitDe], NEED_NOW));
+      expect(usDe["no sponsorship US or DE"]).toBeNull();
+    });
+  });
+
+  it("ignores an authorisation whose validUntil has passed", async () => {
+    await withFixtures(async (evaluate) => {
+      const expired = { country: "US", basis: "work_permit" as const, statedOn: "2025-01-01", validUntil: "2026-01-01" };
+      const live = { ...expired, validUntil: "2027-01-01" };
+      expect((await evaluate(facts({}, [expired], NEED_NOW)))["no sponsorship US"]).toBe("sponsorship not offered");
+      expect((await evaluate(facts({}, [live], NEED_NOW)))["no sponsorship US"]).toBeNull();
+      expect((await evaluate(facts({}, [expired], NEED_NOW)))["right to work unnamed US"]).toBe("right to work required");
+    });
+  });
+
+  it("passes a restriction with alternatives when any alternative is met, and a conjunction only when all of it is", async () => {
+    await withFixtures(async (evaluate) => {
+      const resident = { country: "US", basis: "permanent_resident" as const, statedOn: "2026-09-17" };
+      const citizen = { country: "US", basis: "citizen" as const, statedOn: "2026-09-17" };
+      expect((await evaluate(facts({}, [resident])))["citizen or resident US"]).toBeNull();
+      expect((await evaluate(facts({}, [])))["citizen or resident US"]).toBe("citizenship required");
+      expect((await evaluate(facts({}, [citizen])))["citizen and clearance US"]).toBe("citizenship required");
     });
   });
 });

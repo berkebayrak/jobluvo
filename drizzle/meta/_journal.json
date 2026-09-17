@@ -43,6 +43,13 @@
       "when": 1789640565328,
       "tag": "0005_phase0_drop_last_polled",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789644073299,
+      "tag": "0006_phase0_parsing",
+      "breakpoints": true
     }
   ]
 }

@@ -31,7 +31,7 @@ export const familyEnum = pgEnum("family", [
 ]);
 
 export const workplaceEnum = pgEnum("workplace", ["remote", "hybrid", "onsite", "unknown"]);
-export const compPeriodEnum = pgEnum("comp_period", ["year", "hour", "unknown"]);
+export const compPeriodEnum = pgEnum("comp_period", ["year", "month", "hour", "unknown"]);
 export const sponsorshipEnum = pgEnum("sponsorship", ["offered", "not_offered", "unknown"]);
 export const restrictionEnum = pgEnum("restriction", ["citizenship", "permanent_residency", "right_to_work", "clearance"]);
 export const linkReasonEnum = pgEnum("link_reason", ["native", "url", "requisition", "similar"]);
@@ -124,11 +124,15 @@ export const jobs = pgTable(
     compMax: integer("comp_max"),
     compCurrency: text("comp_currency"),
     compPeriod: compPeriodEnum("comp_period").notNull().default("unknown"),
+    /** The salary text as the board gave it, so the numbers can be reparsed without fetching again. */
+    compRaw: text("comp_raw"),
     seniority: text("seniority"),
     sponsorship: sponsorshipEnum("sponsorship").notNull().default("unknown"),
     sponsorshipEvidence: text("sponsorship_evidence"),
     /** A stated eligibility restriction, separate from sponsorship, with the sentence as evidence. Null when the posting says nothing. */
     eligibility: restrictionEnum("eligibility"),
+    /** Alternatives of conjunctions: one inner list must be met in full. Null when the posting says nothing. */
+    eligibilityOptions: jsonb("eligibility_options").$type<string[][]>(),
     eligibilityCountry: text("eligibility_country"),
     eligibilityEvidence: text("eligibility_evidence"),
     descriptionText: text("description_text").notNull().default(""),

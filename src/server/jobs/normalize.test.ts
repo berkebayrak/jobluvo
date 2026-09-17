@@ -8,8 +8,8 @@ import {
   parseCompensation,
   parseLocation,
   parseLocations,
-  seniorityOf,
   sponsorshipOf,
+  seniorityOf,
   titleNorm,
 } from "./normalize";
 
@@ -81,6 +81,25 @@ describe("parseLocation", () => {
     expect(parseLocation("Dublin")).toMatchObject({ city: "Dublin" });
     expect(parseLocation("Dublin").country).toBeUndefined();
   });
+  it("reads a two letter code after a city by context: state, country, or unknown", () => {
+    expect(parseLocation("Berlin, DE")).toMatchObject({ city: "Berlin", country: "DE" });
+    expect(parseLocation("Berlin, DE").region).toBeUndefined();
+    expect(parseLocation("Toronto, CA")).toMatchObject({ city: "Toronto", country: "CA" });
+    expect(parseLocation("Bengaluru, IN")).toMatchObject({ city: "Bengaluru", country: "IN" });
+    expect(parseLocation("San Francisco, CA")).toMatchObject({ city: "San Francisco", region: "CA", country: "US" });
+    expect(parseLocation("Indianapolis, IN")).toMatchObject({ city: "Indianapolis", region: "IN", country: "US" });
+    expect(parseLocation("Austin, TX")).toMatchObject({ city: "Austin", region: "TX", country: "US" });
+    expect(parseLocation("South San Francisco, CA")).toMatchObject({ city: "South San Francisco", region: "CA", country: "US" });
+    expect(parseLocation("Dover, DE")).toMatchObject({ city: "Dover", region: "DE", country: "US" });
+    expect(parseLocation("Lyon, FR")).toMatchObject({ city: "Lyon", country: "FR" });
+    // Both a state and a country, after a city the table does not know: left unknown, not guessed.
+    const ambiguous = parseLocation("Nowhereville, DE");
+    expect(ambiguous.city).toBe("Nowhereville");
+    expect(ambiguous.country).toBeUndefined();
+    expect(ambiguous.region).toBeUndefined();
+    // A structured country from the feed still wins over all of it.
+    expect(parseLocations([{ raw: "Nowhereville, DE", countryCode: "US" }])[0]).toMatchObject({ city: "Nowhereville", country: "US" });
+  });
   it("reads other countries and leaves the unknown alone", () => {
     expect(parseLocation("London, United Kingdom")).toMatchObject({ city: "London", country: "GB" });
     expect(parseLocation("Paris, France")).toMatchObject({ city: "Paris", country: "FR" });
@@ -129,7 +148,7 @@ describe("parseLocations with structured fields from the feed", () => {
 
 describe("eligibilityOf", () => {
   it("reads a stated restriction with the sentence as evidence and the country it names", () => {
-    expect(eligibilityOf("Great team. Right to work in the UK is required. Apply now.")).toEqual({
+    expect(eligibilityOf("Great team. Right to work in the UK is required. Apply now.")).toMatchObject({
       restriction: "right_to_work",
       country: "GB",
       evidence: "Right to work in the UK is required.",
@@ -161,7 +180,62 @@ describe("eligibilityOf", () => {
   });
 });
 
+describe("titleNorm", () => {
+  it("keeps letters and digits of every script", () => {
+    expect(titleNorm("ソフトウェアエンジニア (東京)")).toBe("ソフトウェアエンジニア 東京");
+    expect(titleNorm("مهندس برمجيات")).toBe("مهندس برمجيات");
+    expect(titleNorm("Développeur C++ / Sr. Ingénieur")).toBe("développeur c++ sr ingénieur");
+    expect(titleNorm("Sr. PM - Growth")).toBe("sr pm growth");
+  });
+});
+
+describe("sponsorshipOf across sentences", () => {
+  it("reads every relevant sentence and lets a stated no win", () => {
+    expect(sponsorshipOf("You must have work authorization for the role. We cannot provide visa sponsorship at this time.")).toMatchObject({
+      value: "not_offered",
+      evidence: "We cannot provide visa sponsorship at this time.",
+    });
+    expect(sponsorshipOf("We sponsor visas for many roles. This role cannot be sponsored.")).toMatchObject({ value: "not_offered" });
+    expect(sponsorshipOf("Great team. We are happy to sponsor visas for this role.")).toMatchObject({ value: "offered" });
+    expect(sponsorshipOf("Applicants must be authorized to work in the US without sponsorship.")).toMatchObject({ value: "not_offered" });
+    expect(sponsorshipOf("Visa questions go to our immigration team.")).toMatchObject({ value: "unknown" });
+    expect(sponsorshipOf("We can sponsor H-1B visas for this role.")).toMatchObject({ value: "offered" });
+  });
+  it("does not read project sponsors, event sponsorships or a relocation sponsor as visa sponsorship", () => {
+    for (const s of [
+      "You will work closely with project sponsors and designated project managers.",
+      "Your focus will be on planning a curated slate of events and sponsorships across the region.",
+      "We will sponsor you for relocation if you need to move for this role.",
+      "Provide executive-level engagement and sponsorship on the most strategic accounts.",
+    ]) {
+      expect(sponsorshipOf(s).value, s).toBe("unknown");
+    }
+    expect(sponsorshipOf("Nothing about it here.")).toEqual({ value: "unknown" });
+  });
+});
+
+describe("eligibilityOf alternatives and conjunctions", () => {
+  it("keeps 'or' as alternatives and 'and' as one conjunction", () => {
+    const either = eligibilityOf("Must be a US citizen or permanent resident.");
+    expect(either).toMatchObject({ restriction: "citizenship", country: "US", options: [["citizenship"], ["permanent_residency"]] });
+    const both = eligibilityOf("US citizenship and an active security clearance are required.");
+    expect(both).toMatchObject({ options: [["citizenship", "clearance"]] });
+    const one = eligibilityOf("Right to work in the UK is required.");
+    expect(one).toMatchObject({ restriction: "right_to_work", options: [["right_to_work"]] });
+  });
+});
+
 describe("parseCompensation", () => {
+  it("keeps the stated currency and period and never infers annual from the size of the number", () => {
+    expect(parseCompensation("CAD 90,000 - 110,000 a year")).toMatchObject({ min: 90000, max: 110000, currency: "CAD", period: "year" });
+    expect(parseCompensation("EUR 4.500 - 5.200 per month")).toMatchObject({ min: 4500, max: 5200, currency: "EUR", period: "month" });
+    expect(parseCompensation("EUR 70.000")).toMatchObject({ min: 70000, max: 70000, currency: "EUR", period: "unknown" });
+    expect(parseCompensation("£45,000")).toMatchObject({ currency: "GBP", period: "unknown" });
+    expect(parseCompensation("$35 an hour")).toMatchObject({ min: 35, currency: "USD", period: "hour" });
+    expect(parseCompensation("A$120k")).toMatchObject({ min: 120000, currency: "AUD", period: "year" });
+    expect(parseCompensation("90,000 - 110,000")).toMatchObject({ min: 90000, currency: undefined, period: "unknown" });
+    expect(parseCompensation("CAD 90,000 - 110,000 a year")?.raw).toBe("CAD 90,000 - 110,000 a year");
+  });
   it("reads Ashby and free text ranges", () => {
     expect(parseCompensation("$211.4K – $290.6K • Offers Equity")).toMatchObject({ min: 211400, max: 290600, currency: "USD", period: "year" });
     expect(parseCompensation("USD 150,000 - 175,000 per year")).toMatchObject({ min: 150000, max: 175000, period: "year" });

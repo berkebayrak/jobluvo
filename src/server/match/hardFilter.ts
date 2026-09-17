@@ -30,9 +30,17 @@ import type { AuthorizationFact, PreferenceFact, SponsorshipFact } from "@/serve
  *   'right to work required'    country the sentence names or, when it names
  *                               none, in the job's own countries
  *   'sponsorship not offered'   the posting says no sponsorship, the user
- *                               needs it now, and holds no authorization for
- *                               that country. Unknown sponsorship passes:
- *                               unknown is unknown, never a no (JOB-04)
+ *                               needs it now, and holds no valid authorization
+ *                               in a country that puts the job in reach: the
+ *                               target country, the work arrangement and the
+ *                               authorization must agree on one location, so
+ *                               a permit in a listed country the user is not
+ *                               targeting does not count. Unknown sponsorship
+ *                               passes: unknown is unknown, never a no (JOB-04)
+ *
+ * An authorization with a validUntil in the past is not an authorization.
+ * A restriction with alternatives, "citizens or permanent residents", passes
+ * when any alternative is met in full.
  *   'employment type'           the posting states a type the user excluded.
  *                               A posting with no type passes
  *   'excluded company'          the user blocked the employer (JOB-07)
@@ -75,10 +83,23 @@ const hay = (word: string): SQL => {
   return sql`(j.title ilike ${like} or j.company_name ilike ${like} or exists (select 1 from ${LOC} where l->>'raw' ilike ${like}))`;
 };
 
-export function hardFilterSql({ prefs, auth, sponsorship }: FilterFacts): SQL {
+/** Authorizations that hold today: no validUntil, or one that has not passed. */
+export function validAuthorizations(auth: AuthorizationFact[], today = new Date().toISOString().slice(0, 10)): AuthorizationFact[] {
+  return auth.filter((a) => a.basis !== "none" && (!a.validUntil || a.validUntil >= today));
+}
+
+export function hardFilterSql({ prefs, auth: allAuth, sponsorship }: FilterFacts, today?: string): SQL {
+  const auth = validAuthorizations(allAuth, today);
   const targets: string[] = prefs.targetCountries === "any" ? [] : prefs.targetCountries;
   const any = prefs.targetCountries === "any";
   const inTargets: SQL = any ? sql`true` : inCountries(targets);
+  /** Countries of the job's locations that put it in reach for this user: the target countries, or all of them with "any". */
+  const reach = (countries: readonly string[]): SQL =>
+    countries.length
+      ? any
+        ? inCountries(countries)
+        : sql`exists (select 1 from ${LOC} where l->>'country' in (${params(countries)}) and l->>'country' in (${params(targets)}))`
+      : sql`false`;
 
   // Location, one CASE: the remote preference first, then reach.
   const cases: SQL[] = [];
@@ -97,22 +118,54 @@ export function hardFilterSql({ prefs, auth, sponsorship }: FilterFacts): SQL {
     if (onsite) relocation = sql`case when not ${IS_REMOTE} and not ${inCountries(onsite)} then 'relocation' end`;
   }
 
-  // Stated restrictions. Met through an authorization fact in the
-  // restriction's country; with no country named, the job's own countries.
+  // Stated restrictions. Met through a valid authorization in the
+  // restriction's country or, with no country named, in a country that puts
+  // the job in reach. With alternatives, any one met in full passes; the
+  // reason names the first term of the first alternative that fails.
   const meets = (countries: string[]): SQL =>
-    countries.length ? sql`coalesce(j.eligibility_country in (${params(countries)}), ${inCountries(countries)})` : sql`false`;
+    countries.length ? sql`coalesce(j.eligibility_country in (${params(countries)}), ${reach(countries)})` : sql`false`;
   const citizens = auth.filter((a) => a.basis === "citizen").map((a) => a.country);
   const residents = auth.filter((a) => a.basis === "citizen" || a.basis === "permanent_resident").map((a) => a.country);
-  const authorised = auth.filter((a) => a.basis !== "none").map((a) => a.country);
+  const authorised = auth.map((a) => a.country);
+  const termMet: Record<string, SQL> = {
+    clearance: sql`false`,
+    citizenship: meets(citizens),
+    permanent_residency: meets(residents),
+    right_to_work: meets(authorised),
+  };
+  const REASON: Record<string, string> = {
+    clearance: "needs a security clearance, Jobluvo does not handle these",
+    citizenship: "citizenship required",
+    permanent_residency: "permanent residency required",
+    right_to_work: "right to work required",
+  };
+  // options is a jsonb array of arrays; each inner array is one alternative.
+  const optionMet = (term: string): SQL => sql`(${termMet[term]})`;
+  const anyOptionMet = sql`exists (
+    select 1 from jsonb_array_elements(coalesce(j.eligibility_options, jsonb_build_array(jsonb_build_array(j.eligibility::text)))) opt
+    where not exists (
+      select 1 from jsonb_array_elements_text(opt) term
+      where not case term
+        when 'clearance' then ${optionMet("clearance")}
+        when 'citizenship' then ${optionMet("citizenship")}
+        when 'permanent_residency' then ${optionMet("permanent_residency")}
+        when 'right_to_work' then ${optionMet("right_to_work")}
+        else false end
+    )
+  )`;
   const restriction = sql`case
-    when j.eligibility = 'clearance' then 'needs a security clearance, Jobluvo does not handle these'
-    when j.eligibility = 'citizenship' and not ${meets(citizens)} then 'citizenship required'
-    when j.eligibility = 'permanent_residency' and not ${meets(residents)} then 'permanent residency required'
-    when j.eligibility = 'right_to_work' and not ${meets(authorised)} then 'right to work required'
+    when j.eligibility is null then null
+    when ${anyOptionMet} then null
+    when j.eligibility = 'clearance' then ${REASON.clearance}
+    when j.eligibility = 'citizenship' then ${REASON.citizenship}
+    when j.eligibility = 'permanent_residency' then ${REASON.permanent_residency}
+    when j.eligibility = 'right_to_work' then ${REASON.right_to_work}
     end`;
 
+  // Sponsorship: needed now, the posting says no, and no valid authorization
+  // in a country that puts this job in reach.
   const sponsorshipRule: SQL = sponsorship?.now
-    ? sql`case when j.sponsorship = 'not_offered' and not ${inCountries(authorised)} then 'sponsorship not offered' end`
+    ? sql`case when j.sponsorship = 'not_offered' and not ${reach(authorised)} then 'sponsorship not offered' end`
     : sql`null`;
 
   const employment: SQL = prefs.employmentTypes?.length

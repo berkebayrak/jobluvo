@@ -37,7 +37,7 @@ export interface RawPosting {
   descriptionHtml: string;
   applyUrl: string;
   postedAt?: Date;
-  compensation?: { min?: number; max?: number; currency?: string; period?: "year" | "hour" };
+  compensation?: { min?: number; max?: number; currency?: string; period?: "year" | "month" | "hour"; raw?: string };
   /**
    * List plus detail families only. What this run knows about the body:
    *   fetched   the body is in descriptionHtml, fetched now

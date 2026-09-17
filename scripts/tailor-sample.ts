@@ -1,6 +1,6 @@
 import { dbPool } from "@/db/client";
 import { resumeFacts } from "@/server/match/profile";
-import { cellStats, runStats } from "@/server/match/report";
+import { cellStats, citationStats, runStats } from "@/server/match/report";
 import { loadScoringJobs } from "@/server/match/run";
 import { stratifiedSample } from "@/server/match/sample";
 import { factEntries } from "@/server/packet/resume";
@@ -67,6 +67,10 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
   };
   console.log("  hard findings on the stored attempt:", JSON.stringify(count(hard)));
   console.log("  soft findings on the stored attempt:", JSON.stringify(count(soft)));
+  // The wrong citation rate, tracked across samples: edits whose cited facts do not carry a value the edit uses.
+  const edits = outcomes.reduce((a, o) => a + o.changes, 0);
+  const wrong = new Set(soft.filter((f) => f.message.includes("not in the cited facts")).map((f) => f.bullet)).size;
+  console.log(`  wrong citations: ${wrong} of ${edits} edits, ${edits ? ((100 * wrong) / edits).toFixed(2) : "0"} per 100`);
   for (const o of outcomes.filter((x) => x.status !== "ready").slice(0, 8)) {
     console.log(`  ${o.status} ${o.jobId}: ${o.error ?? o.findings.filter((f) => f.level === "hard").map((f) => `${f.bullet}: ${f.message} ${f.value ?? ""}`).join("; ")}`);
   }
@@ -105,6 +109,8 @@ async function main() {
     summarise(run, outcomes);
   }
 
+  console.log("\nwrong citations by run, from the packets on hand");
+  console.table(await citationStats(db));
   console.log("\nUSD per call by kind and run");
   console.table((await runStats(db)).filter((r) => r.kind === "tailor" || r.run.startsWith(tag)));
   for (const by of ["family", "length"] as const) {

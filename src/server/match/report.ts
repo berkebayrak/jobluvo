@@ -38,6 +38,55 @@ export interface CellStats {
 
 const num = (v: unknown) => Number(v ?? 0);
 
+export interface CitationStats {
+  run: string;
+  packets: number;
+  edits: number;
+  citedEdits: number;
+  /** Edits whose cited facts do not carry a value the edit uses. */
+  wrongCitations: number;
+  /** Per 100 cited edits. */
+  ratePer100: number;
+}
+
+/**
+ * How often the model points at the wrong supporting fact, from the packets
+ * on hand, by the run that wrote them. A packet is one row per user and
+ * job, so a later run over the same jobs replaces the earlier rows; the
+ * decision log keeps each sample's rate as it was measured.
+ */
+export async function citationStats(db: DbPool | Tx): Promise<CitationStats[]> {
+  const r = await db.execute<Record<string, unknown>>(sql`
+    with edits as (
+      select coalesce(p.run, 'product') as run, p.id, e
+      from packets p, jsonb_array_elements(p.changes) e
+    ),
+    wrong as (
+      select coalesce(p.run, 'product') as run, p.id, f->>'bullet' as bullet
+      from packets p, jsonb_array_elements(p.findings) f
+      where f->>'message' = 'value is on the profile but not in the cited facts'
+    )
+    select run,
+      (select count(*)::int from packets p where coalesce(p.run, 'product') = e.run) as packets,
+      count(*)::int as edits,
+      count(*) filter (where jsonb_array_length(e->'facts') > 0)::int as cited,
+      (select count(distinct (id, bullet))::int from wrong w where w.run = e.run) as wrong
+    from edits e group by run order by run
+  `);
+  return r.rows.map((x) => {
+    const cited = num(x.cited);
+    const wrong = num(x.wrong);
+    return {
+      run: String(x.run),
+      packets: num(x.packets),
+      edits: num(x.edits),
+      citedEdits: cited,
+      wrongCitations: wrong,
+      ratePer100: cited ? Number(((100 * wrong) / cited).toFixed(2)) : 0,
+    };
+  });
+}
+
 export async function runStats(db: DbPool | Tx): Promise<RunStats[]> {
   const r = await db.execute<Record<string, unknown>>(sql`
     select kind::text as kind, coalesce(run, 'cron') as run, count(*)::int as calls, min(model) as model,

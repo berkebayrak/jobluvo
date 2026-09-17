@@ -156,6 +156,8 @@ export function namesOf(text: string): string[] {
       const acronym = /^[A-Z][A-Z&]{1,6}$/.test(w);
       if ((cap && i > 0) || acronym) run.push(w);
       else flush();
+      // A comma, semicolon or slash after the word ends the name: "SQL, Power BI" is two names, not one.
+      if (/[,;/]$/.test(raw)) flush();
     });
     flush();
   }
@@ -204,15 +206,17 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
 }
 
 /**
- * A run of capitalised words is on the profile when the run appears in the
- * facts, or when every word of it does on its own: "SQL Power BI" is two
- * known names side by side, "PMOs" is a known name in the plural. Measured
- * on the first sample, where 3 of 11 name findings were runs like these.
+ * A name is on the profile when it appears in the facts as written, or as
+ * the singular of a plural ("PMOs" for "PMO"). A run of several capitalised
+ * words is one name and is looked up whole: two known words side by side
+ * are not a known name, so "Power SQL" is flagged even though both words
+ * are on the profile. The first sample's three runs of known names were
+ * the tokeniser joining across commas, fixed in `namesOf`, not a case for
+ * looking words up one at a time.
  */
 export function nameOnProfile(name: string, corpus: string): boolean {
   const lc = name.toLowerCase();
-  if (corpus.includes(lc)) return true;
-  return lc.split(" ").every((w) => corpus.includes(w) || (w.endsWith("s") && corpus.includes(w.slice(0, -1))));
+  return corpus.includes(lc) || (lc.endsWith("s") && corpus.includes(lc.slice(0, -1)));
 }
 
 export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: FactSet): PacketFinding[] {

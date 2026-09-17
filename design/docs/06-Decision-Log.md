@@ -65,6 +65,20 @@ The phase 0 review reproduced three rewrites the cited value rule (D-013) passed
 
 **The status column means "passes the rules as they stand".** Five packets sat at ready carrying the managing six invention that the cited rule rejects, because nothing re-validated them when the rule shipped, and this change adds the one function that hands a ready packet's resume downstream. So the rule is: when a validation rule changes, `npm run validator-report` runs first as the measurement and then with `--apply`, which restamps every replayed packet's status, findings and, for a packet that fails today, its resume, keeping a summary's old findings since the summary cannot be replayed. Applied on this date: of 99 ready packets 5 became invalid, 4 became held and 90 stayed ready; the 2 invalid stayed invalid. The alternative, keeping the status as a record of the time and making the downstream function check a rules version, was not taken: a word that means different things by date is not a gate.
 
+**Correction on 17 September, review three finding 1: the figures above came from a defective replay.** The `--apply` that produced "5 became invalid, 4 became held and 90 stayed ready" was wrong in three ways. It derived the status from the replayed bullet findings alone, so a summary finding it kept beside them was written into the row but never counted, and a packet held or rejected by its summary alone would have been stamped ready with its resume intact, behind the one door. It replayed failed packets, whose empty change set is the absence of an answer, and would have stamped them ready. And it re-hashed each resume as jsonb gave it back, keys in the database's order, so `resume_hash` on every row with a resume stopped naming the document the run had hashed. The re-run that "read zero divergence" was the same computation agreeing with itself. Fixed in #35: `src/server/packet/replay.ts` derives the status from every finding the row will carry, does not replay a failed packet, stamps ready or held only a resume that is the base plus the stored changes and summary, and refuses a write when the row moved since it was read; `resumeHash` now hashes the document's shape, so a stored hash can be checked against a stored resume. Recomputed under the corrected replay, then applied, over the same 101 packets:
+
+| Corrected replay, 101 packets | Packets |
+|---|---|
+| Ready | 90 |
+| Held for review | 4 |
+| Invalid | 7 |
+| Status changed by the corrected replay | 0 |
+| Failed, not replayed | 0 |
+| Passes today but no resume to promote | 0 |
+| `resume_hash` wrong before, repaired by the apply | 94 of 94 |
+
+The defective figure and the corrected one agree because of the data, not the code: the 6 summary findings kept from the original run are all soft and decide nothing, there is no failed packet on hand, each of the 7 invalid packets carries a hard bullet finding of its own, and all 94 stored resumes are the base plus their stored changes. On other data the first replay would have promoted held and failed packets. The held rate the gate below is argued from is 4 of 101 packets with a candidate, 4.0 percent, recomputed rather than assumed, and the gate stands.
+
 **What 4 percent means, and the gate it forces.** The unit is packets, not users: one held packet every twenty fifth application, for every user. A Starter account at 750 applications a month meets about 30, a weekly event for everyone who pays. A held packet with no screen to resolve it is an application the user paid for and cannot send. So submission does not ship before DOC-03, the packet review screen, hard. That does not move DOC-03 ahead of the phase 1 pre rank, because nothing can be submitted yet and the pre rank is the only work that moves the cost answer; it puts DOC-03 ahead of submission. `consumableResume` in `src/server/packet/run.ts` is the one door: only a ready packet's resume leaves through it.
 
 ### D-016. The packet attempt history is a measurement requirement, deferred

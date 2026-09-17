@@ -153,6 +153,22 @@ export function renderResume(name: string, doc: ResumeDocument): string {
   return out.join("\n").trimEnd();
 }
 
+/**
+ * The document in the shape the run builds it, key for key. jsonb stores
+ * keys in its own order, so a document read back from the row is not the
+ * object that was written; hashing the shape rather than the object makes
+ * the hash mean the document, and lets a stored hash be checked against
+ * the stored resume (DOC-05).
+ */
+export function shapedResume(d: ResumeDocument): ResumeDocument {
+  return {
+    summary: d.summary,
+    experience: d.experience.map((r) => ({ id: r.id, heading: r.heading, bullets: r.bullets.map((b) => ({ id: b.id, text: b.text })) })),
+    education: d.education.map((e) => ({ id: e.id, text: e.text })),
+    skills: d.skills.map((s) => ({ id: s.id, text: s.text })),
+  };
+}
+
 export function resumeHash(doc: ResumeDocument): string {
-  return sha256(JSON.stringify(doc));
+  return sha256(JSON.stringify(shapedResume(doc)));
 }

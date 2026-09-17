@@ -54,6 +54,10 @@ The limit, which goes beside this figure every time it is quoted: one seeded res
 
 This is a product fact, not only a measurement (D-022). At this rate about two in five applications are held for a person to read before anything could be sent. DOC-03, the packet review screen, is a primary flow that every user meets several times a week, to be designed and staffed as such, or the rules are retuned against real users; it is not a fallback screen before submission. A held packet costs nothing today because nothing is submitted, DOC-03 does not exist and the resume is kept for a person; a shipped invention is permanent, so while holds are free the rules buy coverage. That reasoning inverts the day DOC-03 ships.
 
+On fresh answers the rate is higher: two 20 job samples on 18 September under the same rules, on the current uploaded profile, held 15 of 20 and 13 of 20 (D-022, "The retry, measured"). Same user, different profile, one board family. The figure above is the stored packets' rate because that is what the status column states; the fresh rate is the one that says how far the true rate can move.
+
+The tailoring term measured with the retry on those samples: USD 0.0213 over 20 packets and USD 0.0162 over 20 packets, 39 calls each, USD 0.00107 and 0.00081 per packet, against USD 0.00078 in the function above. The function's tailoring row and the headline's "under USD 0.0009" are stated for the earlier rule and are to be restated when the band table is recomputed with this term; until then this paragraph is the current tailoring figure.
+
 Superseded figures, each true when written: 4.0 percent on 17 September under the claim validator (D-017), computed by a defective replay; 4.0 percent on 17 September confirmed by the corrected replay (#35, the correction under D-017); 15.6 percent of the 90 packets ready that day under rule 2 (D-021); 17.8 percent of 101 on 18 September under rule 2 alone, the figure this section carried before rule 1.
 
 ## What the extraction accuracy is not

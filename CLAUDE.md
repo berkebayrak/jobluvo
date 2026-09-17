@@ -66,6 +66,10 @@ Cloud, BambooHR, BreezyHR, JazzHR, Jobvite, Paylocity, UltiPro, ADP, Dover, Ripp
 and Zoho Recruit, are next phases. Workday is developed early and enabled only for
 validated configurations. Submission is not built yet on any family.
 
+Roles that require a security clearance are out of scope by product decision. The hard
+filter fails them with the reason "needs a security clearance, Jobluvo does not handle
+these", and that rule stays even if a clearance field is added to the profile.
+
 Discovery and execution are separate capabilities with different constraints. A platform
 can be easy for one and hard for the other. Coverage is tiered A to D; state both tiers
 when describing a platform.

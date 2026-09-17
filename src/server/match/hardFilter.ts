@@ -16,11 +16,14 @@ import type { AuthorizationFact, PreferenceFact, SponsorshipFact } from "@/serve
  *   'not remote'                the user takes remote roles only
  *   'relocation'                on site role outside the countries the user
  *                               will work on site in
+ *   'needs a security clearance, Jobluvo does not handle these'
+ *                               a product decision, not a missing fact:
+ *                               cleared roles are out of scope, so the rule
+ *                               stays even when a clearance field exists
  *   'citizenship required'      the posting states a restriction the user's
  *   'permanent residency required'   authorization facts do not meet, in the
  *   'right to work required'    country the sentence names or, when it names
- *   'security clearance required'    none, in the job's own countries. No
- *                               fact can meet a clearance yet
+ *                               none, in the job's own countries
  *   'sponsorship not offered'   the posting says no sponsorship, the user
  *                               needs it now, and holds no authorization for
  *                               that country. Unknown sponsorship passes:
@@ -72,7 +75,7 @@ export function firstFailingReasonSql(prefs: PreferenceFact, auth: Authorization
   const residents = auth.filter((a) => a.basis === "citizen" || a.basis === "permanent_resident").map((a) => a.country);
   const authorised = auth.filter((a) => a.basis !== "none").map((a) => a.country);
   const restriction = `case
-    when j.eligibility = 'clearance' then 'security clearance required'
+    when j.eligibility = 'clearance' then 'needs a security clearance, Jobluvo does not handle these'
     when j.eligibility = 'citizenship' and not ${meets(citizens)} then 'citizenship required'
     when j.eligibility = 'permanent_residency' and not ${meets(residents)} then 'permanent residency required'
     when j.eligibility = 'right_to_work' and not ${meets(authorised)} then 'right to work required'

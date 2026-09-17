@@ -45,8 +45,10 @@ const FACTS: ResumeFacts = {
 };
 
 const set = factSet(factEntries(FACTS));
-const hard = (line: string, cited: string[] = []) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "hard");
-const soft = (line: string, cited: string[] = []) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "soft");
+const ALL = ["R1", "R1.1", "R1.2", "R1.3", "R1.4", "R2", "R2.1", "E1", "S1", "S2"];
+/** Hard findings for a line that cites every fact, so only values that are nowhere on the profile fail. */
+const hard = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "hard");
+const soft = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "soft");
 
 describe("normaliser", () => {
   it("writes word numbers, suffixes, separators and hyphens the same way", () => {
@@ -92,6 +94,8 @@ describe("hard rejections: a value in no confirmed fact", () => {
     // Arithmetic over facts is a new claim: four managers and two analysts is not "a team of 6" on the profile.
     expect(hard("Team of 6 across strategy and analysis")).toEqual([expect.objectContaining({ value: "num:6" })]);
     expect(hard("Managed a USD 250M budget")).toEqual([expect.objectContaining({ value: "money:usd:250000000" })]);
+    // The salary expectation is an answer, not resume content: its figure is not on the resume's fact set at all.
+    expect(hard("Expects USD 150,000 base")).toEqual([expect.objectContaining({ value: "money:usd:150000" })]);
   });
   it("rejects a rounded or rescaled figure, because it is a different claim", () => {
     expect(hard("USD 9M in savings")).toHaveLength(1);
@@ -100,11 +104,19 @@ describe("hard rejections: a value in no confirmed fact", () => {
   });
 });
 
-describe("soft findings", () => {
-  it("flags a citation that does not carry the value, and a citation that does not exist", () => {
-    expect(soft("Reduced cost 11 percent", ["R1.2"])).toEqual([]);
-    expect(soft("Reduced cost 11 percent", ["R1.1"])).toEqual([expect.objectContaining({ message: expect.stringContaining("not in the cited facts"), value: "pct:11" })]);
-    expect(soft("Reduced cost 11 percent", ["R9.9"])).toContainEqual(expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" }));
+describe("a value must be in a cited fact", () => {
+  it("passes a value the cited fact carries, rejects one that is only elsewhere on the profile, and one with nothing cited", () => {
+    expect(hard("Reduced cost 11 percent", ["R1.2"])).toEqual([]);
+    // 11 percent is on the profile, in R1.2, but the edit cites R1.1: rejected.
+    expect(hard("Reduced cost 11 percent", ["R1.1"])).toEqual([expect.objectContaining({ level: "hard", message: "value is on the profile but not in the cited facts", value: "pct:11" })]);
+    // Four managers and two analysts are in R1.1; "six" is on the profile only as coached 6 analysts, elsewhere.
+    expect(hard("Managing six strategy professionals", ["R1.1"])).toEqual([expect.objectContaining({ level: "hard", value: "num:6" })]);
+    expect(hard("Reduced cost 11 percent", [])).toEqual([expect.objectContaining({ level: "hard", message: "value with no fact cited for it", value: "pct:11" })]);
+    // A line with no value needs no citation.
+    expect(hard("Led the planning cycle with finance", [])).toEqual([]);
+  });
+  it("a citation that does not exist is soft, on its own", () => {
+    expect(soft("Led the planning cycle", ["R9.9"])).toEqual([expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" })]);
   });
   it("flags a name that appears in no fact, and passes the names that do", () => {
     expect(soft("Reported to the CEO at Arvento using Power BI")).toEqual([]);
@@ -125,6 +137,7 @@ describe("change set validation", () => {
     const good = validateChangeSet(
       {
         summary: "Strategy leader with 10 years in planning, cost transformation and M&A.",
+        summaryFacts: ["S1"],
         changes: [{ bullet: "R1.2", text: "Ran a 3 year cost program across 4 business units, cutting operating cost 11 percent, USD 9.2M a year.", facts: ["R1.2"] }],
         skills: ["S1"],
       },
@@ -133,14 +146,17 @@ describe("change set validation", () => {
     );
     expect(good.filter((f) => f.level === "hard")).toEqual([]);
     const bad = validateChangeSet(
-      { summary: null, changes: [{ bullet: "R1.2", text: "Cut operating cost 15 percent in an 18 month program.", facts: ["R1.2"] }], skills: [] },
+      { summary: null, summaryFacts: [], changes: [{ bullet: "R1.2", text: "Cut operating cost 15 percent in an 18 month program.", facts: ["R1.2"] }], skills: [] },
       base,
       set,
     );
     expect(bad.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:18", "pct:15"]);
+    // A summary with a value and no citation is rejected like any line.
+    const unc = validateChangeSet({ summary: "Leader with 10 years of experience.", summaryFacts: [], changes: [], skills: [] }, base, set);
+    expect(unc.map((f) => [f.level, f.bullet, f.message])).toEqual([["hard", "summary", "value with no fact cited for it"]]);
   });
   it("reports an edit to a line that does not exist and a skill that does not exist as soft, never as a pass", () => {
-    const f = validateChangeSet({ summary: null, changes: [{ bullet: "R7.1", text: "Anything", facts: [] }], skills: ["S9"] }, base, set);
+    const f = validateChangeSet({ summary: null, summaryFacts: [], changes: [{ bullet: "R7.1", text: "Anything", facts: [] }], skills: ["S9"] }, base, set);
     expect(f.map((x) => [x.level, x.message])).toEqual([
       ["soft", "no such line on the resume; edit dropped"],
       ["soft", "no such skill; ignored"],

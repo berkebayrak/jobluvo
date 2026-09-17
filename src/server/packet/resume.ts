@@ -6,7 +6,7 @@ import type { ResumeFacts } from "@/server/match/profile";
  * The resume as a document built from confirmed facts, and the edits the
  * tailor may make to it. Every line carries the id of the fact it came
  * from: roles R1, R2 most recent first, bullets R1.1, R1.2, education E1,
- * skills S1, answers A1. The model edits by id and cites by id, the code
+ * skills S1. Answers are not resume content and are not here. The model edits by id and cites by id, the code
  * applies the edits, and the diff is the change set itself (DOC-03), not a
  * comparison of two long strings afterwards.
  */
@@ -35,7 +35,9 @@ export function factEntries(f: ResumeFacts): FactEntry[] {
     const detail = [s.years != null ? `${s.years} years` : null, s.evidence].filter(Boolean).join("; ");
     out.push({ id: `S${i + 1}`, text: `${s.name}${detail ? ` (${detail})` : ""}` });
   });
-  f.answers.forEach((a, i) => out.push({ id: `A${i + 1}`, text: `${a.question}: ${a.answer}` }));
+  // Answers (salary expectation, notice period) are what the user tells an
+  // application form, never resume content: not listed, so the model cannot
+  // cite them and the validator never accepts a value from them.
   return out;
 }
 
@@ -56,6 +58,8 @@ export function baseResume(f: ResumeFacts): ResumeDocument {
 export interface ChangeSet {
   /** A line for the top of the resume, or null for none. */
   summary: string | null;
+  /** The facts the summary draws on; its values must be in them. */
+  summaryFacts: string[];
   changes: ResumeChange[];
   /** Skill ids to list first, in this order; the rest follow in their own order. */
   skills: string[];
@@ -93,7 +97,7 @@ export function applyChanges(base: ResumeDocument, cs: ChangeSet): Applied {
   }
   if (cs.summary) {
     resume.summary = cs.summary;
-    diff.unshift({ bullet: "summary", before: "", after: cs.summary, facts: [] });
+    diff.unshift({ bullet: "summary", before: "", after: cs.summary, facts: cs.summaryFacts });
   }
   if (cs.skills.length) {
     const known = new Set(resume.skills.map((s) => s.id));
@@ -106,13 +110,15 @@ export function applyChanges(base: ResumeDocument, cs: ChangeSet): Applied {
 
 /** The whole document mode: the model returned every bullet of every role. Reconciled onto the base by role id and position. */
 export function applyDocument(base: ResumeDocument, doc: { summary: string | null; experience: { id: string; bullets: string[] }[]; skills: string[] }): Applied {
-  const cs: ChangeSet = { summary: doc.summary, changes: [], skills: [] };
+  // The whole document mode carries no citations; each rewritten line is
+  // taken to draw on the line it replaces, and the summary on every role.
+  const cs: ChangeSet = { summary: doc.summary, summaryFacts: base.experience.map((r) => r.id), changes: [], skills: [] };
   for (const role of doc.experience) {
     const baseRole = base.experience.find((r) => r.id === role.id);
     if (!baseRole) continue;
     role.bullets.forEach((text, j) => {
       const id = `${role.id}.${j + 1}`;
-      if (baseRole.bullets[j]) cs.changes.push({ bullet: id, text, facts: [] });
+      if (baseRole.bullets[j]) cs.changes.push({ bullet: id, text, facts: [id] });
     });
   }
   const byName = new Map(base.skills.map((s) => [s.text.toLowerCase(), s.id]));

@@ -54,7 +54,12 @@ function readAnswer(mode: TailorMode, text: string, base: ResumeDocument): { cs:
   }
   const doc = parseDocument(text);
   const applied = applyDocument(base, doc);
-  const cs: ChangeSet = { summary: doc.summary, changes: applied.diff.filter((d) => d.bullet !== "summary").map((d) => ({ bullet: d.bullet, text: d.after, facts: [] })), skills: [] };
+  const cs: ChangeSet = {
+    summary: doc.summary,
+    summaryFacts: base.experience.map((r) => r.id),
+    changes: applied.diff.filter((d) => d.bullet !== "summary").map((d) => ({ bullet: d.bullet, text: d.after, facts: d.facts })),
+    skills: [],
+  };
   return { cs, applied };
 }
 

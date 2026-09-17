@@ -164,10 +164,8 @@ export async function cellStats(db: DbPool | Tx, by: "family" | "length" | "seni
  * surviving the store: matches.error keeps the raw message, and
  * packets.error is assembled by `storedError` in packet/run.ts so the last
  * attempt's message is never truncated away behind an earlier attempt's
- * text. Whoever changes either error text changes what this counts.
- * Extraction stores no error text
- * on a row yet, so its unknown calls are not countable until the document
- * gets a status column (review finding 5, item 9).
+ * text, and profile_documents.error keeps the raw message of a failed
+ * extraction. Whoever changes any of the three changes what this counts.
  */
 export interface UnknownCostStats {
   kind: string;
@@ -188,6 +186,8 @@ export async function unknownCostStats(db: DbPool | Tx): Promise<UnknownCostStat
       select 'score' as kind, count(*)::int as n from matches where error like ${like}
       union all
       select 'tailor' as kind, count(*)::int as n from packets where error like ${like}
+      union all
+      select 'extract' as kind, count(*)::int as n from profile_documents where error like ${like}
     )
     select k.kind, u.n, k.mean, k.total from k left join u on u.kind = k.kind order by 1
   `);
@@ -200,7 +200,7 @@ export async function unknownCostStats(db: DbPool | Tx): Promise<UnknownCostStat
       usdMeanPerCall: Number(mean.toFixed(6)),
       usdWorstCase: n === null ? null : Number((n * mean).toFixed(4)),
       usdRecorded: Number(num(x.total).toFixed(4)),
-      note: n === null ? "not countable: no error text stored per document" : "rows whose latest attempt timed out or lost the connection",
+      note: n === null ? "not countable: no error text stored for this kind" : "rows whose latest attempt timed out or lost the connection",
     };
   });
 }

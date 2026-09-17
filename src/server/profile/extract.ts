@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
 import { costEvents, profileDocuments, profileFacts } from "@/db/schema";
 import { env } from "@/lib/env";
@@ -27,9 +28,9 @@ export const MAX_OUTPUT_TOKENS = 4000;
  * 1,500 output tokens: p50 10.6 s, p99 18.5 s, max 18.7 s, 8.6 ms per
  * output token, so the 4,000 token cap fits in 34 s. 40 s is 114 percent
  * above the observed max, but only 18 percent above the token cap's time;
- * a real two page resume spends that margin. Extraction stores no error
- * text per document yet, so its unknown cost calls are not counted by
- * `npm run cost-report` until the document gets a status (D-015).
+ * a real two page resume spends that margin. A failed call leaves its
+ * message on the document row, so an unknown cost call is counted by
+ * `npm run cost-report` like a scoring or tailoring one (D-015).
  */
 export const TIMEOUT_MS = 40_000;
 
@@ -262,9 +263,16 @@ export interface UploadOutcome {
 }
 
 /**
- * The upload path: stores the file, extracts, stores every fact as
- * `extracted` with its evidence and document, writes the cost row. A failed
- * call still writes its cost row and leaves the document without facts.
+ * The upload path: stores the file as a processing document, extracts,
+ * stores every fact as `extracted` with its evidence and document, marks
+ * the document ready, writes the cost row. A failed call still writes its
+ * cost row and marks the document failed with the reason, so a document
+ * with no facts is never mistaken for a verified one and a call of unknown
+ * cost leaves its mark where the cost report reads it. The document row and
+ * the call are not one transaction, on purpose: nothing holds a
+ * transaction open across a 40 s model call. A function killed mid call
+ * leaves the document processing; the profile view reads a processing
+ * document older than the call budget as failed.
  */
 export async function extractUpload(
   db: DbPool | Tx,
@@ -274,8 +282,11 @@ export async function extractUpload(
 ): Promise<UploadOutcome> {
   const [doc] = await db
     .insert(profileDocuments)
-    .values({ userId, filename: file.filename, bytesPhase0: file.bytes, text: "", pageCount: 0 })
+    .values({ userId, filename: file.filename, bytesPhase0: file.bytes, text: "", pageCount: 0, status: "processing" })
     .returning({ id: profileDocuments.id });
+  const fail = async (message: string) => {
+    await db.update(profileDocuments).set({ status: "failed", error: message.slice(0, 500) }).where(eq(profileDocuments.id, doc.id));
+  };
   let result: ExtractResult;
   try {
     result = await extractCall({ kind: "pdf", filename: file.filename, bytes: file.bytes }, { model: opts.model });
@@ -284,6 +295,7 @@ export async function extractUpload(
     if (err.usage) {
       await db.insert(costEvents).values({ kind: "extract", model: err.model, userId, refId: doc.id, tokensIn: err.usage.inputTokens, tokensCached: err.usage.cachedInputTokens, tokensOut: err.usage.outputTokens, usd: err.usd, ms: err.ms, run: opts.run ?? null });
     }
+    await fail(err.message);
     throw err;
   }
   await db.insert(costEvents).values({
@@ -298,10 +310,16 @@ export async function extractUpload(
     ms: result.ms,
     run: opts.run ?? null,
   });
-  if (result.facts.length) {
-    await db.insert(profileFacts).values(
-      result.facts.map((f) => ({ userId, documentId: doc.id, kind: f.kind, data: f.data, evidence: f.evidence, origin: "upload" as const, status: "extracted" as const })),
-    );
+  try {
+    if (result.facts.length) {
+      await db.insert(profileFacts).values(
+        result.facts.map((f) => ({ userId, documentId: doc.id, kind: f.kind, data: f.data, evidence: f.evidence, origin: "upload" as const, status: "extracted" as const })),
+      );
+    }
+    await db.update(profileDocuments).set({ status: "ready" }).where(eq(profileDocuments.id, doc.id));
+  } catch (e) {
+    await fail(`storing the facts failed: ${e instanceof Error ? e.message : String(e)}`);
+    throw e;
   }
   return {
     documentId: doc.id,

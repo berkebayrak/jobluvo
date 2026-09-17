@@ -71,6 +71,13 @@
       "when": 1789654026302,
       "tag": "0009_phase0_packet_run",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789662071998,
+      "tag": "0010_phase0_document_status",
+      "breakpoints": true
     }
   ]
 }

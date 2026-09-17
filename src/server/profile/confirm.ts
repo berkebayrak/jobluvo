@@ -244,7 +244,7 @@ export class ReplaceRefused extends Error {
  * refusal says which, so the screen never shows a click that did nothing
  * as done.
  */
-export async function replaceWithDocument(db: DbPool | Tx, userId: string, documentId: string, seen?: FactRef[]): Promise<{ confirmed: number; retired: number }> {
+export async function replaceWithDocument(db: DbPool | Tx, userId: string, documentId: string, seen: FactRef[]): Promise<{ confirmed: number; retired: number }> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
     const [doc] = await tx
@@ -260,12 +260,11 @@ export async function replaceWithDocument(db: DbPool | Tx, userId: string, docum
     if (state === "processing") throw new ReplaceRefused("processing", `${doc.filename} is still being read`);
     if (state === "failed") throw new ReplaceRefused("failed", `${doc.filename} could not be read, so there is nothing to confirm`);
     if (pending.length === 0) throw new ReplaceRefused("nothing_to_confirm", `nothing left to confirm from ${doc.filename}`);
-    // Bound to what the page displayed: the same waiting facts at the same versions, or nothing moves.
-    if (seen) {
-      const shown = new Map(seen.map((s) => [s.id, s.version]));
-      const same = pending.length === shown.size && pending.every((p) => shown.get(p.id) === p.version);
-      if (!same) throw new ReplaceRefused("changed", `the facts from ${doc.filename} changed since the page loaded, check them again`);
-    }
+    // Bound to what the page displayed: the same waiting facts at the same versions, or nothing moves. Always: there is no
+    // unbound form, since that is what let a caller confirm facts nobody had reviewed.
+    const shown = new Map(seen.map((s) => [s.id, s.version]));
+    const same = pending.length === shown.size && pending.every((p) => shown.get(p.id) === p.version);
+    if (!same) throw new ReplaceRefused("changed", `the facts from ${doc.filename} changed since the page loaded, check them again`);
     const retiredRows = await tx
       .update(profileFacts)
       .set({ status: "rejected", updatedAt: new Date() })

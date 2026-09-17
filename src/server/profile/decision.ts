@@ -12,8 +12,11 @@ export type FactRef = z.infer<typeof factRef>;
  *   { replaceWith, seen }  confirm every waiting fact of the document and
  *                          retire the resume facts before it; `seen` is the
  *                          list of waiting facts the page displayed with
- *                          their versions, and the replacement is refused
- *                          if the document's waiting facts differ from it.
+ *                          their versions, required, and the replacement is
+ *                          refused if the document's waiting facts differ
+ *                          from it. Without `seen` a caller could confirm a
+ *                          document's current facts without saying what the
+ *                          user reviewed (review three finding 5).
  *   { edit }               replace a waiting fact's data with what the user
  *                          typed, at the version the page showed; the fact
  *                          stays waiting at the next version.
@@ -24,7 +27,7 @@ export type FactRef = z.infer<typeof factRef>;
  *                          let a stale page confirm a fact it never showed.
  */
 export const decisionBody = z.union([
-  z.object({ replaceWith: z.string().uuid(), seen: z.array(factRef).optional() }).strict(),
+  z.object({ replaceWith: z.string().uuid(), seen: z.array(factRef) }).strict(),
   z.object({ edit: z.object({ id: z.string().uuid(), version: z.number().int().positive(), data: z.record(z.string(), z.unknown()) }).strict() }).strict(),
   z.object({ confirm: z.array(factRef).optional(), reject: z.array(factRef).optional() }).strict(),
 ]);

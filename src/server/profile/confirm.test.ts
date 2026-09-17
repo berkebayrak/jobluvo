@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { dbPool, type DbPool, type Tx } from "@/db/client";
 import { profileDocuments, profileFacts, users } from "@/db/schema";
 import { resumeFacts } from "@/server/match/profile";
 import { filterFacts } from "@/server/profile/viewer";
@@ -32,6 +32,14 @@ async function withUser(fn: (tx: Tx, userId: string) => Promise<void>) {
     .catch((e) => {
       if (!(e instanceof Rollback)) throw e;
     });
+}
+
+/** What the page sends: the document's waiting facts as displayed, id and version. */
+async function seenOf(tx: DbPool | Tx, userId: string, documentId: string) {
+  return tx
+    .select({ id: profileFacts.id, version: profileFacts.version })
+    .from(profileFacts)
+    .where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, documentId), eq(profileFacts.status, "extracted")));
 }
 
 const seedFacts = (userId: string) => [
@@ -100,14 +108,14 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
           { userId, documentId: a.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "A skill" } },
         ])
         .returning({ id: profileFacts.id });
-      expect(await replaceWithDocument(tx, userId, a.id)).toEqual({ confirmed: 2, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, a.id, await seenOf(tx, userId, a.id))).toEqual({ confirmed: 2, retired: 2 });
       // The page that showed document a is still open when the user replaces with document b.
       const [b] = await tx.insert(profileDocuments).values({ userId, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       await tx.insert(profileFacts).values([
         { userId, documentId: b.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "B Co", title: "Head", start: "2023-03", bullets: ["B line."] } },
         { userId, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
       ]);
-      expect(await replaceWithDocument(tx, userId, b.id)).toEqual({ confirmed: 2, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, b.id, await seenOf(tx, userId, b.id))).toEqual({ confirmed: 2, retired: 2 });
       // The stale page posts a's ids.
       const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => ({ id: r.id, version: 1 })) });
       expect(stale).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 2, reject: 0 }, skipped: aRows.map((r) => r.id) });
@@ -132,7 +140,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         { userId, documentId: doc.id, kind: "education", origin: "upload", status: "extracted", evidence: "x", data: { institution: "Koc University", degree: "MBA" } },
         { userId, documentId: doc.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
       ]);
-      expect(await replaceWithDocument(tx, userId, doc.id)).toEqual({ confirmed: 3, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 3, retired: 2 });
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["New Co"]);
       expect(f.education.map((e) => e.institution)).toEqual(["Koc University"]);
@@ -143,8 +151,8 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       const old = await tx.select({ status: profileFacts.status }).from(profileFacts).where(and(eq(profileFacts.userId, userId), eq(profileFacts.origin, "user"), eq(profileFacts.kind, "employment")));
       expect(old).toEqual([{ status: "rejected" }]);
       // Doing it again changes nothing and says why.
-      await expect(replaceWithDocument(tx, userId, doc.id)).rejects.toMatchObject({ reason: "nothing_to_confirm", message: "nothing left to confirm from resume.pdf" });
-      await expect(replaceWithDocument(tx, userId, "00000000-0000-0000-0000-000000000000")).rejects.toMatchObject({ reason: "not_found" });
+      await expect(replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).rejects.toMatchObject({ reason: "nothing_to_confirm", message: "nothing left to confirm from resume.pdf" });
+      await expect(replaceWithDocument(tx, userId, "00000000-0000-0000-0000-000000000000", [])).rejects.toMatchObject({ reason: "not_found" });
       expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["New Co"]);
     });
   });
@@ -163,9 +171,9 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         .returning({ id: profileDocuments.id });
       // Even with facts attached, a processing or failed document cannot replace the profile.
       await tx.insert(profileFacts).values([{ userId, documentId: reading.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "Half read" } }]);
-      await expect(replaceWithDocument(tx, userId, reading.id)).rejects.toMatchObject({ reason: "processing", message: "reading.pdf is still being read" });
-      await expect(replaceWithDocument(tx, userId, failed.id)).rejects.toMatchObject({ reason: "failed" });
-      await expect(replaceWithDocument(tx, userId, died.id)).rejects.toMatchObject({ reason: "failed" });
+      await expect(replaceWithDocument(tx, userId, reading.id, await seenOf(tx, userId, reading.id))).rejects.toMatchObject({ reason: "processing", message: "reading.pdf is still being read" });
+      await expect(replaceWithDocument(tx, userId, failed.id, await seenOf(tx, userId, failed.id))).rejects.toMatchObject({ reason: "failed" });
+      await expect(replaceWithDocument(tx, userId, died.id, await seenOf(tx, userId, died.id))).rejects.toMatchObject({ reason: "failed" });
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["Old Co"]);
       expect(f.skills.map((s) => s.name)).toEqual(["Old skill"]);
@@ -197,7 +205,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         ["newer.pdf", "check", 2],
         ["older.pdf", "check", 1],
       ]);
-      expect(await replaceWithDocument(tx, userId, older.id)).toEqual({ confirmed: 1, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, older.id, await seenOf(tx, userId, older.id))).toEqual({ confirmed: 1, retired: 2 });
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["Older Co"]);
       const after = await profileView(tx, userId);
@@ -246,6 +254,8 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       // A replacement bound to what a stale page showed is refused when the waiting facts differ; bound to the current set it runs.
       await expect(replaceWithDocument(tx, userId, doc.id, [{ id: emp.id, version: 2 }, { id: skill.id, version: 1 }])).rejects.toMatchObject({ reason: "changed" });
       await expect(replaceWithDocument(tx, userId, doc.id, [{ id: skill.id, version: 2 }])).rejects.toMatchObject({ reason: "changed" });
+      // An empty list on a document with waiting facts is the unbound form in another shape: refused the same way.
+      await expect(replaceWithDocument(tx, userId, doc.id, [])).rejects.toMatchObject({ reason: "changed" });
       expect(await replaceWithDocument(tx, userId, doc.id, [{ id: skill.id, version: 1 }])).toEqual({ confirmed: 1, retired: 2 });
     });
   });
@@ -270,14 +280,14 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       await tx.insert(profileFacts).values([{ userId, documentId: doc.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "New Co", title: "Head", start: "2022-03", bullets: ["New line."] } }]);
       // The replacement's second update, the confirmation, fails. The first, the retirement, has already run inside the same transaction.
-      await expect(replaceWithDocument(failingOn(tx, 2), userId, doc.id)).rejects.toThrow(/injected failure/);
+      await expect(replaceWithDocument(failingOn(tx, 2), userId, doc.id, await seenOf(tx, userId, doc.id))).rejects.toThrow(/injected failure/);
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["Old Co"]);
       expect(f.skills.map((s) => s.name)).toEqual(["Old skill"]);
       const status = await tx.select({ status: profileFacts.status }).from(profileFacts).where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, doc.id)));
       expect(status).toEqual([{ status: "extracted" }]);
       // The transaction is still usable: the replacement runs clean afterwards.
-      expect(await replaceWithDocument(tx, userId, doc.id)).toEqual({ confirmed: 1, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 1, retired: 2 });
     });
   });
 
@@ -285,7 +295,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
     await withUser(async (tx, userId) => {
       await tx.insert(profileFacts).values(seedFacts(userId));
       const [empty] = await tx.insert(profileDocuments).values({ userId, filename: "failed.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
-      await expect(replaceWithDocument(tx, userId, empty.id)).rejects.toMatchObject({ reason: "nothing_to_confirm", message: "nothing left to confirm from failed.pdf" });
+      await expect(replaceWithDocument(tx, userId, empty.id, await seenOf(tx, userId, empty.id))).rejects.toMatchObject({ reason: "nothing_to_confirm", message: "nothing left to confirm from failed.pdf" });
       expect((await profileView(tx, userId)).documents.find((d) => d.id === empty.id)!.state).toBe("empty");
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["Old Co"]);
@@ -311,7 +321,8 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         { userId: user.id, documentId: b.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "B skill" } },
         { userId: user.id, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
       ]);
-      const [ra, rb] = await Promise.all([replaceWithDocument(db, user.id, a.id), replaceWithDocument(db, user.id, b.id)]);
+      const [seenA, seenB] = await Promise.all([seenOf(db, user.id, a.id), seenOf(db, user.id, b.id)]);
+      const [ra, rb] = await Promise.all([replaceWithDocument(db, user.id, a.id, seenA), replaceWithDocument(db, user.id, b.id, seenB)]);
       // Each confirmed its own facts; the one that ran second also retired the first's.
       expect(ra.confirmed).toBe(2);
       expect(rb.confirmed).toBe(3);

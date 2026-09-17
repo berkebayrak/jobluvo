@@ -82,8 +82,8 @@ export async function ingestBatch(batch = env().INGEST_BATCH): Promise<SourceRun
   return runs;
 }
 
-/** Polls one source. Never throws; the outcome is on the returned run and the source row. */
-export async function ingestSource(db: DbPool, source: Source): Promise<SourceRun> {
+/** Polls one source. Never throws; the outcome is on the returned run and the source row. `detailBudget` defaults to DETAIL_FETCH_BATCH; tests pass a smaller one. */
+export async function ingestSource(db: DbPool, source: Source, opts: { detailBudget?: number } = {}): Promise<SourceRun> {
   const started = Date.now();
   const run: SourceRun = {
     sourceId: source.id,
@@ -106,7 +106,7 @@ export async function ingestSource(db: DbPool, source: Source): Promise<SourceRu
     // cannot hand this one a picture the lock was meant to prevent.
     const preview = await knownJobs(db, source.id);
     const result = await adapter.fetch(source, {
-      detailBudget: env().DETAIL_FETCH_BATCH,
+      detailBudget: opts.detailBudget ?? env().DETAIL_FETCH_BATCH,
       known: new Map([...preview].map(([k, v]) => [k, { listHash: v.listHash, detailPending: v.detailPending, hasBody: v.hasBody }])),
     });
 

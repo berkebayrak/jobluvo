@@ -64,7 +64,7 @@ async function main() {
   let added = 0;
   const skipped: string[] = [];
   for (const s of SEED_SOURCES) {
-    const probe = { ...s, id: "", active: true, etag: null, lastPolledAt: null, lastStatus: null, lastError: null, consecutiveFailures: 0, jobCount: 0, boilerplateVersion: 0, boilerplate: [], createdAt: new Date() };
+    const probe = { ...s, id: "", active: true, etag: null, lastAttemptAt: null, lastSuccessAt: null, lastStatus: null, lastError: null, consecutiveFailures: 0, jobCount: 0, boilerplateVersion: 0, boilerplate: [], createdAt: new Date() };
     try {
       const r = await ADAPTERS[s.family].fetch(probe, { detailBudget: 0, known: new Map() });
       const n = r.notModified ? -1 : r.postings.length;

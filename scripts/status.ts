@@ -6,15 +6,18 @@ async function main() {
   console.log("sources");
   console.table(
     await sql`select family, tenant, last_status as status, job_count as open, consecutive_failures as fails,
-      left(last_error, 50) as err, to_char(last_polled_at, 'HH24:MI:SS') as polled, boilerplate_version as bp
+      left(last_error, 50) as err, to_char(last_attempt_at, 'HH24:MI:SS') as attempt, to_char(last_success_at, 'HH24:MI:SS') as success, boilerplate_version as bp
       from sources order by family, tenant`,
   );
-  const unclaimed = await sql`select tenant from sources where active and last_polled_at is null`;
+  const unclaimed = await sql`select tenant from sources where active and last_attempt_at is null`;
   console.log(
     unclaimed.length
-      ? `WARNING: ${unclaimed.length} active source(s) with null last_polled_at, would be claimed first forever: ${unclaimed.map((r) => r.tenant).join(", ")}`
-      : "every active source has a last_polled_at",
+      ? `WARNING: ${unclaimed.length} active source(s) with null last_attempt_at, would be claimed first forever: ${unclaimed.map((r) => r.tenant).join(", ")}`
+      : "every active source has a last_attempt_at",
   );
+  const died = await sql`select tenant, to_char(last_attempt_at, 'HH24:MI:SS') as attempt from sources
+    where last_status = 'polling' and last_attempt_at < now() - interval '10 minutes'`;
+  if (died.length) console.log(`WARNING: ${died.length} source(s) still "polling" after 10 minutes, the poll died: ${died.map((r) => `${r.tenant} at ${r.attempt}`).join(", ")}`);
   console.log("jobs by family");
   console.table(
     await sql`select family, count(*)::int as jobs, count(closed_at)::int as closed,

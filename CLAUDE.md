@@ -167,6 +167,7 @@ npm run db:migrate   # apply migrations over the direct Neon host
 npm run db:backfill-locations  # re-parse stored locations with the current parser, safe to repeat
 npm run db:backfill-signals    # recompute sponsorship and eligibility from stored text, safe to repeat
 npm run pass-rate    # hard filter pass rate across ingested jobs, by family and reason
+npm run boilerplate-report  # what the boilerplate rule strips per board, and what a rule change releases
 ```
 
 ## Layout

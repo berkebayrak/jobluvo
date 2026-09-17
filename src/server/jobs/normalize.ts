@@ -438,24 +438,40 @@ const FIXED_PHRASES = [
   /recruiting scams?/i,
 ];
 
-export function paragraphsOf(text: string): string[] {
+/** Paragraphs of a description. `minLength` is a floor for boilerplate candidates only; the core keeps every paragraph. */
+export function paragraphsOf(text: string, minLength = 1): string[] {
   return text
     .split(/\n\s*\n/)
     .map((p) => normaliseWhitespace(p))
-    .filter((p) => p.length >= 40);
+    .filter((p) => p.length >= minLength);
+}
+
+/** A paragraph shorter than this is never boilerplate: too short to be a statement that repeats verbatim on purpose. */
+export const BOILERPLATE_MIN_LENGTH = 40;
+
+/**
+ * How many jobs of a board must share a paragraph verbatim before it is
+ * boilerplate: at least three, and at least one in twenty of the board. Two
+ * jobs sharing a paragraph is what genuine shared qualifications look like.
+ * One in ten missed Datadog's benefits block, which sits in 45 of 453
+ * postings because sales roles carry their own; one in twenty catches it and
+ * still leaves a paragraph two or three roles share alone on a large board.
+ */
+export function boilerplateMinCount(boardSize: number): number {
+  return Math.max(3, Math.ceil(boardSize * 0.05));
 }
 
 export function isFixedBoilerplate(p: string): boolean {
   return FIXED_PHRASES.some((re) => re.test(p));
 }
 
-/** Paragraphs that appear verbatim in two or more of the given texts. */
-export function detectRepeated(texts: string[]): string[] {
+/** Paragraphs that appear verbatim in at least `minCount` of the given texts. */
+export function detectRepeated(texts: string[], minCount = boilerplateMinCount(texts.length)): string[] {
   const counts = new Map<string, number>();
   for (const t of texts) {
-    for (const p of new Set(paragraphsOf(t))) counts.set(p, (counts.get(p) ?? 0) + 1);
+    for (const p of new Set(paragraphsOf(t, BOILERPLATE_MIN_LENGTH))) counts.set(p, (counts.get(p) ?? 0) + 1);
   }
-  return [...counts.entries()].filter(([, n]) => n >= 2).map(([p]) => p);
+  return [...counts.entries()].filter(([, n]) => n >= minCount).map(([p]) => p);
 }
 
 export function descriptionCore(text: string, boilerplate: string[]): string {

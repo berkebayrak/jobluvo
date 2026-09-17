@@ -203,8 +203,14 @@ describe("boilerplate", () => {
   const a = `${blurb}\n\n${roleA}\n\n${eeo}`;
   const b = `${blurb}\n\n${roleB}\n\n${eeo}`;
 
-  it("detects paragraphs repeated across jobs of one source", () => {
-    const detected = detectRepeated([a, b]);
+  it("detects paragraphs repeated across jobs of one source, once enough of the board shares them", () => {
+    const c = `${blurb}
+
+A third role with its own duties and its own wording that no other posting repeats.
+
+${eeo}`;
+    expect(detectRepeated([a, b])).toEqual([]);
+    const detected = detectRepeated([a, b, c]);
     expect(detected).toContain(blurb);
     expect(detected).not.toContain(roleA);
   });
@@ -212,11 +218,27 @@ describe("boilerplate", () => {
     const core = descriptionCore(a, [blurb]);
     expect(core).toBe(roleA);
   });
-  it("keeps the content hash stable across whitespace and punctuation noise", () => {
+  it("keeps the content hash stable across whitespace and punctuation noise, on a core that is not empty", () => {
     const locs = [{ raw: "New York, NY" }];
-    const h1 = contentHash("Sr. PM", locs, descriptionCore("You  will ship.\n\n\n\nA lot.", []));
-    const h2 = contentHash("Sr PM", locs, descriptionCore("You will ship.\n\nA lot.", []));
-    expect(h1).toBe(h2);
-    expect(contentHash("Sr PM", locs, "You will ship. A lot more.")).not.toBe(h1);
+    const a = "You will ship the ledger service and own its reliability targets.\n\n\n\nYou will  work with  three teams across two time zones.";
+    const b = "You will ship the ledger service and own its reliability targets.\n\nYou will work with three teams across two time zones.";
+    const coreA = descriptionCore(a, []);
+    expect(coreA.length).toBeGreaterThan(80);
+    expect(contentHash("Sr. PM", locs, coreA)).toBe(contentHash("Sr PM", locs, descriptionCore(b, [])));
+    expect(contentHash("Sr PM", locs, coreA + " And more.")).not.toBe(contentHash("Sr PM", locs, coreA));
+  });
+  it("keeps short bullets in the core, so a role written as bullets is not empty", () => {
+    const bullets = "- Own the ledger\n\n- Ship weekly\n\n- Mentor two engineers";
+    expect(descriptionCore(bullets, [])).toBe(bullets);
+    expect(contentHash("Ledger Engineer", [], descriptionCore(bullets, []))).not.toBe(contentHash("Ledger Engineer", [], ""));
+  });
+  it("treats a paragraph as boilerplate only when a share of the board repeats it", () => {
+    const eeo = "We are an equal chance employer and welcome applications from everyone regardless of background.";
+    const shared = "You have five years of experience running distributed systems in production at scale.";
+    const texts = Array.from({ length: 20 }, (_, i) => `Role ${i}.\n\n${eeo}${i < 2 ? `\n\n${shared}` : ""}`);
+    const detected = detectRepeated(texts);
+    expect(detected).toContain(eeo);
+    expect(detected).not.toContain(shared);
+    expect(detectRepeated(["Short.\n\nToo short to count.", "Short.\n\nToo short to count.", "Short.\n\nToo short to count."])).toEqual([]);
   });
 });

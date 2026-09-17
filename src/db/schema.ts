@@ -86,7 +86,11 @@ export const sources = pgTable(
     companyDomain: text("company_domain"),
     active: boolean("active").notNull().default(true),
     etag: text("etag"),
-    lastPolledAt: ts("last_polled_at"),
+    /** Written by the claim only, and the claim's ordering key. */
+    lastAttemptAt: ts("last_attempt_at"),
+    /** Written when a poll finishes, 200 or 304. An attempt with no later success is a poll that died. */
+    lastSuccessAt: ts("last_success_at"),
+    /** polling while claimed, then ok, not_modified, failed or paused. A stale "polling" is a killed function. */
     lastStatus: text("last_status"),
     lastError: text("last_error"),
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),

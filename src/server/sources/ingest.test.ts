@@ -1,8 +1,8 @@
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { dbPool, type DbPool, type Tx } from "@/db/client";
 import { jobs, sources, type Source } from "@/db/schema";
-import { applyPostings, claimBatch, knownJobs } from "./ingest";
+import { applyPostings, claimBatch, ingestSource, knownJobs } from "./ingest";
 import type { RawPosting } from "./types";
 
 /*
@@ -182,5 +182,120 @@ describe.skipIf(!hasDb)("overlapping claims", () => {
     } finally {
       await db.delete(sources).where(sql`${sources.id} in (${sql.join(inserted.map((r) => sql`${r.id}::uuid`), sql`, `)})`);
     }
+  });
+});
+
+/*
+ * The whole ingest, adapter included, over successive polls of one
+ * SmartRecruiters board. The list is served from a stub that honours
+ * If-None-Match exactly as the API does: a 304 whenever the etag it is
+ * handed matches the list it is serving. This is the ingest half of the
+ * drain guarantee: a body that the budget withheld on one poll arrives on
+ * the next, even though the list has not changed since and the API would
+ * answer a conditional request with a 304.
+ */
+describe.skipIf(!hasDb)("ingest over three polls with the budget exhausted", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  type Item = { id: string; name: string };
+  function body(id: string, text: string) {
+    return { id, name: text, jobAd: { sections: { jobDescription: { title: "Role", text: `<p>${`${text} owns the ledger and the reconciliation of every payment. `.repeat(3)}</p>` } } } };
+  }
+
+  /** One list with one etag; the etag changes when the list does. Records every request. */
+  function stubBoard(state: { items: Item[]; etag: string; details: Record<string, string> }) {
+    const listHeaders: (string | null)[] = [];
+    const detailUrls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes("/postings?")) {
+          const sent = new Headers(init?.headers).get("if-none-match");
+          listHeaders.push(sent);
+          if (sent === state.etag) return new Response(null, { status: 304 });
+          return Response.json({ totalFound: state.items.length, content: state.items }, { headers: { etag: state.etag } });
+        }
+        const id = url.slice(url.lastIndexOf("/") + 1);
+        detailUrls.push(id);
+        return Response.json(body(id, state.details[id]));
+      }),
+    );
+    return { listHeaders, detailUrls };
+  }
+
+  async function reread(tx: Tx, id: string): Promise<Source> {
+    const [s] = await tx.select().from(sources).where(eq(sources.id, id));
+    return s;
+  }
+
+  async function byNative(tx: Tx, sourceId: string) {
+    const rows = await tx
+      .select({ nativeId: jobs.nativeId, title: jobs.title, descriptionText: jobs.descriptionText, detailPending: jobs.detailPending, listHash: jobs.listHash })
+      .from(jobs)
+      .where(eq(jobs.sourceId, sourceId));
+    return Object.fromEntries(rows.map((r) => [r.nativeId, r]));
+  }
+
+  it("a body withheld by the budget arrives on the next poll although the list would answer 304", async () => {
+    await withSource(async (tx, source) => {
+      const db = tx as unknown as DbPool;
+      const state = { items: [{ id: "a", name: "A" }, { id: "b", name: "B" }], etag: '"v1"', details: { a: "A", b: "B" } };
+      const calls = stubBoard(state);
+
+      // Poll 1: nothing known, both bodies fetched, the etag stored.
+      const p1 = await ingestSource(db, source, { detailBudget: 40 });
+      expect(p1.status).toBe("ok");
+      expect(p1.inserted).toBe(2);
+      expect(calls.listHeaders).toEqual([null]);
+      expect(calls.detailUrls).toEqual(["a", "b"]);
+      let rows = await byNative(tx, source.id);
+      expect(rows.a.descriptionText).toContain("A owns the ledger");
+      expect(rows.b.descriptionText).toContain("B owns the ledger");
+      let src = await reread(tx, source.id);
+      expect(src.etag).toBe('"v1"');
+      expect(src.lastStatus).toBe("ok");
+
+      // Poll 2: A changed on the board, so the list is new and the conditional
+      // request is answered in full. The budget is exhausted before A's body.
+      state.items = [{ id: "a", name: "A renamed" }, { id: "b", name: "B" }];
+      state.etag = '"v2"';
+      state.details.a = "A renamed";
+      const p2 = await ingestSource(db, src, { detailBudget: 0 });
+      expect(p2.status).toBe("ok");
+      expect(p2.detailPending).toBe(1);
+      expect(calls.listHeaders).toEqual([null, '"v1"']);
+      expect(calls.detailUrls).toEqual(["a", "b"]);
+      rows = await byNative(tx, source.id);
+      expect(rows.a.detailPending).toBe(true);
+      expect(rows.a.descriptionText).toContain("A owns the ledger");
+      expect(rows.b.detailPending).toBe(false);
+      src = await reread(tx, source.id);
+      expect(src.etag).toBe('"v2"');
+
+      // Poll 3: the list is unchanged since v2, so a conditional request would
+      // get a 304 and A would stay pending. The pending row makes the adapter
+      // skip the etag, the list comes back in full, and only A's body is fetched.
+      const p3 = await ingestSource(db, src, { detailBudget: 40 });
+      expect(p3.status).toBe("ok");
+      expect(p3.detailPending).toBe(0);
+      expect(calls.listHeaders).toEqual([null, '"v1"', null]);
+      expect(calls.detailUrls).toEqual(["a", "b", "a"]);
+      rows = await byNative(tx, source.id);
+      expect(rows.a.detailPending).toBe(false);
+      expect(rows.a.title).toBe("A renamed");
+      expect(rows.a.descriptionText).toContain("A renamed owns the ledger");
+      expect(rows.b.descriptionText).toContain("B owns the ledger");
+      src = await reread(tx, source.id);
+      expect(src.etag).toBe('"v2"');
+
+      // Poll 4: nothing pending, the etag goes out again and the 304 is honoured.
+      const p4 = await ingestSource(db, src, { detailBudget: 40 });
+      expect(p4.status).toBe("not_modified");
+      expect(calls.listHeaders).toEqual([null, '"v1"', null, '"v2"']);
+      expect(calls.detailUrls).toEqual(["a", "b", "a"]);
+      rows = await byNative(tx, source.id);
+      expect(rows.a.detailPending).toBe(false);
+      expect(rows.a.descriptionText).toContain("A renamed owns the ledger");
+    });
   });
 });

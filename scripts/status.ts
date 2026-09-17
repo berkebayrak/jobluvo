@@ -35,6 +35,8 @@ async function main() {
     await sql`select merged, count(*)::int as pairs, round(avg(score)::numeric, 3) as avg_score,
       round(min(score)::numeric, 3) as min_score from similarity_log group by merged`,
   );
+  console.log("matches by status");
+  console.table(await sql`select status, count(*)::int as n, round(avg(score)::numeric, 1) as avg_score, max(attempts) as max_attempts from matches group by status order by status`);
   console.log("cost events");
   console.table(await sql`select kind, count(*)::int as n, sum(ms)::int as ms, round(sum(usd)::numeric, 4) as usd from cost_events group by kind`);
 }

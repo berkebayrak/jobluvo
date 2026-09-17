@@ -26,6 +26,7 @@ const base = {
   firstSeenAt: "2026-09-17T00:00:00.000Z",
   alsoOn: [],
   copies: 1,
+  match: null,
 } satisfies FeedJob;
 
 const needs = { needsSponsorship: true };

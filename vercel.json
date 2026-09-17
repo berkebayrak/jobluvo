@@ -1,6 +1,7 @@
 {
   "regions": ["iad1"],
   "crons": [
-    { "path": "/api/cron/ingest", "schedule": "0 6 * * *" }
+    { "path": "/api/cron/ingest", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/score", "schedule": "30 6 * * *" }
   ]
 }

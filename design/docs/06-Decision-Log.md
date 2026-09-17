@@ -6,6 +6,25 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-011. Measured cost per scoring call: USD 0.00031 mean with the profile cached, USD 0.00057 without
+
+The number phase 0 exists to produce (D-002), measured on this date with `npm run score-sample` over 100 of the demo user's passing jobs, drawn round robin over 67 cells of family, seniority and description length, scored twice on gpt-5.6-luna with reasoning off and a strict JSON output of one integer and at most seven short lines. The profile message was 4,750 characters, about 1,190 tokens: four roles with their own bullet lines, two degrees, sixteen skills and two standing answers, the size extraction produces from a ten year resume. The cached message, instructions plus profile, was 1,444 tokens.
+
+| Run | Calls | Input p50 | Cached p50 | Output p50 | USD p10 | USD p50 | USD p90 | USD mean | USD max |
+|---|---|---|---|---|---|---|---|---|---|
+| Profile first, its own message | 100 | 2,200 | 1,444 | 108 | 0.000241 | 0.000308 | 0.000383 | 0.000311 | 0.000451 |
+| Job first, nothing cached | 100 | 2,200 | 0 | 108 | 0.000503 | 0.000564 | 0.000641 | 0.000573 | 0.000706 |
+
+The cached order costs 54 percent of the uncached one. By description length the shipped order runs USD 0.000239 for short, 0.000300 for medium and 0.000376 for long postings; by family Gem 0.000265, Lever 0.000299, Greenhouse 0.000312, Ashby 0.000317. Seniority makes no difference beyond length. Output tokens are 108 of 2,200, so output is no longer the bill; the job text is.
+
+What it is not: cost per application. A scoring call is paid per job shown, and an application is one of several jobs scored, so the scoring share of an application is USD 0.00031 times the jobs scored per application, and tailoring is not measured yet. Against the USD 0.0035 to 0.0064 budget band the scoring call is 5 to 9 percent of the low end on its own. An earlier run under the same tag date, `sample-2026-09-17-prefix`, measured the single message layout and got 0 cached tokens; its rows stay in cost_events as the record behind D-010.
+
+### D-010. The scoring prompt is two messages, the profile first as its own message, because the cache hits whole messages
+
+The cost study's optimised figure assumes the profile, identical for every job scored for one user, is served from the cached input tier at a tenth of the fresh rate. On gpt-5.6-luna that only happens when the profile is its own message. Measured on this date with the demo profile of about 1,440 tokens after the instructions: with the profile and the job in one user message, profile first, 0 cached tokens on every call, including a call whose text differed from the previous one by four words at its very end, while an identical repeat was served with all but 3 of its 2,171 tokens cached. With the profile as a developer message before the job's user message, 1,440 cached tokens on every call after the first, sequential or five at once. Putting the profile inside the instructions gives the same 1,440. So the cache on this model is keyed on whole messages that repeat, not on a token prefix, and the shipped prompt is instructions, then the profile as one message, then the job as one message.
+
+What it forbids: anything that varies per job inside the profile message, and any layout that puts job text before the profile. The job first order exists in the code only so the sample can measure the difference (D-011).
+
 ### D-009. The apply URL allowlist is keyed on the parameter name, not on the source family
 
 The normaliser keeps only the query parameters that identify a job and drops everything else. That was decided on the first live run, when a denylist stripped gh_jid and collapsed 650 Stripe jobs into 89 groups, and it stands: an allowlist, not a denylist. What changes is the key. The list was keyed on the family of the source that saw the URL, so gh_jid survived only when a Greenhouse adapter handed the link over. A copy of the same posting arriving through any other family dropped it, and every Stripe job seen from such a board would have normalised to https://stripe.com/jobs/search, the same collapse the allowlist was introduced to stop, waiting for the first syndicated board. gh_jid only ever appears on a Greenhouse embedded page, whichever board links to it, so keeping it wherever it appears is correct. The list is now one set of parameter names and the normaliser takes no family.

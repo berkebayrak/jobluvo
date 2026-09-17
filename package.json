@@ -21,7 +21,10 @@
     "pass-rate": "node --env-file=.env.local --import tsx scripts/pass-rate.ts",
     "freshness": "node --env-file=.env.local --import tsx scripts/freshness.ts",
     "boilerplate-report": "node --env-file=.env.local --import tsx scripts/boilerplate-report.ts",
-    "dedupe-report": "node --env-file=.env.local --import tsx scripts/dedupe-report.ts"
+    "dedupe-report": "node --env-file=.env.local --import tsx scripts/dedupe-report.ts",
+    "score": "node --env-file=.env.local --import tsx scripts/score.ts",
+    "score-sample": "node --env-file=.env.local --import tsx scripts/score-sample.ts",
+    "cost-report": "node --env-file=.env.local --import tsx scripts/cost-report.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

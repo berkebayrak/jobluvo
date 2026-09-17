@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { dbPool, type DbPool, type Tx } from "@/db/client";
-import { jobs, sources, type Source } from "@/db/schema";
+import { jobs, sources, users, type Source } from "@/db/schema";
 import { applyPostings, claimBatch, ingestSource, knownJobs } from "./ingest";
 import type { RawPosting } from "./types";
 
@@ -296,6 +296,60 @@ describe.skipIf(!hasDb)("ingest over three polls with the budget exhausted", () 
       rows = await byNative(tx, source.id);
       expect(rows.a.detailPending).toBe(false);
       expect(rows.a.descriptionText).toContain("A renamed owns the ledger");
+    });
+  });
+});
+
+/*
+ * A boilerplate recompute changes content_hash without changing content.
+ * The matches of every job whose text did not change must get the new hash
+ * copied over, whether the job was listed in the poll (rewritten by the
+ * upsert) or not (rehashed in refreshBoilerplate), and a job whose text
+ * really changed must keep its stale match so the rework claim finds it.
+ */
+describe.skipIf(!hasDb)("boilerplate recompute and the matches hash", () => {
+  const P = "<p>Acme builds telematics for commercial fleets in forty countries from offices in Istanbul, Berlin and Austin, and works three days a week on site.</p>";
+  const body = (own: string, withP: boolean) =>
+    `<p>${`${own} owns the ledger and the reconciliation of every payment in the region. `.repeat(3)}</p>${withP ? P : ""}`;
+
+  async function hashes(tx: Tx, sourceId: string, userId: string) {
+    const rows = await tx.execute<{ native_id: string; job_hash: string; match_hash: string }>(sql`
+      select j.native_id, j.content_hash as job_hash, m.content_hash as match_hash
+      from jobs j join matches m on m.job_id = j.id and m.user_id = ${userId}
+      where j.source_id = ${sourceId} order by j.native_id
+    `);
+    return Object.fromEntries(rows.rows.map((r) => [r.native_id, r.match_hash === r.job_hash ? "current" : "stale"]));
+  }
+
+  it("copies the new hash for unchanged text, listed or not, and leaves a real change stale", async () => {
+    await withSource(async (tx, source) => {
+      const [user] = await tx
+        .insert(users)
+        .values({ name: "Fixture", email: `bp-${Date.now()}@test.invalid`, jobluvoAddress: `bp-${Date.now()}@test.invalid` })
+        .returning({ id: users.id });
+      const p = (id: string, html: string) => posting({ nativeId: id, title: `Role ${id}`, descriptionHtml: html, applyUrl: `https://jobs.smartrecruiters.com/acme/${id}` });
+
+      // Poll 1: A, B and D share P, so it is boilerplate from the start (3 of 4 on the board).
+      await applyPostings(tx, source, [p("a", body("Alpha", true)), p("b", body("Beta", true)), p("c", body("Gamma", false)), p("d", body("Delta", true))], await knownJobs(tx, source.id));
+      let [src] = await tx.select().from(sources).where(eq(sources.id, source.id));
+      expect(src.boilerplateVersion).toBe(1);
+      await tx.execute(sql`
+        insert into matches (user_id, job_id, status, prefs_hash, facts_hash, content_hash, score)
+        select ${user.id}, id, 'scored', 'p', 'f', content_hash, 70 from jobs where source_id = ${source.id}
+      `);
+      expect(await hashes(tx, source.id, user.id)).toEqual({ a: "current", b: "current", c: "current", d: "current" });
+
+      // Poll 2: A rewrites its own text and drops P, D is not listed. P is now shared by B and D only,
+      // below the threshold, so it stops being boilerplate: B's and D's cores grow without
+      // their text changing, A's text changed, C is untouched.
+      const known = await knownJobs(tx, source.id);
+      await applyPostings(tx, src, [p("a", body("Alpha revised", false)), p("b", body("Beta", true)), p("c", body("Gamma", false))], known);
+      [src] = await tx.select().from(sources).where(eq(sources.id, source.id));
+      expect(src.boilerplateVersion).toBe(2);
+      const after = await tx.select({ nativeId: jobs.nativeId, contentHash: jobs.contentHash }).from(jobs).where(eq(jobs.sourceId, source.id));
+      const moved = new Set(after.filter((r) => r.contentHash !== known.get(r.nativeId)!.contentHash).map((r) => r.nativeId));
+      expect(moved).toEqual(new Set(["a", "b", "d"]));
+      expect(await hashes(tx, source.id, user.id)).toEqual({ a: "stale", b: "current", c: "current", d: "current" });
     });
   });
 });

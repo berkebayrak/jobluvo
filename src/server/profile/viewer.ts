@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { dbHttp } from "@/db/client";
+import { dbHttp, type DbHttp, type DbPool, type Tx } from "@/db/client";
 import { profileFacts } from "@/db/schema";
 import type { FilterFacts } from "@/server/match/hardFilter";
 import { authorizationFact, preferenceFact, sponsorshipFact } from "@/server/profile/facts";
@@ -15,8 +15,8 @@ export interface ViewerFacts {
  * confirmed preference fact yet, in which case there is nothing to enforce
  * and the feed shows the whole inventory.
  */
-export async function filterFacts(userId: string): Promise<FilterFacts | null> {
-  const rows = await dbHttp()
+export async function filterFacts(userId: string, db: DbHttp | DbPool | Tx = dbHttp()): Promise<FilterFacts | null> {
+  const rows = await db
     .select({ kind: profileFacts.kind, data: profileFacts.data })
     .from(profileFacts)
     .where(

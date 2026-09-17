@@ -50,6 +50,13 @@
       "when": 1789644073299,
       "tag": "0006_phase0_parsing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789650107258,
+      "tag": "0007_phase0_scoring",
+      "breakpoints": true
     }
   ]
 }

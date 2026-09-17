@@ -14,8 +14,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 /*
- * Phase 0 schema, discovery half. Profile, matches, packets and the model cost
- * columns arrive with the profile and packet pull requests.
+ * Phase 0 schema: discovery, profile facts, matches and the cost worksheet.
+ * Packets arrive with the packet pull request.
  *
  * Every timestamp is timestamptz. Ids are uuids. Enums are Postgres enums so
  * the database rejects a value the code does not know.
@@ -37,6 +37,7 @@ export const restrictionEnum = pgEnum("restriction", ["citizenship", "permanent_
 export const linkReasonEnum = pgEnum("link_reason", ["native", "url", "requisition", "similar"]);
 export const decisionEnum = pgEnum("decision", ["apply", "save", "skip"]);
 export const costKindEnum = pgEnum("cost_kind", ["ingest", "extract", "score", "tailor"]);
+export const matchStatusEnum = pgEnum("match_status", ["pending", "scored", "failed"]);
 export const factKindEnum = pgEnum("fact_kind", [
   "contact",
   "link",
@@ -222,6 +223,54 @@ export const swipeDecisions = pgTable(
   (t) => [uniqueIndex("swipe_decisions_user_job").on(t.userId, t.jobId)],
 );
 
+/**
+ * One row per user and job the scoring cron has claimed, unique on the pair.
+ * The claim is two statements (src/server/match/claim.ts): an insert for
+ * pairs that do not exist, then an update over rework rows. `attempts`
+ * counts claims, the first included; a pair that failed three times takes
+ * no further slot. The three hashes say what the score was computed from,
+ * so the rework claim can tell a stale row from a current one without a
+ * model call: prefs_hash over the preference fact, facts_hash over the
+ * resume facts the prompt reads, content_hash copied from the job.
+ */
+export const matches = pgTable(
+  "matches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    status: matchStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(1),
+    /** 0 to 100. Null until scored. */
+    score: integer("score"),
+    band: text("band"),
+    /** Short lines for the card. A line starting with "-" reads against. */
+    reasons: jsonb("reasons").$type<string[]>().notNull().default([]),
+    /** What the posting or the profile does not say and the score could not settle. */
+    unknowns: jsonb("unknowns").$type<string[]>().notNull().default([]),
+    prefsHash: text("prefs_hash").notNull(),
+    factsHash: text("facts_hash").notNull(),
+    contentHash: text("content_hash").notNull(),
+    claimedAt: ts("claimed_at").notNull().defaultNow(),
+    scoredAt: ts("scored_at"),
+    model: text("model"),
+    tokensIn: integer("tokens_in").notNull().default(0),
+    tokensOut: integer("tokens_out").notNull().default(0),
+    usd: real("usd").notNull().default(0),
+    error: text("error"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("matches_user_job").on(t.userId, t.jobId),
+    index("matches_user_status").on(t.userId, t.status, t.claimedAt),
+  ],
+);
+
 /** The observed cost worksheet. Model calls add tokens and usd; ingest adds time. */
 export const costEvents = pgTable(
   "cost_events",
@@ -232,9 +281,13 @@ export const costEvents = pgTable(
     userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     refId: text("ref_id"),
     tokensIn: integer("tokens_in").notNull().default(0),
+    /** Of tokens_in, the part billed at the cached input rate. */
+    tokensCached: integer("tokens_cached").notNull().default(0),
     tokensOut: integer("tokens_out").notNull().default(0),
     usd: real("usd").notNull().default(0),
     ms: integer("ms").notNull().default(0),
+    /** Null for the cron. A one off measurement tags its rows so the report can keep them apart (D-003). */
+    run: text("run"),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [index("cost_events_kind_created").on(t.kind, t.createdAt)],
@@ -291,4 +344,5 @@ export const profileFacts = pgTable(
 export type Source = typeof sources.$inferSelect;
 export type ProfileFact = typeof profileFacts.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
+export type Match = typeof matches.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;

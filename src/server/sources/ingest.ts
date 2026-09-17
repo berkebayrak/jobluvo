@@ -144,7 +144,7 @@ export async function ingestSource(db: DbPool, source: Source): Promise<SourceRu
   return run;
 }
 
-interface Known {
+export interface Known {
   id: string;
   contentHash: string;
   listHash: string | null;
@@ -152,7 +152,7 @@ interface Known {
   boilerplateVersion: number;
 }
 
-async function knownJobs(db: DbPool | Tx, sourceId: string): Promise<Map<string, Known>> {
+export async function knownJobs(db: DbPool | Tx, sourceId: string): Promise<Map<string, Known>> {
   const rows = await db
     .select({
       id: jobs.id,
@@ -180,21 +180,28 @@ interface ApplyOutcome {
  * what the feed no longer lists. Boilerplate detection runs first so every
  * job in this poll is hashed under the same version.
  */
-async function applyPostings(tx: Tx, source: Source, postings: RawPosting[], known: Map<string, Known>): Promise<ApplyOutcome> {
+export async function applyPostings(tx: Tx, source: Source, postings: RawPosting[], known: Map<string, Known>): Promise<ApplyOutcome> {
   const out: ApplyOutcome = { inserted: 0, updated: 0, closed: 0, linked: 0, detailPending: 0 };
   const now = new Date();
 
   const bp = await refreshBoilerplate(tx, source, postings, known);
 
   const full: NewJob[] = [];
-  const touchOnly: { id: string; listHash: string | null }[] = [];
+  /*
+   * Rows whose body this run did not fetch. "stored" is an unchanged listing
+   * with its body already in the row; "pending" is a changed listing whose
+   * refetch did not happen yet. Both keep the stored body and every signal
+   * read from it; pending also marks the row so the next poll drains it
+   * (the adapter skips the conditional request while any row is pending),
+   * which is what stops a changed posting from being stranded behind a 304.
+   */
+  const touchOnly: { id: string; listHash: string | null; pending: boolean }[] = [];
   const seen: string[] = [];
   for (const p of mergeDuplicates(postings)) {
     seen.push(p.nativeId);
     const prior = known.get(p.nativeId);
-    // A pending SmartRecruiters entry keeps the body it already has until a detail arrives.
-    if (prior && p.detailPending && !prior.detailPending) {
-      touchOnly.push({ id: prior.id, listHash: p.listHash ?? null });
+    if (prior && (p.detail === "stored" || p.detail === "pending")) {
+      touchOnly.push({ id: prior.id, listHash: p.listHash ?? null, pending: p.detail === "pending" });
       continue;
     }
     const n = normalise(p, bp.paragraphs);
@@ -231,7 +238,7 @@ async function applyPostings(tx: Tx, source: Source, postings: RawPosting[], kno
       lastCheckedAt: now,
       missedPolls: 0,
       closedAt: null,
-      detailPending: p.detailPending ?? false,
+      detailPending: p.detail === "pending",
       listHash: p.listHash ?? null,
     });
   }
@@ -290,12 +297,16 @@ async function applyPostings(tx: Tx, source: Source, postings: RawPosting[], kno
     }
   }
 
-  for (let i = 0; i < touchOnly.length; i += CHUNK) {
-    const chunk = touchOnly.slice(i, i + CHUNK);
-    await tx
-      .update(jobs)
-      .set({ lastCheckedAt: now, missedPolls: 0, closedAt: null })
-      .where(inArray(jobs.id, chunk.map((c) => c.id)));
+  for (const pending of [false, true]) {
+    const rows = touchOnly.filter((c) => c.pending === pending);
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      await tx
+        .update(jobs)
+        .set(pending ? { lastCheckedAt: now, missedPolls: 0, closedAt: null, detailPending: true } : { lastCheckedAt: now, missedPolls: 0, closedAt: null })
+        .where(inArray(jobs.id, chunk.map((c) => c.id)));
+      if (pending) out.detailPending += chunk.length;
+    }
   }
 
   out.linked = await linkChanged(tx, changed);
@@ -333,6 +344,7 @@ function mergeDuplicates(postings: RawPosting[]): RawPosting[] {
     for (const l of p.locations) if (!prior.locations.some((x) => x.raw === l.raw)) prior.locations.push(l);
     if (!prior.descriptionHtml && p.descriptionHtml) prior.descriptionHtml = p.descriptionHtml;
     if (prior.remote !== true && p.remote === true) prior.remote = true;
+    if (prior.detail !== "fetched" && p.detail === "fetched") prior.detail = "fetched";
   }
   return [...byId.values()];
 }

@@ -38,8 +38,16 @@ export interface RawPosting {
   applyUrl: string;
   postedAt?: Date;
   compensation?: { min?: number; max?: number; currency?: string; period?: "year" | "hour" };
-  /** SmartRecruiters: the body has not been fetched yet for this list entry. */
-  detailPending?: boolean;
+  /**
+   * List plus detail families only. What this run knows about the body:
+   *   fetched   the body is in descriptionHtml, fetched now
+   *   stored    the list entry is unchanged and the body is already stored;
+   *             descriptionHtml is empty and must not overwrite anything
+   *   pending   the body is needed and was not fetched this run, budget or
+   *             failure; a stored body stays until it arrives
+   * Absent means fetched: the family carries the body in its list.
+   */
+  detail?: "fetched" | "stored" | "pending";
   /** SmartRecruiters: hash of the list entry, so a detail is refetched only on change. */
   listHash?: string;
   native: unknown;

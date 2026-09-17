@@ -32,7 +32,7 @@ export const gem: Adapter = {
         nativeId: String(j.id),
         requisitionId: j.requisition_id,
         title: j.title,
-        locations: [...locations],
+        locations: [...locations].map((raw) => ({ raw })),
         workplace: lt === "remote" || lt === "hybrid" ? lt : lt === "onsite" || lt === "on_site" ? "onsite" : undefined,
         employmentType: j.employment_type,
         descriptionHtml: j.content ?? "",

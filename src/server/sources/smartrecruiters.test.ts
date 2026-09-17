@@ -4,7 +4,17 @@ import { smartrecruiters } from "./smartrecruiters";
 
 const source = { tenant: "acme", etag: '"list-v1"' } as unknown as Source;
 
-const list = { totalFound: 1, content: [{ id: "j1", name: "Engineer", releasedDate: "2026-09-01T00:00:00.000Z" }] };
+const list = {
+  totalFound: 1,
+  content: [
+    {
+      id: "j1",
+      name: "Engineer",
+      releasedDate: "2026-09-01T00:00:00.000Z",
+      location: { city: "Paris", region: "IDF", country: "fr", remote: false, fullLocation: "Paris, IDF, France" },
+    },
+  ],
+};
 const detail = { id: "j1", name: "Engineer", applyUrl: "https://jobs.smartrecruiters.com/acme/j1", jobAd: { sections: { jobDescription: { title: "Role", text: "<p>Build things</p>" } } } };
 
 /** Records the If-None-Match header of every list request and serves a 304 whenever one is sent. */
@@ -43,6 +53,7 @@ describe("smartrecruiters detail drain", () => {
     if (r.notModified) return;
     expect(r.postings).toHaveLength(1);
     expect(r.postings[0].detailPending).toBe(false);
+    expect(r.postings[0].locations).toEqual([{ raw: "Paris, IDF, France", city: "Paris", region: "IDF", countryCode: "FR", remote: undefined }]);
     expect(r.postings[0].descriptionHtml).toContain("Build things");
     expect(r.etag).toBe('"list-v1"');
   });

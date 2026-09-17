@@ -33,7 +33,7 @@ export const greenhouse: Adapter = {
         nativeId: String(j.id),
         requisitionId: j.requisition_id ?? undefined,
         title: j.title,
-        locations: [...locations],
+        locations: [...locations].map((raw) => ({ raw })),
         employmentType: typeof employment === "string" ? employment : undefined,
         descriptionHtml: j.content ?? "",
         applyUrl: j.absolute_url,

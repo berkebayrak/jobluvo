@@ -41,7 +41,10 @@ export type Family = (typeof familyEnum.enumValues)[number];
 export interface JobLocation {
   city?: string;
   region?: string;
+  /** ISO 3166 alpha 2. */
   country?: string;
+  /** The feed's country name when it is not in the code table; `country` stays empty. */
+  countryName?: string;
   remote?: boolean;
   raw: string;
 }

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { JobLocation } from "@/db/schema";
-import type { RawPosting } from "@/server/sources/types";
+import type { RawLocation, RawPosting } from "@/server/sources/types";
 
 /*
  * Pure functions that turn a RawPosting into the canonical job fields. No
@@ -75,14 +75,15 @@ const US_STATES = new Set(
   ),
 );
 const US_WORDS = /^(?:the\s+)?(united states(?: of america)?|usa|u\.s\.a?\.?|us)$/i;
+/** Country names as boards write them, to ISO 3166 alpha 2. A name not here is kept as `countryName`, never guessed. */
 const COUNTRY_CODES: Record<string, string> = {
-  us: "US", usa: "US", "united states": "US",
-  gb: "GB", uk: "GB", "united kingdom": "GB",
+  us: "US", usa: "US", "united states": "US", "united states of america": "US",
+  gb: "GB", uk: "GB", "united kingdom": "GB", england: "GB", scotland: "GB", wales: "GB",
   ca: "CA", canada: "CA",
   de: "DE", germany: "DE",
   fr: "FR", france: "FR",
   ie: "IE", ireland: "IE",
-  nl: "NL", netherlands: "NL",
+  nl: "NL", netherlands: "NL", "the netherlands": "NL",
   se: "SE", sweden: "SE",
   es: "ES", spain: "ES",
   in: "IN", india: "IN",
@@ -91,6 +92,40 @@ const COUNTRY_CODES: Record<string, string> = {
   br: "BR", brazil: "BR",
   jp: "JP", japan: "JP",
   pl: "PL", poland: "PL",
+  mx: "MX", mexico: "MX",
+  kr: "KR", "south korea": "KR", korea: "KR",
+  il: "IL", israel: "IL",
+  cn: "CN", china: "CN",
+  ch: "CH", switzerland: "CH",
+  pt: "PT", portugal: "PT",
+  ro: "RO", romania: "RO",
+  it: "IT", italy: "IT",
+  be: "BE", belgium: "BE",
+  dk: "DK", denmark: "DK",
+  no: "NO", norway: "NO",
+  fi: "FI", finland: "FI",
+  at: "AT", austria: "AT",
+  cz: "CZ", czechia: "CZ", "czech republic": "CZ",
+  hu: "HU", hungary: "HU",
+  tr: "TR", turkey: "TR", "türkiye": "TR",
+  ae: "AE", "united arab emirates": "AE", uae: "AE",
+  sa: "SA", "saudi arabia": "SA",
+  za: "ZA", "south africa": "ZA",
+  ng: "NG", nigeria: "NG",
+  ke: "KE", kenya: "KE",
+  eg: "EG", egypt: "EG",
+  ar: "AR", argentina: "AR",
+  cl: "CL", chile: "CL",
+  co: "CO", colombia: "CO",
+  pe: "PE", peru: "PE",
+  nz: "NZ", "new zealand": "NZ",
+  ph: "PH", philippines: "PH",
+  id: "ID", indonesia: "ID",
+  vn: "VN", vietnam: "VN",
+  th: "TH", thailand: "TH",
+  my: "MY", malaysia: "MY",
+  tw: "TW", taiwan: "TW",
+  hk: "HK", "hong kong": "HK",
 };
 const US_STATE_NAMES: Record<string, string> = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT",
@@ -198,13 +233,39 @@ export function parseLocation(raw: string, hint?: { country?: string; remote?: b
   return loc;
 }
 
-export function parseLocations(raws: string[], hint?: { country?: string; remote?: boolean }): JobLocation[] {
+/** ISO code for a country name or code the feed wrote, or undefined when it is not in the table. */
+export function countryCodeOf(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  const key = name.trim().toLowerCase();
+  if (COUNTRY_CODES[key]) return COUNTRY_CODES[key];
+  return /^[a-z]{2}$/.test(key) ? key.toUpperCase() : undefined;
+}
+
+/**
+ * One JobLocation per raw string. The text parse supplies whatever the feed
+ * left unstructured; a structured field from the feed overwrites the parsed
+ * one, and a structured country wins outright: a code as given, a name
+ * through the table, and a name the table does not know kept as
+ * `countryName` with `country` left empty rather than guessed.
+ */
+export function parseLocations(raws: RawLocation[], hint?: { country?: string; remote?: boolean }): JobLocation[] {
   const seen = new Set<string>();
   const out: JobLocation[] = [];
   for (const r of raws) {
-    if (!r || seen.has(r)) continue;
-    seen.add(r);
-    out.push(parseLocation(r, hint));
+    if (!r?.raw || seen.has(r.raw)) continue;
+    seen.add(r.raw);
+    const loc = parseLocation(r.raw, { remote: hint?.remote || r.remote, country: hint?.country });
+    if (r.city) loc.city = r.city;
+    if (r.region) loc.region = r.region;
+    const code = countryCodeOf(r.countryCode) ?? countryCodeOf(r.country);
+    if (code) {
+      loc.country = code;
+      delete loc.countryName;
+    } else if (r.country) {
+      delete loc.country;
+      loc.countryName = r.country;
+    }
+    out.push(loc);
   }
   return out;
 }

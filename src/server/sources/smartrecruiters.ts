@@ -1,5 +1,5 @@
 import { sha256 } from "@/server/jobs/normalize";
-import type { Adapter, RawPosting } from "./types";
+import type { Adapter, RawLocation, RawPosting } from "./types";
 import { fetchJson, toDate } from "./types";
 
 interface SrListItem {
@@ -21,11 +21,21 @@ interface SrDetail extends SrListItem {
 
 const SECTION_ORDER = ["companyDescription", "jobDescription", "qualifications", "additionalInformation"];
 
-function locationOf(l: SrListItem["location"]): string[] {
+/** The list entry is structured: city, region, a lower case ISO country code and a remote flag. */
+function locationOf(l: SrListItem["location"]): RawLocation[] {
   if (!l) return [];
   const parts = [l.city, l.region, l.country?.toUpperCase()].filter(Boolean);
-  const s = l.fullLocation ?? parts.join(", ");
-  return s ? [s] : [];
+  const raw = l.fullLocation ?? parts.join(", ");
+  if (!raw) return [];
+  return [
+    {
+      raw,
+      city: l.city || undefined,
+      region: l.region || undefined,
+      countryCode: l.country ? l.country.toUpperCase() : undefined,
+      remote: l.remote || undefined,
+    },
+  ];
 }
 
 /**

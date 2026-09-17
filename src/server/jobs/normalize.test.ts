@@ -6,6 +6,7 @@ import {
   htmlToText,
   parseCompensation,
   parseLocation,
+  parseLocations,
   seniorityOf,
   sponsorshipOf,
   titleNorm,
@@ -94,6 +95,34 @@ describe("parseLocation", () => {
       expect(l.city, s).toBeUndefined();
       expect(l.country, s).toBeUndefined();
     }
+  });
+});
+
+describe("parseLocations with structured fields from the feed", () => {
+  it("lets a country code from the feed win over the text, and never guesses", () => {
+    expect(parseLocations([{ raw: "Paris, Texas", countryCode: "FR" }])[0]).toMatchObject({ city: "Paris", country: "FR" });
+    expect(parseLocations([{ raw: "London", countryCode: "gb" }])[0]).toMatchObject({ city: "London", country: "GB" });
+    expect(parseLocations([{ raw: "London" }])[0].country).toBeUndefined();
+  });
+  it("maps a country name through the table and keeps an unknown name as countryName", () => {
+    expect(parseLocations([{ raw: "Halifax, England, United Kingdom", city: "Halifax", region: "England", country: "United Kingdom" }])[0]).toMatchObject({
+      city: "Halifax",
+      region: "England",
+      country: "GB",
+    });
+    const odd = parseLocations([{ raw: "Somewhere", country: "Atlantis" }])[0];
+    expect(odd.country).toBeUndefined();
+    expect(odd.countryName).toBe("Atlantis");
+  });
+  it("takes structured city and region over the parsed ones and keeps the remote flag", () => {
+    const l = parseLocations([{ raw: "Paris, IDF, France", city: "Paris", region: "IDF", countryCode: "FR", remote: true }])[0];
+    expect(l).toMatchObject({ raw: "Paris, IDF, France", city: "Paris", region: "IDF", country: "FR", remote: true });
+  });
+  it("still parses free text entries that carry no structure", () => {
+    expect(parseLocations([{ raw: "San Francisco, CA" }, { raw: "Remote - US" }])).toEqual([
+      { raw: "San Francisco, CA", city: "San Francisco", region: "CA", country: "US" },
+      { raw: "Remote - US", remote: true, country: "US" },
+    ]);
   });
 });
 

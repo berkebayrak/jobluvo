@@ -324,7 +324,7 @@ function mergeDuplicates(postings: RawPosting[]): RawPosting[] {
       byId.set(p.nativeId, { ...p, locations: [...p.locations] });
       continue;
     }
-    for (const l of p.locations) if (!prior.locations.includes(l)) prior.locations.push(l);
+    for (const l of p.locations) if (!prior.locations.some((x) => x.raw === l.raw)) prior.locations.push(l);
     if (!prior.descriptionHtml && p.descriptionHtml) prior.descriptionHtml = p.descriptionHtml;
     if (prior.remote !== true && p.remote === true) prior.remote = true;
   }

@@ -32,10 +32,24 @@ export const workable: Adapter = {
     const res = await fetchJson<{ jobs: WorkableJob[] }>(url, source.etag);
     if (!res) return { notModified: true };
     const postings: RawPosting[] = (res.json.jobs ?? []).map((j) => {
+      // Multi location postings carry one structured entry per location with
+      // a country code; single location postings put city, state and country
+      // name on the job itself.
       const extra = (j.locations ?? [])
-        .map((l) => [l.city, l.region, l.country].filter(Boolean).join(", "))
-        .filter(Boolean);
-      const loc = extra.length ? extra : [[j.city, j.state, j.country].filter(Boolean).join(", ")].filter(Boolean);
+        .map((l) => ({
+          raw: [l.city, l.region, l.country].filter(Boolean).join(", "),
+          city: l.city || undefined,
+          region: l.region || undefined,
+          country: l.country || undefined,
+          countryCode: l.countryCode?.toUpperCase() || undefined,
+        }))
+        .filter((l) => l.raw);
+      const single = [j.city, j.state, j.country].filter(Boolean).join(", ");
+      const loc = extra.length
+        ? extra
+        : single
+          ? [{ raw: single, city: j.city || undefined, region: j.state || undefined, country: j.country || undefined }]
+          : [];
       const html = [
         j.description,
         j.requirements ? `<h2>Requirements</h2>${j.requirements}` : "",

@@ -6,6 +6,21 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-014. Extraction per user: USD 0.0022, the PDF sent as a file, no parser dependency
+
+The third term of the cost per application (D-011), measured on this date with `npm run extract-sample`: Jack Miller's resume, rendered from his seeded facts by `npm run resume-pdf` so the extractor has a ground truth, sent five times as the PDF and five times as plain text to gpt-5.6-luna, reasoning off, strict JSON of the facts with the resume's own words as evidence for each.
+
+| Input | Input tokens | Output tokens | USD, first call | USD, repeat |
+|---|---|---|---|---|
+| PDF as a file | 1,605 | 1,430 to 1,545 | 0.00218 | 0.00175 to 0.00189 |
+| Plain text | 1,546 | 1,545 | 0.00216 | 0.00189 |
+
+The product path is the first call: one resume, once per user, nothing to repeat. So extraction per user is USD 0.0022. The API reads the PDF as text, 59 tokens more than the text itself, so a PDF parser would save nothing and none was added; the file goes to the model as it is. Output is 85 percent of the bill, because the facts come back in full with their evidence, and that is the point of the call.
+
+What it read back, five of five runs the same: 4 of 4 roles with their dates, 18 of 18 bullets word for word, 16 of 16 skills, 2 of 2 answers, contact and link. 1 of 2 degrees differed from the seed by reading the resume line literally, "MBA, Executive MBA, part time" as the degree, which is what the line says. The extractor copies; it does not tidy.
+
+Nothing extracted is read until confirmed (ID-03). The confirmation screen lists every extracted fact with its evidence, Confirm and Reject per line, and Confirm all, which confirms the document's facts and retires the confirmed resume facts before it as rejected, never deleted (DOC-06). Preference, authorization and sponsorship facts are the user's own answers and are never touched. Jack's seeded resume facts were replaced this way on this date: 26 confirmed from the upload, 24 seeded now rejected. With the facts hash moved, the scoring cron reworks his scored matches on its next run and the packets built on the old facts read as stale.
+
 ### D-013. Tailoring is a change set, not a document: USD 0.00054 per packet, 55 percent of the whole document, with the validator as the guarantee
 
 The second term of the cost per application (D-011), measured on this date with `npm run tailor-sample` over the same 100 jobs as the scoring sample, on gpt-5.6-luna, reasoning off. The facts message, every confirmed fact with an id, was 4,638 characters, 42 facts, about 1,160 tokens; the cached block, instructions plus facts, was 1,521 tokens on every call after the first.

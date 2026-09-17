@@ -22,9 +22,14 @@ function openai(): OpenAI {
 
 export type ReasoningEffort = "none" | "low" | "medium";
 
+/** A part of a message: text, or a file the API renders for the model. */
+export type PromptContent =
+  | { type: "input_text"; text: string }
+  | { type: "input_file"; filename: string; file_data: string };
+
 export interface PromptMessage {
   role: "developer" | "user";
-  content: string;
+  content: string | PromptContent[];
 }
 
 export interface StructuredCall {

@@ -49,7 +49,7 @@ export async function runStats(db: DbPool | Tx): Promise<RunStats[]> {
       percentile_cont(0.5) within group (order by usd) as p50,
       percentile_cont(0.9) within group (order by usd) as p90,
       avg(usd) as mean, max(usd) as max, sum(usd) as total
-    from cost_events where kind in ('score', 'tailor')
+    from cost_events where kind in ('score', 'tailor', 'extract')
     group by 1, 2 order by 1, 2
   `);
   return r.rows.map((x) => ({

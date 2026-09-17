@@ -27,6 +27,8 @@ Sources of truth:
   platform.
 - `design/docs/06-Decision-Log.md` decisions taken during build that the other docs
   assume but do not state, newest first, each with what it was measured against.
+- `design/docs/07-Phase-0-Cost-Summary.md` the phase 0 deliverable: the three measured
+  cost terms and the cost per application function against the budget band.
 
 When product facts and this file disagree, the docs win. Update this file to match.
 

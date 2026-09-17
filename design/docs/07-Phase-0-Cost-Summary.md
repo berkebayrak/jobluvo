@@ -36,6 +36,23 @@ On the 20 job sample under the shipped value rule, 6 of 20 packets needed the on
 
 Both invalid packets were the same sentence on one profile, "managing six", four managers and two analysts added together, written again after the retry. The rate is one stubborn pattern, not a general failure, and it needs re-measuring on a real uploaded resume before it means anything.
 
+## Held packets, the current rate
+
+This is the one place the held rate is stated. Every earlier figure in the decision log points here and says superseded. When the rate changes, this section changes and the entry that changed it says so.
+
+| Held rate, 18 September 2026, under rule 2 (D-021) | Packets |
+|---|---|
+| Packets with a candidate | 101 |
+| Held for review | 18, 17.8 percent |
+| Of those, by rule 2, a value bound to words its fact never gave | 14 |
+| Of those, by the claim validator before it, D-017 | 4 |
+| Ready | 76 |
+| Invalid | 7 |
+
+The limit, which goes beside this figure every time it is quoted: one seeded resume, one user, one vocabulary, bullets only, no summary. It is provisional until rule 1, the redesign of the non numeric check (review three finding 3), lands, and it will be restated once more then. Rule 1 may move some of the 14 back to ready as well as hold more, so the number can go down as well as up; 17.8 percent is not a floor. A held packet costs nothing today: nothing consumes packets, submission is gated behind DOC-03 (D-017), and a held packet keeps its resume for that screen.
+
+Superseded figures, each true when written: 4.0 percent on 17 September under the claim validator (D-017), computed by a defective replay; 4.0 percent on 17 September confirmed by the corrected replay (#35, the correction under D-017); 15.6 percent of the 90 packets ready that day under rule 2 (D-021), the same measurement as the table above with the earlier held packets left out of the denominator.
+
 ## What the extraction accuracy is not
 
 The resume the extractor was measured on was rendered from Jack's seeded facts: one column, plain headings, no tables. Reading 4 of 4 roles and 18 of 18 bullets back word for word tests the pipeline, not extraction, and must not be quoted as an extraction benchmark. The cost, USD 0.0021 per resume, is real and representative of a resume of that length. The accuracy is not; a real resume has two columns, tables, date ranges and inconsistent headings, and that measurement waits for real uploads.

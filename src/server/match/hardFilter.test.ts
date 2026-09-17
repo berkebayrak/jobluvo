@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dbPool, type Tx } from "@/db/client";
 import { jobs, sources, type JobLocation, type NewJob } from "@/db/schema";
 import { hardFilterSql, type FilterFacts } from "./hardFilter";
@@ -9,7 +9,12 @@ import type { AuthorizationFact, PreferenceFact, SponsorshipFact } from "@/serve
  * The hard filter against fixture rows in the real database. Every test
  * runs inside one transaction that is rolled back at the end, so the shared
  * database is left exactly as it was; a Neon branch would do the same with
- * an API key this environment does not have. Skipped without DATABASE_URL.
+ * an API key this environment does not have.
+ *
+ * Without DATABASE_URL these tests skip, and the run says so at the end
+ * (vitest.reporter.ts). With DATABASE_URL set, a database that cannot be
+ * reached fails the run rather than skipping it, so a clean clone cannot
+ * report success with the most important tests never run.
  */
 
 const hasDb = !!process.env.DATABASE_URL;
@@ -108,6 +113,14 @@ afterAll(async () => {
 });
 
 describe.skipIf(!hasDb)("hardFilterSql against fixture rows", () => {
+  beforeAll(async () => {
+    try {
+      await dbPool().execute(sql`select 1`);
+    } catch (e) {
+      throw new Error(`DATABASE_URL is set but the database cannot be reached: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
+
   it("applies each remote preference", async () => {
     await withFixtures(async (evaluate) => {
       const ok = await evaluate(facts({ remote: "remote_ok" }));

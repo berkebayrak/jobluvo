@@ -6,6 +6,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
+    reporters: ["default", "./vitest.reporter.ts"],
     /* The database backed tests share one connection pool; keep them in one worker. */
     fileParallelism: false,
     testTimeout: 30_000,

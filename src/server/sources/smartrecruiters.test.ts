@@ -41,14 +41,14 @@ afterEach(() => vi.unstubAllGlobals());
 describe("smartrecruiters detail drain", () => {
   it("sends the etag when nothing is pending, so an unchanged list costs one request", async () => {
     const listHeaders = stubFetch();
-    const r = await smartrecruiters.fetch(source, { detailBudget: 40, known: new Map([["j1", { listHash: "x", detailPending: false }]]) });
+    const r = await smartrecruiters.fetch(source, { detailBudget: 40, known: new Map([["j1", { listHash: "x", detailPending: false, hasBody: true }]]) });
     expect(listHeaders).toEqual(['"list-v1"']);
     expect(r.notModified).toBe(true);
   });
 
   it("skips the conditional request while a known job is pending, so the backlog drains", async () => {
     const listHeaders = stubFetch();
-    const r = await smartrecruiters.fetch(source, { detailBudget: 40, known: new Map([["j1", { listHash: "x", detailPending: true }]]) });
+    const r = await smartrecruiters.fetch(source, { detailBudget: 40, known: new Map([["j1", { listHash: "x", detailPending: true, hasBody: false }]]) });
     expect(listHeaders).toEqual([null]);
     expect(r.notModified).toBe(false);
     if (r.notModified) return;
@@ -119,8 +119,8 @@ describe("smartrecruiters detail states over successive polls", () => {
 
     // What ingest stored after poll 1: a has its body, b is pending.
     const known = new Map([
-      ["a", { listHash: hashOf("A"), detailPending: false }],
-      ["b", { listHash: hashOf("B"), detailPending: true }],
+      ["a", { listHash: hashOf("A"), detailPending: false, hasBody: true }],
+      ["b", { listHash: hashOf("B"), detailPending: true, hasBody: false }],
     ]);
     urls = stub(two);
     const p2 = await smartrecruiters.fetch({ tenant: "acme", etag: '"v1"' } as unknown as Source, { detailBudget: 40, known });
@@ -138,8 +138,8 @@ describe("smartrecruiters detail states over successive polls", () => {
   it("a changed listing over budget is reported pending, not stored, so the next poll drains it even after a 304", async () => {
     stub({ totalFound: 2, content: [{ id: "a", name: "A renamed" }, { id: "b", name: "B" }] });
     const known = new Map([
-      ["a", { listHash: hashOf("A"), detailPending: false }],
-      ["b", { listHash: hashOf("B"), detailPending: false }],
+      ["a", { listHash: hashOf("A"), detailPending: false, hasBody: true }],
+      ["b", { listHash: hashOf("B"), detailPending: false, hasBody: true }],
     ]);
     const r = await smartrecruiters.fetch({ tenant: "acme", etag: null } as unknown as Source, { detailBudget: 0, known });
     expect(r.notModified).toBe(false);
@@ -148,5 +148,27 @@ describe("smartrecruiters detail states over successive polls", () => {
       ["a", "pending"],
       ["b", "stored"],
     ]);
+  });
+});
+
+describe("smartrecruiters stored body check", () => {
+  it("fetches a detail again for a row that is not pending and unchanged but has no body stored", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/postings?")) return Response.json({ totalFound: 1, content: [{ id: "a", name: "A" }] });
+        urls.push(url);
+        return Response.json({ id: "a", name: "A", jobAd: { sections: { jobDescription: { text: "<p>Body a</p>" } } } });
+      }),
+    );
+    const hash = sha256(JSON.stringify(["A", undefined, undefined, undefined, undefined]));
+    const known = new Map([["a", { listHash: hash, detailPending: false, hasBody: false }]]);
+    const r = await smartrecruiters.fetch({ tenant: "acme", etag: null } as unknown as Source, { detailBudget: 40, known });
+    expect(r.notModified).toBe(false);
+    if (r.notModified) return;
+    expect(r.postings[0].detail).toBe("fetched");
+    expect(r.postings[0].descriptionHtml).toContain("Body a");
+    expect(urls).toHaveLength(1);
   });
 });

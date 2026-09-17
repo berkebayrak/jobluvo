@@ -97,7 +97,7 @@ export async function ingestSource(db: DbPool, source: Source): Promise<SourceRu
     const known = await knownJobs(db, source.id);
     const result = await adapter.fetch(source, {
       detailBudget: env().DETAIL_FETCH_BATCH,
-      known: new Map([...known].map(([k, v]) => [k, { listHash: v.listHash, detailPending: v.detailPending }])),
+      known: new Map([...known].map(([k, v]) => [k, { listHash: v.listHash, detailPending: v.detailPending, hasBody: v.hasBody }])),
     });
 
     if (result.notModified) {
@@ -150,6 +150,8 @@ export interface Known {
   listHash: string | null;
   detailPending: boolean;
   boilerplateVersion: number;
+  /** A non empty description is stored. Read, not inferred. */
+  hasBody: boolean;
 }
 
 export async function knownJobs(db: DbPool | Tx, sourceId: string): Promise<Map<string, Known>> {
@@ -161,10 +163,11 @@ export async function knownJobs(db: DbPool | Tx, sourceId: string): Promise<Map<
       listHash: jobs.listHash,
       detailPending: jobs.detailPending,
       boilerplateVersion: jobs.boilerplateVersion,
+      hasBody: sql<boolean>`${jobs.descriptionText} <> ''`,
     })
     .from(jobs)
     .where(eq(jobs.sourceId, sourceId));
-  return new Map(rows.map((r) => [r.nativeId, r]));
+  return new Map(rows.map((r) => [r.nativeId, { ...r, hasBody: r.hasBody === true }]));
 }
 
 interface ApplyOutcome {

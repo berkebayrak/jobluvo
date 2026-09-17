@@ -78,7 +78,9 @@ export const smartrecruiters: Adapter = {
     for (const item of items) {
       const listHash = sha256(JSON.stringify([item.name, item.refNumber, item.releasedDate, item.location, item.typeOfEmployment]));
       const known = opts.known.get(item.id);
-      const needsDetail = !known || known.detailPending || known.listHash !== listHash;
+      // A body is needed when the row is new, still pending, changed, or has
+      // no body stored despite all of that: checked, not inferred.
+      const needsDetail = !known || known.detailPending || known.listHash !== listHash || !known.hasBody;
       const base: RawPosting = {
         nativeId: item.id,
         requisitionId: item.refNumber,

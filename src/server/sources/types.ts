@@ -71,7 +71,14 @@ export interface FetchOptions {
   /** Upper bound on detail requests in this run, for list plus detail families. */
   detailBudget: number;
   /** Jobs already stored for this source, keyed by native id, with their list hash. */
-  known: Map<string, { listHash: string | null; detailPending: boolean }>;
+  /**
+   * Jobs already stored for this source, keyed by native id: the list hash,
+   * whether a detail is still pending, and whether a body is actually stored.
+   * The adapter checks the last one rather than inferring it from the other
+   * two, so a detail that arrived with no sections is fetched again instead
+   * of being stranded as "stored".
+   */
+  known: Map<string, { listHash: string | null; detailPending: boolean; hasBody: boolean }>;
 }
 
 export const USER_AGENT = "Jobluvo/0.1 (+https://jobluvo.vercel.app)";

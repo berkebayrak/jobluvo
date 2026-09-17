@@ -236,10 +236,12 @@ export async function applyPostings(tx: Tx, source: Source, postings: RawPosting
       compMax: n.comp?.max != null ? Math.round(n.comp.max) : null,
       compCurrency: n.comp?.currency ?? null,
       compPeriod: n.comp?.period ?? "unknown",
+      compRaw: n.comp?.raw ?? null,
       seniority: n.seniority ?? null,
       sponsorship: n.sponsorship,
       sponsorshipEvidence: n.sponsorshipEvidence ?? null,
       eligibility: n.eligibility ?? null,
+      eligibilityOptions: n.eligibilityOptions ?? null,
       eligibilityCountry: n.eligibilityCountry ?? null,
       eligibilityEvidence: n.eligibilityEvidence ?? null,
       descriptionText: n.descriptionText,
@@ -277,10 +279,12 @@ export async function applyPostings(tx: Tx, source: Source, postings: RawPosting
           compMax: sql`excluded.comp_max`,
           compCurrency: sql`excluded.comp_currency`,
           compPeriod: sql`excluded.comp_period`,
+          compRaw: sql`excluded.comp_raw`,
           seniority: sql`excluded.seniority`,
           sponsorship: sql`excluded.sponsorship`,
           sponsorshipEvidence: sql`excluded.sponsorship_evidence`,
           eligibility: sql`excluded.eligibility`,
+          eligibilityOptions: sql`excluded.eligibility_options`,
           eligibilityCountry: sql`excluded.eligibility_country`,
           eligibilityEvidence: sql`excluded.eligibility_evidence`,
           descriptionText: sql`excluded.description_text`,
@@ -369,7 +373,16 @@ function mergeDuplicates(postings: RawPosting[]): RawPosting[] {
 /**
  * Recomputes the source's boilerplate set from this feed. When it changes,
  * the version increments and every existing job of the source that was
- * hashed under the old version is rehashed in the same transaction. Matches,
+ * hashed under the old version is rehashed in the same transaction.
+ *
+ * WHEN `matches` EXISTS this function must also run, in the same
+ * transaction and right after the rehash below:
+ *   update matches m set content_hash = j.content_hash
+ *   from jobs j where j.id = m.job_id and j.source_id = <this source>
+ * so a boilerplate recompute never looks like changed content and never
+ * triggers a paid rescore. The whole board re-poll on 17 Sep 2026 is the
+ * event this rule exists for; it must land before the first model call.
+ * Matches,
  * when they exist, copy the new hash so a recompute never triggers a paid
  * rescore; that copy lands with the profile pull request.
  */

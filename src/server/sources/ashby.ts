@@ -43,7 +43,7 @@ export const ashby: Adapter = {
           descriptionHtml: j.descriptionHtml ?? "",
           applyUrl: j.applyUrl ?? j.jobUrl ?? `https://jobs.ashbyhq.com/${source.tenant}/${j.id}`,
           postedAt: toDate(j.publishedAt),
-          compensation: comp ? { min: comp.min, max: comp.max, currency: comp.currency, period: comp.period === "unknown" ? undefined : comp.period } : undefined,
+          compensation: comp ? { min: comp.min, max: comp.max, currency: comp.currency, period: comp.period === "unknown" ? undefined : comp.period, raw: comp.raw } : undefined,
           native: j,
         };
       });

@@ -59,11 +59,12 @@ export function normaliseWhitespace(s: string): string {
  * meet here; "Senior Product Manager" does not, which is what the URL and
  * requisition rules are for.
  */
+/** Lower case, punctuation and whitespace collapsed, every script's letters and digits kept: a Japanese or Arabic title is not an empty string. */
 export function titleNorm(title: string): string {
   return title
     .toLowerCase()
     .replace(/[‐-―]/g, "-")
-    .replace(/[^a-z0-9+#./\s-]/g, " ")
+    .replace(/[^\p{L}\p{N}+#./\s-]/gu, " ")
     .replace(/[./-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -151,8 +152,31 @@ const US_CITIES = new Set([
   "salt lake city", "las vegas", "columbus", "indianapolis", "kansas city", "st. louis", "st louis", "saint louis",
   "cincinnati", "cleveland", "milwaukee", "madison", "orlando", "tampa", "new orleans", "reston", "arlington",
   "portland", "san antonio", "fort worth", "tucson", "albuquerque", "omaha", "louisville", "memphis", "oklahoma city",
+  // Cities whose two letter state code is also a country code, so the table is what reads them as US.
+  "south san francisco", "san mateo", "foster city", "burlingame", "berkeley", "emeryville", "fremont", "san bruno", "daly city",
+  "walnut creek", "pleasanton", "san ramon", "santa cruz", "los gatos", "campbell", "milpitas", "hayward", "san rafael",
+  "dover", "wilmington", "fort wayne", "colorado springs", "aurora", "savannah", "boise", "springfield", "baton rouge",
+  "worcester", "lowell", "somerville", "annapolis", "bethesda", "rockville", "st. paul", "saint paul", "billings", "missoula",
+  "lincoln", "harrisburg", "columbia", "charleston", "sioux falls", "knoxville", "chattanooga", "mclean", "tysons", "herndon", "chantilly",
 ]);
 const METRO = /^(?:greater\s+)?(.+?)\s+(?:bay\s+area|metropolitan\s+area|metro(?:politan)?\s+area|metro|area)$/i;
+/*
+ * Cities outside the US whose two letter code after them is also a US state
+ * code: "Berlin, DE", "Toronto, CA", "Bengaluru, IN", "Tel Aviv, IL". The
+ * table is the context that resolves the code; a city in neither table with
+ * such a code is left unknown rather than guessed.
+ */
+const NON_US_CITIES: Record<string, string> = {
+  berlin: "DE", munich: "DE", münchen: "DE", hamburg: "DE", frankfurt: "DE", cologne: "DE", köln: "DE", düsseldorf: "DE", stuttgart: "DE",
+  toronto: "CA", vancouver: "CA", montreal: "CA", montréal: "CA", ottawa: "CA", calgary: "CA", edmonton: "CA", waterloo: "CA", quebec: "CA", québec: "CA",
+  bengaluru: "IN", bangalore: "IN", mumbai: "IN", delhi: "IN", "new delhi": "IN", hyderabad: "IN", pune: "IN", chennai: "IN", gurugram: "IN", gurgaon: "IN", noida: "IN", kolkata: "IN",
+  "tel aviv": "IL", jerusalem: "IL", haifa: "IL",
+  bogotá: "CO", bogota: "CO", medellín: "CO", medellin: "CO",
+  "panama city": "PA",
+  "buenos aires": "AR",
+  jakarta: "ID",
+  "kuala lumpur": "MY",
+};
 const NOT_A_PLACE = /^(n\/?a|tbd|tba|various|multiple(?: locations)?|flexible|global|worldwide|other|none|any|anywhere|nationwide|international)$/i;
 const REMOTE_WORDS = /\b(remote|work from home|wfh|distributed|telecommute|home[- ]based)\b/i;
 
@@ -185,7 +209,7 @@ export function parseLocation(raw: string, hint?: { country?: string; remote?: b
       p
         .replace(REMOTE_WORDS, " ")
         .replace(/\b(hybrid|on[- ]?site|based|only|eligible|friendly|option(?:al)?|first)\b/gi, " ")
-        .replace(/^\s*(?:anywhere|any|all)?\s*(?:in|within|from|across)\b(?:\s+the)?\s*/i, "")
+        .replace(/^\s*(?:anywhere|any|all)?\s*(?:in|within|from|across)\b(?:\s+the)?\s+(?=\S)/i, "")
         .replace(/\s+/g, " ")
         .trim(),
     )
@@ -198,13 +222,28 @@ export function parseLocation(raw: string, hint?: { country?: string; remote?: b
       loc.country = "US";
       continue;
     }
-    // "San Francisco, CA" is California, not Canada: a two letter US state
-    // code after a city wins over the country table. "CA" on its own or
-    // "Canada" spelled out still reads as the country.
-    if (loc.city && key.length === 2 && US_STATES.has(key)) {
-      loc.region = key.toUpperCase();
-      loc.country = "US";
-      continue;
+    // A two letter code after a city: "San Francisco, CA" is California,
+    // "Toronto, CA" is Canada, "Berlin, DE" is Germany, "Bengaluru, IN" is
+    // India. Context decides: a city in the US table makes it a state, a
+    // code that is only a country makes it a country, a code that is only a
+    // state makes it a state, and a code that is both after a city the
+    // table does not know is left unknown rather than guessed.
+    if (loc.city && key.length === 2) {
+      const isState = US_STATES.has(key);
+      const isCountry = !!COUNTRY_CODES[key];
+      const cityKey = loc.city.toLowerCase();
+      const usCity = US_CITIES.has(cityKey);
+      const abroad = NON_US_CITIES[cityKey];
+      if (isState && (usCity || !isCountry)) {
+        loc.region = key.toUpperCase();
+        loc.country = "US";
+        continue;
+      }
+      if (isCountry && (!isState || abroad === COUNTRY_CODES[key])) {
+        loc.country = COUNTRY_CODES[key];
+        continue;
+      }
+      if (isState && isCountry) continue;
     }
     if (COUNTRY_CODES[key]) {
       loc.country = COUNTRY_CODES[key];
@@ -294,30 +333,63 @@ export interface Compensation {
   min?: number;
   max?: number;
   currency?: string;
-  period: "year" | "hour" | "unknown";
+  period: "year" | "month" | "hour" | "unknown";
+  /** The text the board gave, kept so the numbers can be reparsed without a fetch. */
+  raw?: string;
 }
 
 /** Reads "$211.4K – $290.6K", "USD 150,000 - 175,000", "$45/hr" and the like. */
+const CURRENCY_CODES = /\b(USD|EUR|GBP|CAD|AUD|NZD|CHF|SGD|HKD|JPY|INR|SEK|NOK|DKK|PLN|CZK|HUF|BRL|MXN|ZAR|AED|TRY|ILS|KRW|CNY)\b/i;
+const CURRENCY_SYMBOLS: [RegExp, string][] = [
+  [/(?:^|[^A-Za-z])(CA\$|C\$)/i, "CAD"],
+  [/(?:^|[^A-Za-z])(A\$|AU\$)/i, "AUD"],
+  [/(?:^|[^A-Za-z])(NZ\$)/i, "NZD"],
+  [/(?:^|[^A-Za-z])(S\$)/i, "SGD"],
+  [/(?:^|[^A-Za-z])(HK\$)/i, "HKD"],
+  [/(?:^|[^A-Za-z])(US\$)/i, "USD"],
+  [/€/, "EUR"],
+  [/£/, "GBP"],
+  [/₹/, "INR"],
+  [/¥/, "JPY"],
+  [/\$/, "USD"],
+];
+
+/** "70.000" and "70,000" are seventy thousand; "70.5" is seventy and a half. */
+function amount(raw: string): number {
+  if (/^\d{1,3}(?:[.,]\d{3})+$/.test(raw)) return Number(raw.replace(/[.,]/g, ""));
+  return Number(raw.replace(/,/g, ""));
+}
+
+/**
+ * The stated currency and the stated period, nothing inferred from the size
+ * of the number: "CAD 90,000" is Canadian dollars, "EUR 4.500 a month" is
+ * monthly, "EUR 70.000" is seventy thousand. A number with no currency and
+ * no period is stored with both unknown, and the original text is kept so a
+ * better reading can be applied without fetching again.
+ */
 export function parseCompensation(s: string | undefined): Compensation | undefined {
-  if (!s) return undefined;
+  if (!s?.trim()) return undefined;
   const text = s.replace(/–|—/g, "-");
-  const nums = [...text.matchAll(/(?:\$|usd|eur|gbp|€|£)?\s*(\d{1,3}(?:[,.]\d{3})+|\d+(?:\.\d+)?)\s*(k|m)?\b/gi)];
+  const nums = [...text.matchAll(/(\d{1,3}(?:[,.]\d{3})+|\d+(?:[.,]\d+)?)\s*(k|m)?\b/gi)];
   const values = nums
     .map((m) => {
-      let n = Number(m[1].replace(/,/g, ""));
+      let n = amount(m[1]);
       if (m[2]?.toLowerCase() === "k") n *= 1_000;
       if (m[2]?.toLowerCase() === "m") n *= 1_000_000;
       return n;
     })
     .filter((n) => n >= 10 && n < 5_000_000);
   if (!values.length) return undefined;
-  const currency = /€|\beur\b/i.test(text) ? "EUR" : /£|\bgbp\b/i.test(text) ? "GBP" : /\$|\busd\b/i.test(text) ? "USD" : undefined;
-  const period: Compensation["period"] = /\/\s*(hr|hour)|per hour|hourly/i.test(text)
+  const code = CURRENCY_CODES.exec(text)?.[1].toUpperCase();
+  const currency = code ?? CURRENCY_SYMBOLS.find(([re]) => re.test(text))?.[1];
+  const period: Compensation["period"] = /\/\s*(hr|hour)\b|per hour|hourly|an hour/i.test(text)
     ? "hour"
-    : /year|annual|\/\s*yr|k\b/i.test(text) || values[0] > 5_000
-      ? "year"
-      : "unknown";
-  return { min: Math.min(...values), max: Math.max(...values), currency, period };
+    : /\/\s*(mo|month)\b|per month|monthly|a month|\bpm\b/i.test(text)
+      ? "month"
+      : /\byear\b|annual|per annum|\/\s*(yr|year|annum)\b|\bpa\b|\bp\.a\.|\d\s*k\b/i.test(text)
+        ? "year"
+        : "unknown";
+  return { min: Math.min(...values), max: Math.max(...values), currency, period, raw: s.trim().slice(0, 200) };
 }
 
 export type Sponsorship = "offered" | "not_offered" | "unknown";
@@ -332,17 +404,34 @@ export function sentencesOf(text: string): string[] {
   return text.split(/(?<=[a-z0-9)][.!?])\s+(?=[A-Z"(])|\n+/);
 }
 
+const SPONSOR_TOPIC = /\b(sponsor\w*|visas?|h-?1b|work authori[sz]ation)\b/i;
+/** Sponsors that are not visa sponsors: project sponsors, event sponsorships, a relocation sponsor. */
+const SPONSOR_OTHER =
+  /\b(project|executive|business|internal|event|events|marketing|brand|sales|stakeholder|corporate)s?\s+sponsor|sponsorships?\s+(across|deals?|packages?|revenue|sales)|events? and sponsorships?|\brelocation\b|sponsorship on the/i;
+/** A yes has to be about a visa: "we sponsor visas", "H-1B sponsorship is available", "we can sponsor work authorization". */
+const VISA_CONTEXT = /\b(visas?|h-?1b|immigration|work authori[sz]ation|work permit|employment authori[sz]ation|right to work)\b/i;
+const SPONSOR_NO =
+  /\b(not|unable|cannot|can't|won't|will not|no|never|don't|do not|does not)\b[^.]*\bsponsor\w*\b|\bsponsor\w*\b[^.]*\b(is not|are not|not available|unavailable|not provided|not offered)\b|must be authori[sz]ed[^.]*without|without (visa |the need for |requiring )?sponsorship/i;
+const SPONSOR_YES = /\b(will|can|able to|offers?|provide[sd]?|happy to|open to|available)\b[^.]*\bsponsor/i;
+
+/**
+ * Every sentence that touches the subject is read, not only the first. A
+ * stated no wins over a stated yes, so "we sponsor for some roles" followed
+ * by "this role cannot be sponsored" is a no, and "you must have work
+ * authorization" followed by "we cannot provide visa sponsorship" is a no
+ * rather than an unknown. Only what the posting says; the deciding sentence
+ * is the evidence.
+ */
 export function sponsorshipOf(text: string): { value: Sponsorship; evidence?: string } {
-  const sentences = sentencesOf(text);
-  const hit = sentences.find((s) => /\b(sponsor|sponsorship|visa|h-?1b|work authori[sz]ation)\b/i.test(s));
-  if (!hit) return { value: "unknown" };
-  const neg =
-    /\b(not|unable|cannot|can't|won't|will not|no)\b[^.]*\b(sponsor|sponsorship)\b|\b(sponsor|sponsorship)\b[^.]*\b(is not|not available|unavailable)\b|must be authori[sz]ed[^.]*without/i;
-  if (neg.test(hit)) return { value: "not_offered", evidence: hit.trim().slice(0, 300) };
-  if (/\b(will|can|able to|offers?|provide)\b[^.]*\bsponsor/i.test(hit)) {
-    return { value: "offered", evidence: hit.trim().slice(0, 300) };
-  }
-  return { value: "unknown", evidence: hit.trim().slice(0, 300) };
+  const hits = sentencesOf(text)
+    .map((s) => s.trim())
+    .filter((s) => SPONSOR_TOPIC.test(s) && !SPONSOR_OTHER.test(s));
+  if (!hits.length) return { value: "unknown" };
+  const no = hits.find((s) => SPONSOR_NO.test(s));
+  if (no) return { value: "not_offered", evidence: no.slice(0, 300) };
+  const yes = hits.find((s) => VISA_CONTEXT.test(s) && SPONSOR_YES.test(s));
+  if (yes) return { value: "offered", evidence: yes.slice(0, 300) };
+  return { value: "unknown", evidence: hits[0].slice(0, 300) };
 }
 
 export type Restriction = "citizenship" | "permanent_residency" | "right_to_work" | "clearance";
@@ -379,22 +468,50 @@ const DEMONYMS: [RegExp, string][] = [
  * when it names one. Everything that is not clearly one of these is nothing:
  * a posting that says nothing carries no restriction (JOB-04).
  */
-export function eligibilityOf(text: string): { restriction: Restriction; country?: string; evidence: string } | undefined {
+/**
+ * The restrictions one sentence states, as alternatives of conjunctions:
+ * "US citizens or permanent residents" is [["citizenship"], ["permanent_residency"]],
+ * one of which must be met; "US citizenship and an active clearance" is
+ * [["citizenship", "clearance"]], all of which must be met. `restriction` is
+ * the first alternative's first term, kept for the card and the reports.
+ */
+export interface Eligibility {
+  restriction: Restriction;
+  options: Restriction[][];
+  country?: string;
+  evidence: string;
+}
+
+const RESTRICTION_TERMS: [RegExp, Restriction][] = [
+  [/\bclearance\b/i, "clearance"],
+  [/\bcitizens?(hip)?\b/i, "citizenship"],
+  [/\b(green card|permanent residen(t|cy)|lawful permanent)\b/i, "permanent_residency"],
+  [/\b(right|eligib\w+|authori[sz]\w+|entitle\w+|legally (able|allowed|permitted)) to (live and )?work in\b/i, "right_to_work"],
+];
+
+export function eligibilityOf(text: string): Eligibility | undefined {
   for (const raw of sentencesOf(text)) {
     const s = raw.trim();
     if (!s || RESTRICTION_GUARD.test(s)) continue;
-    let restriction: Restriction | undefined;
-    if (/\bclearance\b/i.test(s) && (REQUIRED.test(s) || /^clearance:\s*(an? )?active/i.test(s))) restriction = "clearance";
-    else if (/\bcitizens?(hip)?\b/i.test(s) && REQUIRED.test(s)) restriction = "citizenship";
-    else if (/\b(green card|permanent residen(t|cy)|lawful permanent)\b/i.test(s) && REQUIRED.test(s)) restriction = "permanent_residency";
-    else if (
-      /\b(right|eligib\w+|authori[sz]\w+|entitle\w+|legally (able|allowed|permitted)) to (live and )?work in\b/i.test(s) &&
-      (REQUIRED.test(s) || /without (visa |the need for |requiring )?sponsorship/i.test(s))
-    )
-      restriction = "right_to_work";
-    if (!restriction) continue;
+    const required = REQUIRED.test(s) || /^clearance:\s*(an? )?active/i.test(s) || /without (visa |the need for |requiring )?sponsorship/i.test(s);
+    if (!required) continue;
+    // Terms in the order they appear, so "citizens or permanent residents"
+    // and "citizenship and a clearance" keep their shape.
+    const found = RESTRICTION_TERMS.flatMap(([re, r]) => {
+      const m = re.exec(s);
+      return m ? [{ at: m.index, r }] : [];
+    }).sort((a, b) => a.at - b.at);
+    if (!found.length) continue;
+    const terms = found.map((f) => f.r);
+    const between = (i: number) => s.slice(found[i].at, found[i + 1].at);
+    let options: Restriction[][] = [[terms[0]]];
+    for (let i = 1; i < terms.length; i += 1) {
+      if (/\b(or|either)\b|\/|,\s*or\b/i.test(between(i - 1))) options.push([terms[i]]);
+      else options[options.length - 1].push(terms[i]);
+    }
+    options = options.map((o) => [...new Set(o)]);
     const country = DEMONYMS.find(([re]) => re.test(s))?.[1];
-    return { restriction, country, evidence: s.slice(0, 300) };
+    return { restriction: options[0][0], options, country, evidence: s.slice(0, 300) };
   }
   return undefined;
 }
@@ -504,6 +621,7 @@ export interface NormalisedJob {
   sponsorship: Sponsorship;
   sponsorshipEvidence?: string;
   eligibility?: Restriction;
+  eligibilityOptions?: Restriction[][];
   eligibilityCountry?: string;
   eligibilityEvidence?: string;
   descriptionText: string;
@@ -533,6 +651,7 @@ export function normalise(p: RawPosting, boilerplate: string[]): NormalisedJob {
     sponsorship: sp.value,
     sponsorshipEvidence: sp.evidence,
     eligibility: el?.restriction,
+    eligibilityOptions: el?.options,
     eligibilityCountry: el?.country,
     eligibilityEvidence: el?.evidence,
     descriptionText,

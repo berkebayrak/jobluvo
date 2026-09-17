@@ -28,7 +28,7 @@ async function main() {
 
   const rows = (await sql`
     select id, description_text, sponsorship::text as sponsorship, sponsorship_evidence, eligibility::text as eligibility,
-      eligibility_country, eligibility_evidence from jobs`) as {
+      eligibility_country, eligibility_evidence, eligibility_options::text as eligibility_options from jobs`) as {
     id: string;
     description_text: string;
     sponsorship: string;
@@ -36,14 +36,16 @@ async function main() {
     eligibility: string | null;
     eligibility_country: string | null;
     eligibility_evidence: string | null;
+    eligibility_options: string | null;
   }[];
 
   const updates: unknown[][] = [];
   for (const r of rows) {
     const sp = sponsorshipOf(r.description_text);
     const el = eligibilityOf(r.description_text);
-    const next = [sp.value, sp.evidence ?? null, el?.restriction ?? null, el?.country ?? null, el?.evidence ?? null];
-    const prior = [r.sponsorship, r.sponsorship_evidence, r.eligibility, r.eligibility_country, r.eligibility_evidence];
+    const options = el ? JSON.stringify(el.options) : null;
+    const next = [sp.value, sp.evidence ?? null, el?.restriction ?? null, el?.country ?? null, el?.evidence ?? null, options];
+    const prior = [r.sponsorship, r.sponsorship_evidence, r.eligibility, r.eligibility_country, r.eligibility_evidence, r.eligibility_options];
     if (next.some((v, i) => v !== prior[i])) updates.push([r.id, ...next]);
   }
 
@@ -52,14 +54,15 @@ async function main() {
     const slice = updates.slice(i, i + chunk);
     const values = slice
       .map((_, k) => {
-        const b = k * 6;
-        return `($${b + 1}::uuid, $${b + 2}::sponsorship, $${b + 3}, $${b + 4}::restriction, $${b + 5}, $${b + 6})`;
+        const b = k * 7;
+        return `($${b + 1}::uuid, $${b + 2}::sponsorship, $${b + 3}, $${b + 4}::restriction, $${b + 5}, $${b + 6}, $${b + 7}::jsonb)`;
       })
       .join(", ");
     await sql.query(
       `update jobs as j set sponsorship = v.sponsorship, sponsorship_evidence = v.sponsorship_evidence,
-         eligibility = v.eligibility, eligibility_country = v.eligibility_country, eligibility_evidence = v.eligibility_evidence
-       from (values ${values}) as v(id, sponsorship, sponsorship_evidence, eligibility, eligibility_country, eligibility_evidence)
+         eligibility = v.eligibility, eligibility_country = v.eligibility_country, eligibility_evidence = v.eligibility_evidence,
+         eligibility_options = v.eligibility_options
+       from (values ${values}) as v(id, sponsorship, sponsorship_evidence, eligibility, eligibility_country, eligibility_evidence, eligibility_options)
        where j.id = v.id`,
       slice.flat(),
     );

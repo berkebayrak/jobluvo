@@ -56,7 +56,13 @@ export const lever: Adapter = {
         applyUrl: p.applyUrl ?? p.hostedUrl ?? `https://jobs.lever.co/${source.tenant}/${p.id}/apply`,
         postedAt: toDate(p.createdAt),
         compensation: sr?.min || sr?.max
-          ? { min: sr.min, max: sr.max, currency: sr.currency, period: /hour/i.test(sr.interval ?? "") ? "hour" : "year" }
+          ? {
+              min: sr.min,
+              max: sr.max,
+              currency: sr.currency,
+              period: /hour/i.test(sr.interval ?? "") ? "hour" : /month/i.test(sr.interval ?? "") ? "month" : "year",
+              raw: [sr.currency, sr.min, sr.max, sr.interval].filter((v) => v != null).join(" "),
+            }
           : undefined,
         native: p,
       };

@@ -74,17 +74,17 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
 
       const emp = rows.find((r) => r.kind === "employment")!.id;
       const skill = rows.find((r) => r.kind === "skill")!.id;
-      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 1, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [] });
+      expect(await decideFacts(tx, userId, { confirm: [{ id: emp, version: 1 }], reject: [{ id: skill, version: 1 }] })).toEqual({ confirmed: 1, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [] });
       const after = (await resumeFacts(tx, userId))!;
       expect(after.employment.map((e) => e.company).sort()).toEqual(["New Co", "Old Co"]);
       expect(after.skills.map((s) => s.name)).toEqual(["Old skill"]);
       expect(after.factsHash).not.toBe(before.factsHash);
       // Another user's ids are skipped and named.
-      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [emp] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 0 }, skipped: [emp] });
+      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [{ id: emp, version: 1 }] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 0 }, skipped: [emp] });
       // A second click on the same ids moves nothing and says so.
-      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 1 }, skipped: [emp, skill] });
+      expect(await decideFacts(tx, userId, { confirm: [{ id: emp, version: 1 }], reject: [{ id: skill, version: 1 }] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 1 }, skipped: [emp, skill] });
       // A rejected fact is not revived by confirming its id; a confirmed one can still be rejected.
-      expect(await decideFacts(tx, userId, { confirm: [skill], reject: [emp] })).toEqual({ confirmed: 0, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [skill] });
+      expect(await decideFacts(tx, userId, { confirm: [{ id: skill, version: 1 }], reject: [{ id: emp, version: 1 }] })).toEqual({ confirmed: 0, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [skill] });
       expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["Old Co"]);
     });
   });
@@ -109,7 +109,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       ]);
       expect(await replaceWithDocument(tx, userId, b.id)).toEqual({ confirmed: 2, retired: 2 });
       // The stale page posts a's ids.
-      const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => r.id) });
+      const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => ({ id: r.id, version: 1 })) });
       expect(stale).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 2, reject: 0 }, skipped: aRows.map((r) => r.id) });
       // The invariant: every confirmed resume fact carries one document id, and it is b's.
       const confirmed = await tx

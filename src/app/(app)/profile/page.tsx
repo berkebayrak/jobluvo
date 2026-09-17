@@ -527,8 +527,13 @@ export default function ProfilePage() {
                             ) : (
                               <>
                                 <FactDetail f={f} />
-                                {f.evidence ? <div className="sub">From the resume: {f.evidence}</div> : null}
-                                {f.origin === "edit" ? <div className="sub">Edited by you.</div> : null}
+                                {f.evidence ? (
+                                  <div className="sub">
+                                    {f.origin === "edit" ? `Your resume said: ${f.evidence}. You changed it.` : `From the resume: ${f.evidence}`}
+                                  </div>
+                                ) : f.origin === "edit" ? (
+                                  <div className="sub">You changed it.</div>
+                                ) : null}
                               </>
                             )}
                           </span>

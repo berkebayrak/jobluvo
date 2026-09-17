@@ -120,17 +120,13 @@ export interface DecideResult {
  * same rows, and a decide racing a replace without the lock could confirm a
  * fact the replacement is retiring.
  */
-export async function decideFacts(db: DbPool | Tx, userId: string, decision: { confirm?: (string | FactRef)[]; reject?: (string | FactRef)[] }): Promise<DecideResult> {
+export async function decideFacts(db: DbPool | Tx, userId: string, decision: { confirm?: FactRef[]; reject?: FactRef[] }): Promise<DecideResult> {
   const confirm = decision.confirm ?? [];
   const reject = decision.reject ?? [];
-  const idOf = (r: string | FactRef) => (typeof r === "string" ? r : r.id);
-  // One update per version the page named, plus one for the ids it named without a version.
-  const groups = (refs: (string | FactRef)[]) => {
-    const by = new Map<number | null, string[]>();
-    for (const r of refs) {
-      const v = typeof r === "string" ? null : r.version;
-      by.set(v, [...(by.get(v) ?? []), idOf(r)]);
-    }
+  // Every decision names the version it saw; one update per version named. There is no unbound form.
+  const groups = (refs: FactRef[]) => {
+    const by = new Map<number, string[]>();
+    for (const r of refs) by.set(r.version, [...(by.get(r.version) ?? []), r.id]);
     return [...by.entries()];
   };
   return db.transaction(async (tx) => {
@@ -140,14 +136,7 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
       const rows = await tx
         .update(profileFacts)
         .set({ status: "confirmed", updatedAt: new Date() })
-        .where(
-          and(
-            eq(profileFacts.userId, userId),
-            inArray(profileFacts.id, ids),
-            eq(profileFacts.status, "extracted"),
-            version === null ? undefined : eq(profileFacts.version, version),
-          ),
-        )
+        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), eq(profileFacts.status, "extracted"), eq(profileFacts.version, version)))
         .returning({ id: profileFacts.id });
       for (const r of rows) moved.add(r.id);
     }
@@ -157,14 +146,7 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
       const rows = await tx
         .update(profileFacts)
         .set({ status: "rejected", updatedAt: new Date() })
-        .where(
-          and(
-            eq(profileFacts.userId, userId),
-            inArray(profileFacts.id, ids),
-            inArray(profileFacts.status, ["extracted", "confirmed"]),
-            version === null ? undefined : eq(profileFacts.version, version),
-          ),
-        )
+        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), inArray(profileFacts.status, ["extracted", "confirmed"]), eq(profileFacts.version, version)))
         .returning({ id: profileFacts.id });
       rejected += rows.length;
       for (const r of rows) moved.add(r.id);
@@ -173,7 +155,7 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
       confirmed,
       rejected,
       asked: { confirm: confirm.length, reject: reject.length },
-      skipped: [...confirm, ...reject].map(idOf).filter((id) => !moved.has(id)),
+      skipped: [...confirm, ...reject].map((r) => r.id).filter((id) => !moved.has(id)),
     };
   });
 }

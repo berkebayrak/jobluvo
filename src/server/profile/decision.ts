@@ -17,19 +17,16 @@ export type FactRef = z.infer<typeof factRef>;
  *   { edit }               replace a waiting fact's data with what the user
  *                          typed, at the version the page showed; the fact
  *                          stays waiting at the next version.
- *   { confirm, reject }    single decisions, each by id or by id and
- *                          version; with a version the decision is skipped
- *                          if the fact has moved on since the page showed it.
+ *   { confirm, reject }    single decisions, each by id and version; the
+ *                          decision is skipped if the fact has moved on
+ *                          since the page showed it. There is no form
+ *                          without a version: an unbound decision is what
+ *                          let a stale page confirm a fact it never showed.
  */
 export const decisionBody = z.union([
   z.object({ replaceWith: z.string().uuid(), seen: z.array(factRef).optional() }).strict(),
   z.object({ edit: z.object({ id: z.string().uuid(), version: z.number().int().positive(), data: z.record(z.string(), z.unknown()) }).strict() }).strict(),
-  z
-    .object({
-      confirm: z.array(z.union([z.string().uuid(), factRef])).optional(),
-      reject: z.array(z.union([z.string().uuid(), factRef])).optional(),
-    })
-    .strict(),
+  z.object({ confirm: z.array(factRef).optional(), reject: z.array(factRef).optional() }).strict(),
 ]);
 
 export type DecisionBody = z.infer<typeof decisionBody>;

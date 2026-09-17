@@ -74,13 +74,52 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
 
       const emp = rows.find((r) => r.kind === "employment")!.id;
       const skill = rows.find((r) => r.kind === "skill")!.id;
-      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 1, rejected: 1 });
+      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 1, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [] });
       const after = (await resumeFacts(tx, userId))!;
       expect(after.employment.map((e) => e.company).sort()).toEqual(["New Co", "Old Co"]);
       expect(after.skills.map((s) => s.name)).toEqual(["Old skill"]);
       expect(after.factsHash).not.toBe(before.factsHash);
-      // Another user's ids are ignored.
-      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [emp] })).toEqual({ confirmed: 0, rejected: 0 });
+      // Another user's ids are skipped and named.
+      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [emp] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 0 }, skipped: [emp] });
+      // A second click on the same ids moves nothing and says so.
+      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 1 }, skipped: [emp, skill] });
+      // A rejected fact is not revived by confirming its id; a confirmed one can still be rejected.
+      expect(await decideFacts(tx, userId, { confirm: [skill], reject: [emp] })).toEqual({ confirmed: 0, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [skill] });
+      expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["Old Co"]);
+    });
+  });
+
+  it("after a replacement, a stale confirm of the old document's fact id does not put a second document into the confirmed profile", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [a] = await tx.insert(profileDocuments).values({ userId, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const aRows = await tx
+        .insert(profileFacts)
+        .values([
+          { userId, documentId: a.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "A Co", title: "Head", start: "2022-03", bullets: ["A line."] } },
+          { userId, documentId: a.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "A skill" } },
+        ])
+        .returning({ id: profileFacts.id });
+      expect(await replaceWithDocument(tx, userId, a.id)).toEqual({ confirmed: 2, retired: 2 });
+      // The page that showed document a is still open when the user replaces with document b.
+      const [b] = await tx.insert(profileDocuments).values({ userId, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      await tx.insert(profileFacts).values([
+        { userId, documentId: b.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "B Co", title: "Head", start: "2023-03", bullets: ["B line."] } },
+        { userId, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
+      ]);
+      expect(await replaceWithDocument(tx, userId, b.id)).toEqual({ confirmed: 2, retired: 2 });
+      // The stale page posts a's ids.
+      const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => r.id) });
+      expect(stale).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 2, reject: 0 }, skipped: aRows.map((r) => r.id) });
+      // The invariant: every confirmed resume fact carries one document id, and it is b's.
+      const confirmed = await tx
+        .select({ documentId: profileFacts.documentId, kind: profileFacts.kind })
+        .from(profileFacts)
+        .where(and(eq(profileFacts.userId, userId), eq(profileFacts.status, "confirmed")));
+      const resume = confirmed.filter((f) => f.kind !== "preference" && f.kind !== "authorization" && f.kind !== "sponsorship");
+      expect(new Set(resume.map((f) => f.documentId))).toEqual(new Set([b.id]));
+      expect(resume).toHaveLength(2);
+      expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["B Co"]);
     });
   });
 
@@ -108,4 +147,97 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       await expect(replaceWithDocument(tx, userId, "00000000-0000-0000-0000-000000000000")).rejects.toThrow(/document not found/);
     });
   });
+
+  it("a failure between the retirement and the confirmation rolls the retirement back", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      await tx.insert(profileFacts).values([{ userId, documentId: doc.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "New Co", title: "Head", start: "2022-03", bullets: ["New line."] } }]);
+      // The replacement's second update, the confirmation, fails. The first, the retirement, has already run inside the same transaction.
+      await expect(replaceWithDocument(failingOn(tx, 2), userId, doc.id)).rejects.toThrow(/injected failure/);
+      const f = (await resumeFacts(tx, userId))!;
+      expect(f.employment.map((e) => e.company)).toEqual(["Old Co"]);
+      expect(f.skills.map((s) => s.name)).toEqual(["Old skill"]);
+      const status = await tx.select({ status: profileFacts.status }).from(profileFacts).where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, doc.id)));
+      expect(status).toEqual([{ status: "extracted" }]);
+      // The transaction is still usable: the replacement runs clean afterwards.
+      expect(await replaceWithDocument(tx, userId, doc.id)).toEqual({ confirmed: 1, retired: 2 });
+    });
+  });
+
+  it("a document with no extracted facts retires nothing", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [empty] = await tx.insert(profileDocuments).values({ userId, filename: "failed.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      expect(await replaceWithDocument(tx, userId, empty.id)).toEqual({ confirmed: 0, retired: 0 });
+      const f = (await resumeFacts(tx, userId))!;
+      expect(f.employment.map((e) => e.company)).toEqual(["Old Co"]);
+      expect(f.skills.map((s) => s.name)).toEqual(["Old skill"]);
+    });
+  });
+
+  it("two replacements for one user at once run one after the other through the pool, and the profile is one document, never a mix", async () => {
+    const db = dbPool();
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const [user] = await db
+      .insert(users)
+      .values({ name: "Confirm race fixture", email: `confirm-race-${stamp}@test.invalid`, jobluvoAddress: `confirm-race-${stamp}@test.invalid` })
+      .returning({ id: users.id });
+    try {
+      await db.insert(profileFacts).values(seedFacts(user.id));
+      const [a] = await db.insert(profileDocuments).values({ userId: user.id, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const [b] = await db.insert(profileDocuments).values({ userId: user.id, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      await db.insert(profileFacts).values([
+        { userId: user.id, documentId: a.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "A Co", title: "Head", start: "2022-03", bullets: ["A line."] } },
+        { userId: user.id, documentId: a.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "A skill" } },
+        { userId: user.id, documentId: b.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "B Co", title: "Head", start: "2023-03", bullets: ["B line."] } },
+        { userId: user.id, documentId: b.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "B skill" } },
+        { userId: user.id, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
+      ]);
+      const [ra, rb] = await Promise.all([replaceWithDocument(db, user.id, a.id), replaceWithDocument(db, user.id, b.id)]);
+      // Each confirmed its own facts; the one that ran second also retired the first's.
+      expect(ra.confirmed).toBe(2);
+      expect(rb.confirmed).toBe(3);
+      const rows = await db
+        .select({ documentId: profileFacts.documentId, status: profileFacts.status, origin: profileFacts.origin })
+        .from(profileFacts)
+        .where(eq(profileFacts.userId, user.id));
+      const confirmedDocs = new Set(rows.filter((r) => r.status === "confirmed" && r.origin === "upload").map((r) => r.documentId));
+      expect(confirmedDocs.size).toBe(1);
+      const winner = [...confirmedDocs][0];
+      const loser = winner === a.id ? b.id : a.id;
+      // The first retired the 2 seeded resume facts; the second retired the first's own, 2 for a or 3 for b.
+      expect(ra.retired + rb.retired).toBe(2 + (winner === b.id ? 2 : 3));
+      expect(rows.filter((r) => r.documentId === winner).every((r) => r.status === "confirmed")).toBe(true);
+      expect(rows.filter((r) => r.documentId === loser).every((r) => r.status === "rejected")).toBe(true);
+      // The user's own resume facts are retired, the preference is untouched.
+      expect(rows.filter((r) => r.origin === "user").map((r) => r.status).sort()).toEqual(["confirmed", "rejected", "rejected"]);
+      expect((await filterFacts(user.id, db))?.prefs.targetCountries).toEqual(["US"]);
+    } finally {
+      await db.delete(profileFacts).where(eq(profileFacts.userId, user.id));
+      await db.delete(profileDocuments).where(eq(profileDocuments.userId, user.id));
+      await db.delete(users).where(eq(users.id, user.id));
+    }
+  });
 });
+
+/**
+ * The transaction handle with its nth `update` replaced by a throw, carried
+ * into the savepoint the replacement opens, so the failure lands between
+ * the two statements of one transaction. No seam in the production code.
+ */
+function failingOn(tx: Tx, nth: number, state = { n: 0 }): Tx {
+  return new Proxy(tx, {
+    get(target, key, receiver) {
+      if (key === "transaction") {
+        const real = Reflect.get(target, key, receiver) as Tx["transaction"];
+        return ((cb: (inner: Tx) => Promise<unknown>) => real.call(target, (inner: Tx) => cb(failingOn(inner, nth, state)))) as Tx["transaction"];
+      }
+      if (key === "update") {
+        state.n += 1;
+        if (state.n === nth) throw new Error("injected failure");
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+}

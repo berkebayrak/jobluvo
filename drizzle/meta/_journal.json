@@ -8,6 +8,13 @@
       "when": 1789591950236,
       "tag": "0000_phase0_discovery",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789634457672,
+      "tag": "0001_phase0_profile",
+      "breakpoints": true
     }
   ]
 }

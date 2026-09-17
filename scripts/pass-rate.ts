@@ -1,71 +1,78 @@
 import { neon } from "@neondatabase/serverless";
+import { firstFailingReasonSql } from "@/server/match/hardFilter";
+import { authorizationFact, preferenceFact, sponsorshipFact, type PreferenceFact } from "@/server/profile/facts";
 
 /**
- * Hard filter pass rate across the ingested jobs, before any scoring runs.
+ * Hard filter pass rate across the ingested jobs, as a matrix.
  * `npm run pass-rate`.
  *
- * The filter is provisional: it stands in for Jack Miller's preference and
- * authorization facts until PR 2 stores them. From the mock profile: needs
- * visa sponsorship, wants a US location or US remote, full time, manager or
- * director level. A job fails on the first reason in this order: location,
- * sponsorship, employment type, seniority. The independent counts show how
- * many jobs each rule cuts on its own, so the order does not hide a rule.
+ * The filter is the one in src/server/match/hardFilter.ts, JOB-06, built
+ * from the demo user's confirmed authorization and sponsorship facts. The
+ * target countries are varied across four realistic sets so the cost of the
+ * filter and the cost of the registry show up separately: a low pass rate
+ * for "United States only" against a high one for "Western Europe" is the
+ * seed boards, not the rule.
  */
 
-const US_LOCATION = `exists (select 1 from jsonb_array_elements(j.locations) l where l->>'country' = 'US')`;
-const REMOTE_UNKNOWN = `(j.workplace = 'remote' or exists (select 1 from jsonb_array_elements(j.locations) l where (l->>'remote')::boolean))
-  and not exists (select 1 from jsonb_array_elements(j.locations) l where l->>'country' is not null)`;
-const REASON = `case
-  when ${US_LOCATION} then null
-  when ${REMOTE_UNKNOWN} then 'remote, country unknown'
-  else 'not US' end`;
-const FIRST_REASON = `coalesce(${REASON},
-  case when j.sponsorship = 'not_offered' then 'sponsorship not offered' end,
-  case when j.employment_type is not null and j.employment_type <> 'Full time' then 'employment type' end,
-  case when j.seniority in ('Intern', 'Junior') then 'seniority' end)`;
+const WESTERN_EUROPE = ["GB", "IE", "FR", "DE", "NL", "BE", "LU", "ES", "PT", "IT", "CH", "AT", "DK", "SE", "NO", "FI"];
+
+const BASE: Omit<PreferenceFact, "targetCountries"> = { relocation: "yes", remote: "remote_ok", employmentTypes: ["Full time"] };
+const SCENARIOS: { name: string; prefs: PreferenceFact }[] = [
+  { name: "United States only", prefs: { ...BASE, targetCountries: ["US"] } },
+  { name: "US, Britain, Ireland, Canada", prefs: { ...BASE, targetCountries: ["US", "GB", "IE", "CA"] } },
+  { name: "Western Europe", prefs: { ...BASE, targetCountries: WESTERN_EUROPE } },
+  { name: "Remote anywhere", prefs: { ...BASE, targetCountries: "any", remote: "remote_only" } },
+];
 
 async function main() {
   const sql = neon(process.env.DATABASE_URL!);
+
+  const facts = (await sql`
+    select f.kind, f.data from profile_facts f join users u on u.id = f.user_id
+    where u.email = 'jack.miller@jobluvo.com' and f.status = 'confirmed' and f.kind in ('authorization', 'sponsorship', 'preference')`) as {
+    kind: string;
+    data: unknown;
+  }[];
+  const auth = facts.filter((f) => f.kind === "authorization").map((f) => authorizationFact.parse(f.data));
+  const sponsorshipRow = facts.find((f) => f.kind === "sponsorship");
+  const sponsorship = sponsorshipRow ? sponsorshipFact.parse(sponsorshipRow.data) : null;
+  const stored = facts.find((f) => f.kind === "preference");
+  if (!sponsorship || !stored) {
+    console.error("Jack Miller has no confirmed sponsorship or preference fact. Run `npm run seed` first.");
+    process.exit(2);
+  }
+  console.log(
+    `facts: authorization ${auth.map((a) => `${a.country}:${a.basis}`).join(", ") || "none"}; sponsorship now ${sponsorship.now}, future ${sponsorship.future}, stated ${sponsorship.statedOn}`,
+  );
+  console.log(`stored preference: ${JSON.stringify(preferenceFact.parse(stored.data))}\n`);
+
   const base = `from jobs j join sources s on s.id = j.source_id where j.closed_at is null`;
+  const matrix: Record<string, unknown>[] = [];
+  const byFamily: Record<string, Record<string, unknown>> = {};
+  for (const sc of SCENARIOS) {
+    const reason = firstFailingReasonSql(preferenceFact.parse(sc.prefs), auth, sponsorship);
+    const rows = (await sql.query(
+      `select coalesce(${reason}, 'pass') as reason, count(*)::int as jobs ${base} group by 1 order by 2 desc`,
+    )) as { reason: string; jobs: number }[];
+    const total = rows.reduce((n, r) => n + r.jobs, 0);
+    const pass = rows.find((r) => r.reason === "pass")?.jobs ?? 0;
+    const row: Record<string, unknown> = { scenario: sc.name, pass, "pass %": Math.round((1000 * pass) / total) / 10 };
+    for (const r of rows) if (r.reason !== "pass") row[r.reason] = r.jobs;
+    matrix.push(row);
 
-  console.log("overall");
-  console.table(
-    await sql.query(`select count(*)::int as open_jobs, count(*) filter (where ${FIRST_REASON} is null)::int as pass,
-      round(100.0 * count(*) filter (where ${FIRST_REASON} is null) / count(*), 1) as pass_pct,
-      count(*) filter (where j.detail_pending)::int as detail_pending ${base}`),
-  );
+    const fam = (await sql.query(
+      `select s.family, count(*)::int as jobs, count(*) filter (where ${reason} is null)::int as pass ${base} group by 1 order by 2 desc`,
+    )) as { family: string; jobs: number; pass: number }[];
+    for (const f of fam) {
+      byFamily[f.family] ??= { family: f.family, jobs: f.jobs };
+      byFamily[f.family][sc.name] = f.pass;
+    }
+  }
 
-  console.log("by family");
-  console.table(
-    await sql.query(`select s.family, count(*)::int as open_jobs, count(*) filter (where ${FIRST_REASON} is null)::int as pass,
-      round(100.0 * count(*) filter (where ${FIRST_REASON} is null) / count(*), 1) as pass_pct ${base}
-      group by s.family order by open_jobs desc`),
-  );
-
-  console.log("first failing reason, by family");
-  console.table(
-    await sql.query(`select coalesce(${FIRST_REASON}, 'pass') as reason, s.family, count(*)::int as jobs ${base}
-      group by 1, 2 order by 1, 3 desc`),
-  );
-
-  console.log("each rule on its own (a job can count under several)");
-  console.table(
-    await sql.query(`select count(*) filter (where not ${US_LOCATION} and not (${REMOTE_UNKNOWN}))::int as "not US",
-      count(*) filter (where ${REMOTE_UNKNOWN})::int as "remote, country unknown",
-      count(*) filter (where j.sponsorship = 'not_offered')::int as "sponsorship not offered",
-      count(*) filter (where j.sponsorship = 'unknown')::int as "sponsorship unknown",
-      count(*) filter (where j.employment_type is not null and j.employment_type <> 'Full time')::int as "employment type",
-      count(*) filter (where j.employment_type is null)::int as "employment type unknown",
-      count(*) filter (where j.seniority in ('Intern', 'Junior'))::int as "seniority",
-      count(*) filter (where j.seniority is null)::int as "seniority unknown" ${base}`),
-  );
-
-  console.log("US jobs by seniority");
-  console.table(
-    await sql.query(`select coalesce(j.seniority, '(unknown)') as seniority, count(*)::int as us_jobs,
-      count(*) filter (where ${FIRST_REASON} is null)::int as pass ${base} and ${US_LOCATION}
-      group by 1 order by 2 desc`),
-  );
+  console.log("jobs passing, and the first failing reason for the rest");
+  console.table(matrix);
+  console.log("jobs passing by family (what the registry costs)");
+  console.table(Object.values(byFamily));
 }
 
 main()

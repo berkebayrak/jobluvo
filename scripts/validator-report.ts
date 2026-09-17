@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { dbPool } from "@/db/client";
 import { packets, profileFacts, type PacketFinding } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
-import { applyReplay, replayDecision, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
+import { applyReplay, replayDecision, sameDocument, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
 
@@ -89,7 +89,7 @@ async function main() {
   for (const p of rows) byUser.set(p.userId, [...(byUser.get(p.userId) ?? []), p]);
 
   const apply = process.argv.includes("--apply");
-  const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision | "excluded"; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null }[] = [];
+  const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision | "excluded"; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null; rebuilds: boolean | null }[] = [];
   const profilesUsed: Record<string, number> = {};
   for (const [userId, ps] of byUser) {
     const candidates = await candidateProfiles(db, userId);
@@ -97,7 +97,7 @@ async function main() {
       const row: ReplayRow = { id: p.id, status: p.status, resume: p.resume, resumeHash: p.resumeHash, findings: p.findings, updatedAt: p.updatedAt };
       const match = candidates.find((c) => c.facts.factsHash === p.factsHash);
       if (!match) {
-        perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision: "excluded", findings: p.findings, outcome: outcomeOf("excluded"), hashHolds: null });
+        perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision: "excluded", findings: p.findings, outcome: outcomeOf("excluded"), hashHolds: null, rebuilds: null });
         continue;
       }
       profilesUsed[match.name] = (profilesUsed[match.name] ?? 0) + 1;
@@ -110,7 +110,8 @@ async function main() {
       const decision = replayDecision(row, replayed, candidate);
       const findings = decision.kind === "no_candidate" ? p.findings : decision.findings;
       const hashHolds = p.resume ? resumeHash(p.resume) === p.resumeHash : null;
-      perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision, findings, outcome: outcomeOf(decision), hashHolds });
+      const rebuilds = p.resume && candidate ? sameDocument(p.resume, candidate) : null;
+      perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision, findings, outcome: outcomeOf(decision), hashHolds, rebuilds });
     }
   }
   const replayed = perPacket.filter((p) => p.decision !== "excluded");
@@ -130,10 +131,10 @@ async function main() {
   console.log(`packets on hand ${rows.length}, replayed ${replayed.length} (${edits} bullet edits), excluded ${excluded} whose facts hash no profile on hand reproduces`);
   console.log("profiles the packets were built on:", JSON.stringify(profilesUsed));
   const withResume = perPacket.filter((p) => p.hashHolds !== null);
-  const candidates = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "restamp" && p.decision.resume).length;
+  const rebuilds = perPacket.filter((p) => p.rebuilds).length;
   const noResume = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "no_resume").length;
   console.log(
-    `stored resumes: ${withResume.length}; ${candidates} are the base plus their stored changes and summary (skill order not stored, not compared), ${noResume} pass today but are not, or have no resume, and are not promoted; resume_hash names the stored resume on ${withResume.filter((p) => p.hashHolds).length} of ${withResume.length} (the rest are rewritten by --apply)`,
+    `stored resumes: ${withResume.length}; ${rebuilds} are the base plus their stored changes and summary (skill order not stored, not compared); ${noResume} pass today but have no such resume and are not promoted; resume_hash names the stored resume on ${withResume.filter((p) => p.hashHolds).length} of ${withResume.length} (the rest are rewritten by --apply)`,
   );
   const retained = replayed.flatMap((p) => p.row.findings.filter((f) => f.bullet === "summary"));
   console.log(`summary findings kept from the original run, not replayable: ${retained.length} on ${replayed.filter((p) => p.row.findings.some((f) => f.bullet === "summary")).length} packets, by level ${JSON.stringify(count(retained.map((f) => f.level)))}`);
@@ -179,7 +180,11 @@ async function main() {
           ? "number phrase unreadable, line"
           : f.message.startsWith("value could not be checked")
             ? "number phrase unreadable, cited fact"
-            : "metric unreadable";
+            : f.message.startsWith("cited fact does not exist")
+              ? "cited fact does not exist"
+              : f.message.startsWith("no fact cited")
+                ? "no fact cited"
+                : "metric unreadable";
   console.table(count(review.map(reviewKind)));
   console.log("packets held for review by the reasons that hold them");
   console.table(count(replayed.filter((p) => p.outcome === "needs_review").map((p) => [...new Set(by(p, "review").map(reviewKind))].sort().join(" + "))));

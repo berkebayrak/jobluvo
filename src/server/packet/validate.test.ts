@@ -160,11 +160,14 @@ describe("a value must be in a cited fact", () => {
     // The line's own phrase is unreadable: held.
     expect(checkLine("Raised five thousand two million dollars.", "R1.1", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["review", "five thousand two million"]]);
     // A word the tables do not know but Object.prototype does is a word.
-    expect(checkLine("Used constructor injection across 3 and 5 teams.", "R1.2", ["R1.2"], odd).filter((f) => f.level !== "soft")).toEqual([]);
+    expect(checkLine("Used constructor injection across the teams.", "R1.2", ["R1.2"], odd).filter((f) => f.level !== "soft")).toEqual([]);
   });
 
-  it("a citation that does not exist is soft, on its own", () => {
-    expect(soft("Led the planning cycle", ["R9.9"])).toEqual([expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" })]);
+  it("a citation that does not exist holds the line, and so does a line that cites nothing", () => {
+    expect(review("Led the planning cycle", ["R9.9"])).toEqual([expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" })]);
+    expect(hard("Led the planning cycle", ["R9.9"])).toEqual([]);
+    expect(review("Led the planning cycle", [])).toEqual([expect.objectContaining({ message: "no fact cited for this line" })]);
+    expect(review("Led the planning cycle", ["R1.3"])).toEqual([]);
   });
   it("holds a name that appears in no fact for review, and passes the names that do", () => {
     // Every name in the line is on the profile; the verb that opens it is not, and a sentence initial miss is soft: measured at 12 of 12 false positives (D-017).
@@ -204,8 +207,9 @@ describe("change set validation", () => {
     expect(bad.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:18", "pct:15"]);
     // A summary with a value and no citation is rejected like any line.
     const unc = validateChangeSet({ summary: "Leader with 10 years of experience.", summaryFacts: [], changes: [], skills: [] }, base, set);
-    // "Leader" opens the sentence and is on no fact: soft, it travels with the packet (D-017).
+    // "Leader" opens the sentence and is on no fact: soft, it travels with the packet (D-017). Citing nothing is itself held.
     expect(unc.map((f) => [f.level, f.bullet, f.message])).toEqual([
+      ["review", "summary", "no fact cited for this line"],
       ["hard", "summary", "value with no fact cited for it"],
       ["soft", "summary", "name appears in no confirmed fact"],
     ]);

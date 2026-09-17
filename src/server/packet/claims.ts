@@ -16,24 +16,26 @@ import { normaliseNumbers } from "./normalise";
  * so a metric mismatch is held for review, never rejected.
  */
 
-export type ClaimKind = "pct" | "money" | "date" | "year" | "duration" | "count";
+export type ClaimKind = "pct" | "money" | "date" | "year" | "duration" | "count" | "period";
 export type ClaimRole = "result" | "target" | "baseline";
 
 export interface Claim {
   /** The value key the old validator used, kept so findings read the same: "pct:11", "money:usd:9200000", "date:2023-01", "year:2023", "num:4". */
   key: string;
   kind: ClaimKind;
-  /** A number, or the date or year text. */
+  /** A number, the date or year text, or for a period the time word ("year" for "annually", "a year", "per year"). */
   value: number | string;
   /** The currency, the time word, or the counted noun, singular; null when the line names none. */
   unit: string | null;
   /** For a count, the words after the number up to the first stop word, singular: "14 fleet software acquisition targets" keeps all four, so either side's noun can be found in the other's run. */
   nounRun: string[];
-  /** Content words of the clause around the value, stop words and the value's own words removed. */
+  /** Content words of the value's own predicate, stop words, the predicate's verb and the value's own words removed. */
   metric: string[];
+  /** Content words of the whole sentence the value sits in. A fact's sentence is the user's truth, and a line may draw its words from any of it. */
+  sentence: string[];
   role: ClaimRole;
   direction: "up" | "down" | null;
-  /** The whole clause, for the review screen. */
+  /** The predicate segment the value sits in, for the review screen. */
   clause: string;
 }
 
@@ -52,13 +54,18 @@ const MONTHS: Record<string, string> = {
   oct: "10", october: "10", nov: "11", november: "11", dec: "12", december: "12",
 };
 const CURRENCIES: Record<string, string> = { usd: "usd", $: "usd", us$: "usd", eur: "eur", "€": "eur", gbp: "gbp", "£": "gbp", cad: "cad", try: "try" };
+/** "annually", "a year", "per year", "each quarter": a period is a claim about how often, read as its time word. */
+const PERIODS: Record<string, string> = {
+  annually: "year", yearly: "year", year: "year", annum: "year", monthly: "month", month: "month", quarterly: "quarter", quarter: "quarter",
+  weekly: "week", week: "week", daily: "day", day: "day", hourly: "hour", hour: "hour",
+};
 const TIME_UNITS: Record<string, string> = {
   year: "year", years: "year", yr: "year", yrs: "year", month: "month", months: "month", week: "week", weeks: "week",
   day: "day", days: "day", hour: "hour", hours: "hour", hr: "hour", hrs: "hour", quarter: "quarter", quarters: "quarter",
 };
 
 const DOWN = new Set(["reduced", "reduce", "reducing", "cut", "cutting", "lowered", "lower", "lowering", "decreased", "decrease", "saved", "saving", "savings", "fell", "shrank", "declined", "down", "halved"]);
-const UP = new Set(["grew", "grow", "growing", "growth", "increased", "increase", "increasing", "raised", "raise", "raising", "added", "adding", "expanded", "expand", "improved", "improve", "rose", "doubled", "tripled", "lifted", "up", "boosted"]);
+const UP = new Set(["grew", "grow", "growing", "growth", "increased", "increase", "increasing", "raised", "raise", "raising", "added", "adding", "expanded", "expand", "improved", "improve", "rose", "doubled", "tripled", "lifted", "lift", "lifts", "lifting", "up", "boosted", "boost"]);
 /** Words that make the value after them a target ("against a 12 percent target") ... */
 const PRE_TARGET = new Set(["against", "versus", "vs"]);
 /** ... and words that make the value they follow, or the value after "target of", a target. */
@@ -76,20 +83,69 @@ const STOP = new Set([
 
 const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
 
-/** The value pattern, alternatives in priority order at each position: money, percentage, month date, dash date, bare year, duration, count. */
-const VALUE = new RegExp(
-  [
+/** Irregular pasts to their lemma, for the few verbs resumes lean on. */
+const IRREGULAR: Record<string, string> = { built: "build", led: "lead", ran: "run", grew: "grow", sold: "sell", held: "hold", won: "win", drove: "drive", made: "make", took: "take", wrote: "write", brought: "bring", kept: "keep", met: "meet", oversaw: "oversee", rebuilt: "rebuild" };
+
+/**
+ * The same word in another form is the same word: "removing", "removed"
+ * and "remove"; "workstream" and "workstreams"; "led" and "lead". Metric
+ * words are compared as lemmas so that an inflection is never a changed
+ * measure. Crude on purpose, and applied to both sides alike.
+ */
+export function lemma(w0: string): string {
+  if (Object.hasOwn(IRREGULAR, w0)) return lemma(IRREGULAR[w0]);
+  let w = w0;
+  if (w.endsWith("ies")) w = w.slice(0, -3) + "y";
+  else w = singular(w);
+  if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
+  else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
+  if (w.length > 3 && w.endsWith("e")) w = w.slice(0, -1);
+  if (w.length > 3 && w[w.length - 1] === w[w.length - 2] && /[bdgmnprt]/.test(w[w.length - 1])) w = w.slice(0, -1);
+  return w;
+}
+
+/** The value pattern, alternatives in priority order at each position: money, percentage, period, month date, dash date, bare year, duration, count. */
+const VALUE_SOURCE = [
     String.raw`(?<cur>usd|us\$|eur|gbp|cad|try|\$|€|£)\s?(?<curn>\d+(?:\.\d+)?)`,
     String.raw`(?<mn>\d+(?:\.\d+)?)\s?(?<mcur>usd|eur|gbp|cad|try)\b`,
     String.raw`(?<pn>\d+(?:\.\d+)?)\s?(?:%|percent|pct|per cent)(?![a-z])`,
+    String.raw`(?<![a-z\d.-])(?<per>annually|yearly|monthly|quarterly|weekly|daily|hourly|(?:per|a|each|every) (?:year|annum|month|quarter|week|day|hour))(?![a-z])`,
     String.raw`\b(?<dy>(?:19|20)\d{2})-(?<dm>0[1-9]|1[0-2])\b`,
     String.raw`\b(?<mon>[a-z]+)\.? (?<my>(?:19|20)\d{2})\b(?!-)`,
     String.raw`\b(?<y>(?:19|20)\d{2})\b(?![\d.-])`,
     String.raw`(?<![a-z\d.-])(?<dn>\d+(?:\.\d+)?)\s?(?<du>years?|yrs?|months?|weeks?|days?|hours?|hrs?|quarters?)\b`,
     String.raw`(?<![a-z\d.-])(?<n>\d+(?:\.\d+)?)(?![\d.]*[a-z])`,
-  ].join("|"),
-  "g",
-);
+].join("|");
+const VALUE = new RegExp(VALUE_SOURCE, "g");
+const HAS_VALUE = new RegExp(VALUE_SOURCE);
+/** Where one predicate ends and the next begins inside a clause: "increased revenue by 20 percent and reduced cost by 10 percent". */
+const PREDICATE = /\s+(?:and|while)\s+/;
+
+/**
+ * A clause's predicate segments: the clause split at "and" and "while",
+ * with every piece that carries no value folded into the piece before it,
+ * or the piece after it when it comes first. "Designed and ran a program
+ * that cut cost 11 percent" stays one segment; "increased revenue by 20
+ * percent and reduced cost by 10 percent" is two. Each value then reads
+ * its words and its direction from its own predicate and nothing borrows
+ * from the rest of the sentence.
+ */
+export function segmentsOf(clause: string): string[] {
+  const out: string[] = [];
+  let carry = "";
+  for (const piece of clause.split(PREDICATE)) {
+    const text = carry ? `${carry} and ${piece}` : piece;
+    carry = "";
+    if (HAS_VALUE.test(text)) out.push(text);
+    else if (out.length) out[out.length - 1] += ` and ${text}`;
+    else carry = text;
+  }
+  if (carry) {
+    if (out.length) out[out.length - 1] += ` and ${carry}`;
+    else out.push(carry);
+  }
+  return out;
+}
 
 /** The claims a text makes, one per value found. */
 export function claimsOf(text: string): Claim[] {
@@ -97,11 +153,20 @@ export function claimsOf(text: string): Claim[] {
   const norm = normaliseNumbers(text);
   for (const sentence of norm.split(/(?<=[.;:!?])\s+|\n/)) {
     const clauses = sentence.split(/,\s+(?=(?:and |but |which |while )?[a-z])/);
-    for (const clause of clauses) {
+    // A segment with no words of its own, "or USD 9.2M a year" after "cut cost 11 percent", is an apposition: it measures what the segment before it measured.
+    let inherited: string[] = [];
+    const sentenceWords = [...new Set(sentence.split(/[^a-z0-9]+/).filter((w) => w && !/\d/.test(w) && !STOP.has(w) && !DOWN.has(w) && !UP.has(w) && !TARGET.has(w) && w.length > 1).map(singular))];
+    for (const clause of clauses.flatMap(segmentsOf)) {
       const words = clause.split(/[^a-z0-9]+/).filter(Boolean);
       const direction = words.some((w) => DOWN.has(w)) === words.some((w) => UP.has(w)) ? null : words.some((w) => DOWN.has(w)) ? "down" : "up";
       const matches = [...clause.matchAll(VALUE)];
-      const sentenceMetric = [...new Set(sentence.split(/[^a-z0-9]+/).filter((w) => w && !/\d/.test(w) && !STOP.has(w) && !DOWN.has(w) && !UP.has(w) && !TARGET.has(w) && w.length > 1).map(singular))];
+      const content = (ws: string[]) => [...new Set(ws.filter((w) => !/\d/.test(w) && !STOP.has(w) && !DOWN.has(w) && !UP.has(w) && !TARGET.has(w) && w.length > 1).map(singular))];
+      // A resume predicate opens with its verb: "Led a 3 year cost program", "Designed and ran". The verb says what the person did,
+      // not what the value measures, so it is not a metric word; "Led" for "Ran" is a rewording. Kept when it is the only word,
+      // "Revenue grew 20 percent" measures revenue.
+      const all = content(words);
+      const lead = words.find((w) => !/\d/.test(w));
+      const metricWords = lead && all[0] === singular(lead) && all.length > 1 ? all.slice(1) : all;
       const read = matches.map((m) => {
         const g = m.groups ?? {};
         let kind: ClaimKind;
@@ -118,6 +183,11 @@ export function claimsOf(text: string): Claim[] {
           kind = "pct";
           value = Number(g.pn);
           key = `pct:${fmt(value)}`;
+        } else if (g.per) {
+          kind = "period";
+          unit = PERIODS[g.per.split(" ").pop()!];
+          value = unit;
+          key = `period:${unit}`;
         } else if (g.mon) {
           if (!(g.mon in MONTHS)) {
             // "since 2023" style words are not months; read the year on its own.
@@ -165,7 +235,8 @@ export function claimsOf(text: string): Claim[] {
         const after = clause.slice(m.index! + m[0].length, to).split(/[^a-z]+/).filter(Boolean).slice(nounWords.length);
         let role: ClaimRole = "result";
         // "against a 12 percent target": the words before 12 carry "against", the words after it carry "target"; neither belongs to the 11 before them.
-        if (before.some((w) => TARGET.has(w)) || after.some((w) => POST_TARGET.has(w))) role = "target";
+        // A period has no role: "present targets to the board twice a year" is how often, whatever is presented.
+        if (kind !== "period" && (before.some((w) => TARGET.has(w)) || after.some((w) => POST_TARGET.has(w)))) role = "target";
         // "from 7 to 5", "11 units into 6": the first value is the baseline and the second the result.
         const prev = before.slice(-2);
         const next = i + 1 < read.length;
@@ -173,10 +244,13 @@ export function claimsOf(text: string): Claim[] {
         if (next && (prev.includes("from") || last === "to" || last === "into")) role = "baseline";
         const nounRun = nounWords.map(singular);
         const own = new Set([...nounRun, ...(unit ? [unit] : [])]);
-        const clauseMetric = [...new Set(words.filter((w) => !/\d/.test(w) && !STOP.has(w) && !DOWN.has(w) && !UP.has(w) && !TARGET.has(w) && w.length > 1).map(singular))].filter((w) => !own.has(w));
-        const metric = clauseMetric.length ? clauseMetric : sentenceMetric.filter((w) => !own.has(w));
-        out.push({ key, kind, value, unit, nounRun, metric, role, direction: kind === "date" || kind === "year" ? null : direction, clause: clause.trim() });
+        const segmentMetric = metricWords.filter((w) => !own.has(w));
+        const metric = segmentMetric.length ? segmentMetric : inherited.filter((w) => !own.has(w));
+        out.push({ key, kind, value, unit, nounRun, metric, sentence: sentenceWords, role, direction: kind === "date" || kind === "year" || kind === "period" ? null : direction, clause: clause.trim() });
       });
+      const ownWords = new Set(read.flatMap((r) => [...r.nounWords.map(singular), ...(r.unit ? [r.unit] : [])]));
+      const segmentWords = metricWords.filter((w) => !ownWords.has(w));
+      if (segmentWords.length) inherited = segmentWords;
     }
   }
   return out;
@@ -224,6 +298,8 @@ export function describe(c: Claim): string {
       return `${c.value} ${c.unit}${c.value === 1 ? "" : "s"}`;
     case "count":
       return c.unit ? `${c.value} ${c.unit}${c.value === 1 ? "" : "s"}` : `a count of ${c.value}`;
+    case "period":
+      return `per ${c.value}`;
     default:
       return String(c.value);
   }
@@ -231,19 +307,31 @@ export function describe(c: Claim): string {
 
 /**
  * Whether the two sides measure the same thing, as far as words can tell:
- * true when they share a metric word, or when either side has none to
- * compare. Dates and years are exempt; a date's meaning is its role, and
- * the role rule in the validator covers that.
+ * yes when every metric word of the line's predicate is in the fact's
+ * sentence, unreadable when either side has none to compare, differ
+ * otherwise. One shared word is not agreement: "customer churn" and
+ * "customer acquisition costs" share a word and measure different things.
+ * The line's side is its own predicate, so a value cannot borrow words
+ * from elsewhere in the line; the fact's side is its whole sentence, so a
+ * line that folds the fact's own descriptive clauses into one predicate
+ * still passes. The hole that leaves, named here so it is not
+ * rediscovered: a fact sentence with two predicates, "reduced churn 11
+ * percent, and cut acquisition cost 5 percent", supports a line that
+ * pairs 11 percent with acquisition cost, when the direction agrees. Dates,
+ * years and periods are exempt; their meaning is the value and the role.
  */
 export function metricsAgree(fact: Claim, line: Claim): "yes" | "differ" | "unreadable" {
-  if (fact.kind === "date" || fact.kind === "year") return "yes";
+  if (fact.kind === "date" || fact.kind === "year" || fact.kind === "period") return "yes";
   // "6 analysts" against "6 analysts": the counted noun is the metric, and it matched already.
+  const factSentence = new Set(fact.sentence.map(lemma));
   if (fact.kind === "count" || line.kind === "count") {
-    const factNouns = [...fact.nounRun, ...(fact.unit ? [fact.unit] : [])];
-    const lineNouns = [...line.nounRun, ...(line.unit ? [line.unit] : [])];
+    const factNouns = [...fact.nounRun, ...(fact.unit ? [fact.unit] : [])].map(lemma);
+    const lineNouns = [...line.nounRun, ...(line.unit ? [line.unit] : [])].map(lemma);
+    const lineMetric = new Set(line.metric.map(lemma));
+    const factMetric = new Set(fact.metric.map(lemma));
     // "team of 6" against "6 team members": the noun on one side is a metric word or the noun on the other.
-    if (factNouns.some((w) => lineNouns.includes(w) || line.metric.includes(w)) || lineNouns.some((w) => fact.metric.includes(w))) return "yes";
+    if (factNouns.some((w) => lineNouns.includes(w) || lineMetric.has(w)) || lineNouns.some((w) => factMetric.has(w))) return "yes";
   }
   if (!fact.metric.length || !line.metric.length) return "unreadable";
-  return fact.metric.some((w) => line.metric.includes(w)) ? "yes" : "differ";
+  return line.metric.every((w) => factSentence.has(lemma(w))) ? "yes" : "differ";
 }

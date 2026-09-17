@@ -179,7 +179,11 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       expect(held.status).toBe("needs_review");
       expect(held.attempts).toBe(1);
       expect(call()).toHaveBeenCalledTimes(1);
-      expect(held.findings.map((f) => [f.level, f.value])).toEqual([["review", "KPI"]]);
+      // "with KPI reporting" attaches words to the 3 year program that its fact does not have, and "KPI" is on no fact: two holds, one packet.
+      expect(held.findings.map((f) => [f.level, f.value])).toEqual([
+        ["review", "num:3"],
+        ["review", "KPI"],
+      ]);
       expect(held.resume?.experience[0].bullets[0].text).toBe("Ran a 3 year program with KPI reporting, cutting cost 11 percent.");
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("needs_review");

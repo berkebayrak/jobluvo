@@ -136,7 +136,10 @@ export function roleOfLine(bullet: string | null): string | null {
 /** Checks one proposed line against the facts it cites. */
 export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet): PacketFinding[] {
   const out: PacketFinding[] = [];
-  for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "soft", bullet, message: "cited fact does not exist", value: id });
+  // A citation that names nothing supports nothing: the line's values are checked against the facts that do exist, and a person reads the rest.
+  for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "review", bullet, message: "cited fact does not exist", value: id });
+  // A line that cites nothing asserts on its own authority, whatever it says.
+  if (!cited.length) out.push({ level: "review", bullet, message: "no fact cited for this line" });
 
   // A line under one employer may cite that employer's employment facts only.
   const role = roleOfLine(bullet);

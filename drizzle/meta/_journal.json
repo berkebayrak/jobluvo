@@ -64,6 +64,13 @@
       "when": 1789652520885,
       "tag": "0008_phase0_packets",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789654026302,
+      "tag": "0009_phase0_packet_run",
+      "breakpoints": true
     }
   ]
 }

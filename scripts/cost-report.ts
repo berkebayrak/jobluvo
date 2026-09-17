@@ -1,5 +1,5 @@
 import { dbPool } from "@/db/client";
-import { cellStats, runStats } from "@/server/match/report";
+import { cellStats, citationStats, runStats } from "@/server/match/report";
 
 /**
  * Cost per scoring call from cost_events, one block per run tag, the cron
@@ -14,6 +14,8 @@ async function main() {
   console.table(await runStats(db));
   console.log(`by ${by}`);
   console.table(await cellStats(db, by));
+  console.log("wrong citations by run, from the packets on hand");
+  console.table(await citationStats(db));
 }
 
 main()

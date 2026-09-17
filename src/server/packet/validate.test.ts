@@ -110,8 +110,11 @@ describe("soft findings", () => {
     expect(soft("Reported to the CEO at Arvento using Power BI")).toEqual([]);
     expect(soft("Led migration to Salesforce for the Deloitte team")).toEqual([expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce" })]);
     expect(namesOf("Built dashboards in Power BI. Reported to the CFO monthly.")).toEqual(["Power BI", "CFO"]);
-    // Two known names side by side, and a known name in the plural, are not new names. A new acronym still is.
-    expect(soft("Automated reporting in Excel Power BI for the PMOs")).toEqual([]);
+    // A comma ends a name, so a list of known names is several known names; a plural of a known name is known.
+    expect(namesOf("Skills in Excel, Power BI, and financial modelling.")).toEqual(["Excel", "Power BI"]);
+    expect(soft("Built reporting in Excel, Power BI for the PMOs")).toEqual([]);
+    // Two known words run together are not a known name, and a new acronym is not either.
+    expect(soft("Built reporting in Power Excel")).toEqual([expect.objectContaining({ value: "Power Excel" })]);
     expect(soft("Owned the KPI framework")).toEqual([expect.objectContaining({ value: "KPI" })]);
   });
 });

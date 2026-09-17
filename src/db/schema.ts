@@ -317,6 +317,8 @@ export const packets = pgTable(
     /** "changes": the model emitted edits and the code assembled the document. "document": the model emitted the whole resume. */
     mode: text("mode").notNull(),
     model: text("model").notNull(),
+    /** Null for the product path. A sample tags its packets so the citation rate can be tracked per sample (D-013). */
+    run: text("run"),
     attempts: integer("attempts").notNull().default(1),
     resume: jsonb("resume").$type<ResumeDocument>(),
     changes: jsonb("changes").$type<ResumeChange[]>().notNull().default([]),

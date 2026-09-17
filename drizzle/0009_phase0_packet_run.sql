@@ -1,0 +1,1 @@
+ALTER TABLE "packets" ADD COLUMN "run" text;

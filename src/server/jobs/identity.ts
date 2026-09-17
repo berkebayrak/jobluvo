@@ -93,7 +93,7 @@ interface Candidate {
   score?: number;
 }
 
-type LocJob = { id: string; workplace: string; locations: JobLocation[] };
+export type LocJob = { id: string; workplace: string; locations: JobLocation[] };
 
 /**
  * Links every changed job that matches an existing one. Returns how many
@@ -156,13 +156,19 @@ export async function linkChanged(tx: Tx, changedIds: string[]): Promise<number>
       score: number;
       c_workplace: string;
       c_locations: JobLocation[];
+      c_family: string;
+      c_req: string | null;
       o_workplace: string;
       o_locations: JobLocation[];
+      o_family: string;
+      o_req: string | null;
     }>(sql`
       select c.id as job_id, o.id as other_id,
              similarity(o.description_core, c.description_core) as score,
              c.workplace as c_workplace, c.locations as c_locations,
-             o.workplace as o_workplace, o.locations as o_locations
+             c.family as c_family, c.requisition_id as c_req,
+             o.workplace as o_workplace, o.locations as o_locations,
+             o.family as o_family, o.requisition_id as o_req
       from jobs c join jobs o
         on o.company_domain = c.company_domain and o.title_norm = c.title_norm and o.id <> c.id and o.closed_at is null
       where c.id in (${idList(remaining)})
@@ -172,15 +178,19 @@ export async function linkChanged(tx: Tx, changedIds: string[]): Promise<number>
       order by c.id, score desc
     `);
     const logRows: (typeof similarityLog.$inferInsert)[] = [];
+    let conflicts = 0;
     for (const r of near.rows) {
       const share = locationsOverlap(
         { id: r.job_id, workplace: r.c_workplace, locations: r.c_locations },
         { id: r.other_id, workplace: r.o_workplace, locations: r.o_locations },
       );
-      const merged = share && Number(r.score) >= threshold && !chosen.has(r.job_id);
+      const conflict = requisitionConflict(r.c_family, r.c_req, r.o_family, r.o_req);
+      if (conflict) conflicts += 1;
+      const merged = share && !conflict && Number(r.score) >= threshold && !chosen.has(r.job_id);
       logRows.push({ jobA: r.job_id, jobB: r.other_id, score: Number(r.score), merged });
       if (merged) take({ jobId: r.job_id, otherId: r.other_id, reason: "similar", score: Number(r.score) });
     }
+    if (conflicts) console.log(`  ${conflicts} similarity candidates refused: the two postings carry different requisition ids`);
     for (let i = 0; i < logRows.length; i += 500) await tx.insert(similarityLog).values(logRows.slice(i, i + 500));
   }
 
@@ -192,13 +202,100 @@ export async function linkChanged(tx: Tx, changedIds: string[]): Promise<number>
   return linked;
 }
 
-function locationsOverlap(a: LocJob, b: LocJob): boolean {
+/**
+ * The country as a comparable token: the ISO code when the feed gave one,
+ * otherwise the board's own country name. The prefix keeps the two apart, and
+ * `sameCountry` never compares across the two kinds, because a name the code
+ * table did not resolve is an unknown country, not a different one, and an
+ * unknown never fails a rule.
+ */
+function countryKey(l: JobLocation): string | undefined {
+  if (l.country) return l.country.toUpperCase();
+  if (l.countryName) return `name:${l.countryName.trim().toLowerCase()}`;
+  return undefined;
+}
+
+/** null when the two cannot be compared: no token on one side, or a code against an unresolved name. */
+function sameCountry(a: string | undefined, b: string | undefined): boolean | null {
+  if (!a || !b) return null;
+  if (a.startsWith("name:") !== b.startsWith("name:")) return null;
+  return a === b;
+}
+
+function countriesOf(j: LocJob): Set<string> {
+  const out = new Set<string>();
+  for (const l of j.locations) {
+    const k = countryKey(l);
+    if (k) out.add(k);
+  }
+  return out;
+}
+
+const norm = (s: string | undefined) => s?.trim().toLowerCase() || undefined;
+
+/**
+ * One location against one location. The country is a gate, not a rung: two
+ * places in different countries are never the same place, whatever else
+ * matches. "Cambridge, GB" and "Cambridge, US" used to overlap on the city
+ * alone. Below the gate the finest shared level decides, and when neither
+ * side names anything finer than the country, the country itself is enough,
+ * so "Austin, TX, US" and a company wide "United States" posting of the same
+ * title now meet.
+ */
+function samePlace(la: JobLocation, lb: JobLocation): boolean {
+  const country = sameCountry(countryKey(la), countryKey(lb));
+  if (country === false) return false;
+  const cityA = norm(la.city);
+  const cityB = norm(lb.city);
+  if (cityA && cityB) return cityA === cityB;
+  const regionA = norm(la.region);
+  const regionB = norm(lb.region);
+  if (regionA && regionB) return regionA === regionB;
+  if (country === true) return true;
+  return norm(la.raw) === norm(lb.raw);
+}
+
+/**
+ * Whether two postings can be in the same place. Remote is treated as
+ * possibly country restricted: two remote roles that each name a country and
+ * share none of them are two different opportunities, not one, because
+ * "Remote, United States" and "Remote, Germany" are what a company posts when
+ * it wants a person in each. A remote role that names no country at all is
+ * unrestricted as far as the feed says, so it still overlaps anything remote.
+ */
+export function locationsOverlap(a: LocJob, b: LocJob): boolean {
   const aRemote = a.workplace === "remote" || a.locations.some((l) => l.remote);
   const bRemote = b.workplace === "remote" || b.locations.some((l) => l.remote);
-  if (aRemote && bRemote) return true;
-  const key = (l: JobLocation) => (l.city ?? l.region ?? l.country ?? l.raw).toLowerCase();
-  const set = new Set(a.locations.map(key));
-  return b.locations.some((l) => set.has(key(l)));
+  if (aRemote && bRemote) {
+    const ac = countriesOf(a);
+    const bc = countriesOf(b);
+    if (!ac.size || !bc.size) return true;
+    for (const x of ac) for (const y of bc) if (sameCountry(x, y) !== false) return true;
+    return false;
+  }
+  return a.locations.some((la) => b.locations.some((lb) => samePlace(la, lb)));
+}
+
+/** A requisition id that identifies one requisition rather than a placeholder: it carries a digit and is short. */
+const realRequisition = (id: string | null): id is string => !!id && /[0-9]/.test(id) && id.length <= 40;
+
+/**
+ * Whether two requisition ids say, on their own, that these are two different
+ * openings. Only within one family: a board numbers its own requisitions, so
+ * two different ids from one board are the employer saying two openings. Two
+ * ids from different boards are two unrelated schemes, and reading a
+ * difference into them would refuse exactly the syndication merge the
+ * similarity rule exists to make. Placeholders such as Airbnb's "ONE" and
+ * "MULTI" carry no digit and are ignored on both sides.
+ *
+ * Measured before it shipped: over the 48 similarity merges that existed on
+ * 17 Sep 2026 this refuses 18, all Greenhouse against Greenhouse, all
+ * distinct real ids, mostly one Datadog sales role posted per US territory.
+ */
+export function requisitionConflict(familyA: string, reqA: string | null, familyB: string, reqB: string | null): boolean {
+  if (familyA !== familyB) return false;
+  if (!realRequisition(reqA) || !realRequisition(reqB)) return false;
+  return reqA !== reqB;
 }
 
 /**

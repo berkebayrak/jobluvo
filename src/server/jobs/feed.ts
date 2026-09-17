@@ -1,13 +1,19 @@
 import { sql, type SQL } from "drizzle-orm";
-import { dbHttp } from "@/db/client";
+import { dbHttp, type DbHttp, type Tx } from "@/db/client";
 import type { JobLocation } from "@/db/schema";
 import { hardFilterSql, type FilterFacts } from "@/server/match/hardFilter";
 
 /**
- * The job feed for one user: one card per dedupe group, the canonical job
- * being the earliest open member; closed jobs, jobs still waiting for a
- * SmartRecruiters detail, and jobs the user has swiped are excluded as live
- * conditions, so Undo brings a job straight back.
+ * The job feed for one user: one card per dedupe group; closed jobs, jobs
+ * still waiting for a SmartRecruiters detail, and jobs the user has swiped
+ * are excluded as live conditions, so Undo brings a job straight back.
+ *
+ * Which member of a group represents it is decided per user, not per group.
+ * The group's canonical job is the earliest open member for everyone, so a
+ * canonical that fails this user's hard filter used to hide the whole group
+ * even when a sibling passed. Here the representative is the earliest open
+ * member that passes, and a group where nothing passes is counted once under
+ * its first failing reason rather than once per copy.
  *
  * The hard filter is applied here, before anything is ranked or shown
  * (JOB-06). Jobs it hides are counted by reason so the page can say how many
@@ -68,9 +74,9 @@ export interface FeedPage {
   limit: number;
   /** Jobs matching the chips, across the whole inventory. */
   total: number;
-  /** The inventory before any chip: open jobs that pass the user's hard filter. */
+  /** The inventory before any chip: one card per group that passes the user's hard filter. */
   inventory: { jobs: number; companies: number };
-  /** Open jobs the hard filter keeps out, by first failing reason. Empty with no profile. */
+  /** Groups the hard filter keeps out entirely, by first failing reason. Empty with no profile. */
   hidden: { total: number; reasons: Record<string, number> };
   /** Every value present in the inventory, so an option always matches something. */
   facets: { loc: string[]; workplace: string[]; co: string[]; level: string[] };
@@ -92,12 +98,39 @@ const LOCATION_LABEL = sql`case
 
 const textList = (xs: string[]) => sql.join(xs.map((x) => sql`${x}`), sql`, `);
 
-/** Open, visible to the user: not closed, not waiting for a detail, canonical, not swiped. */
+/**
+ * Open and undecided: not closed, not waiting for a detail, and not swiped.
+ *
+ * The swipe test reads the decision across the whole group. A decision is
+ * about an opportunity, not about the copy of it the user happened to be
+ * shown, so skipping the Greenhouse listing must also bury the Lever one.
+ * Joining through job_group_links rather than storing the group on the
+ * decision keeps it right when the group forms after the swipe, which is the
+ * case that resurrects a skipped job.
+ */
 function visibleWhere(userId: string): SQL {
   return sql`j.closed_at is null
     and not j.detail_pending
-    and (l.job_id is null or g.canonical_job_id = j.id)
-    and not exists (select 1 from swipe_decisions s where s.user_id = ${userId} and s.job_id = j.id)`;
+    and not exists (
+      select 1 from swipe_decisions s
+      left join job_group_links ls on ls.job_id = s.job_id
+      where s.user_id = ${userId} and (s.job_id = j.id or ls.group_id = l.group_id))`;
+}
+
+/**
+ * `vis`, every open undecided job with its group and its first failing
+ * reason, and `rep`, one row per group: the earliest member that passes, or
+ * the earliest member when none passes. A job with no group is its own group.
+ */
+function withRep(userId: string, reason: SQL | null): SQL {
+  return sql`with vis as (
+      select j.id, l.group_id, j.first_seen_at, (${reason ?? sql`null`})::text as reason
+      ${FROM}
+      where ${visibleWhere(userId)}
+    ), rep as (
+      select distinct on (coalesce(group_id, id)) id, reason from vis
+      order by coalesce(group_id, id), (reason is null) desc, first_seen_at, id
+    )`;
 }
 
 function chipsWhere(f: FeedFilters): SQL[] {
@@ -119,25 +152,28 @@ function chipsWhere(f: FeedFilters): SQL[] {
 }
 
 const FROM = sql`from jobs j
-  left join job_group_links l on l.job_id = j.id
-  left join job_groups g on g.id = l.group_id`;
+  left join job_group_links l on l.job_id = j.id`;
+
+/** The same source, narrowed to this user's representatives. */
+const REP = sql`${FROM} join rep on rep.id = j.id`;
 
 export async function feedForUser(
   userId: string,
-  opts: { limit?: number; offset?: number; filters?: FeedFilters; facts?: FilterFacts | null } = {},
+  /** `db` is for tests: the cycle tests run inside one transaction that is rolled back, which dbHttp cannot join. */
+  opts: { limit?: number; offset?: number; filters?: FeedFilters; facts?: FilterFacts | null; db?: DbHttp | Tx } = {},
 ): Promise<FeedPage> {
   const limit = Math.min(Math.max(opts.limit ?? FEED_PAGE, 1), 500);
   const offset = Math.max(opts.offset ?? 0, 0);
-  const db = dbHttp();
+  const db = opts.db ?? dbHttp();
 
-  const visible = visibleWhere(userId);
   const reason = opts.facts ? hardFilterSql(opts.facts) : null;
-  const passes: SQL = reason ? sql`(${reason}) is null` : sql`true`;
-  const inventoryWhere = sql`${visible} and ${passes}`;
-  const where = sql.join([inventoryWhere, ...chipsWhere(opts.filters ?? {})], sql` and `);
+  const rep = withRep(userId, reason);
+  const passing = sql`rep.reason is null`;
+  const where = sql.join([passing, ...chipsWhere(opts.filters ?? {})], sql` and `);
 
   const [page, counts, facets, hidden] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
+      ${rep}
       select
         j.id, l.group_id, j.family, j.company_name, j.company_domain, j.title, j.locations, j.workplace,
         j.employment_type, j.comp_min, j.comp_max, j.comp_currency, j.comp_period, j.seniority, j.sponsorship,
@@ -147,31 +183,34 @@ export async function feedForUser(
           select array_agg(distinct o.family::text) from job_group_links l2 join jobs o on o.id = l2.job_id
           where l2.group_id = l.group_id and o.id <> j.id and o.closed_at is null
         ), '{}') as also_on,
-        coalesce((select count(*) from job_group_links l3 where l3.group_id = l.group_id), 1) as copies
-      ${FROM}
+        case when l.group_id is null then 1 else (select count(*) from job_group_links l3 where l3.group_id = l.group_id) end as copies
+      ${REP}
       where ${where}
       order by coalesce(j.posted_at, j.first_seen_at) desc, j.id
       limit ${limit} offset ${offset}
     `),
     db.execute<{ total: number; inventory_jobs: number; inventory_companies: number }>(sql`
+      ${rep}
       select
-        (select count(*)::int ${FROM} where ${where}) as total,
-        (select count(*)::int ${FROM} where ${inventoryWhere}) as inventory_jobs,
-        (select count(distinct j.company_name)::int ${FROM} where ${inventoryWhere}) as inventory_companies
+        (select count(*)::int ${REP} where ${where}) as total,
+        (select count(*)::int from rep where reason is null) as inventory_jobs,
+        (select count(distinct j.company_name)::int ${REP} where ${passing}) as inventory_companies
     `),
     db.execute<{ kind: string; value: string }>(sql`
-      select distinct 'loc' as kind, (${LOCATION_LABEL}) as value ${FROM} where ${inventoryWhere}
+      ${rep}
+      select distinct 'loc' as kind, (${LOCATION_LABEL}) as value ${REP} where ${passing}
       union
-      select distinct 'workplace', j.workplace::text ${FROM} where ${inventoryWhere}
+      select distinct 'workplace', j.workplace::text ${REP} where ${passing}
       union
-      select distinct 'co', j.company_name ${FROM} where ${inventoryWhere}
+      select distinct 'co', j.company_name ${REP} where ${passing}
       union
-      select distinct 'level', j.seniority ${FROM} where ${inventoryWhere} and j.seniority is not null
+      select distinct 'level', j.seniority ${REP} where ${passing} and j.seniority is not null
       order by 1, 2
     `),
     reason
       ? db.execute<{ reason: string; n: number }>(sql`
-          select (${reason}) as reason, count(*)::int as n ${FROM} where ${visible} and (${reason}) is not null group by 1 order by 2 desc
+          ${rep}
+          select reason, count(*)::int as n from rep where reason is not null group by 1 order by 2 desc
         `)
       : Promise.resolve({ rows: [] as { reason: string; n: number }[] }),
   ]);

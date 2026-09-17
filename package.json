@@ -19,7 +19,9 @@
     "db:backfill-locations": "node --env-file=.env.local --import tsx scripts/backfill-locations.ts",
     "db:backfill-signals": "node --env-file=.env.local --import tsx scripts/backfill-signals.ts",
     "pass-rate": "node --env-file=.env.local --import tsx scripts/pass-rate.ts",
-    "boilerplate-report": "node --env-file=.env.local --import tsx scripts/boilerplate-report.ts"
+    "freshness": "node --env-file=.env.local --import tsx scripts/freshness.ts",
+    "boilerplate-report": "node --env-file=.env.local --import tsx scripts/boilerplate-report.ts",
+    "dedupe-report": "node --env-file=.env.local --import tsx scripts/dedupe-report.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

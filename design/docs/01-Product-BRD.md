@@ -1,12 +1,12 @@
 # Jobluvo, Product brief and business requirements
 
-Version 0.3, 12 September 2026. Planning baseline for founder review. Updated with the dashboard redesign, plan tiers, agent entitlement and the marketing site; see [Dashboard mockup](03-Dashboard-Mockup.html), [Website](05-Website.html) and [ATS integration plan](04-Job-Parsing-and-ATS-Integration.md).
+Version 0.4, 17 September 2026. Planning baseline for founder review. The market statement is corrected from the Phase 0 measurement: the hard filter costs almost nothing, the registry decides everything, so the product is not restricted by country. Version 0.3 added the dashboard redesign, plan tiers, agent entitlement and the marketing site; see [Dashboard mockup](03-Dashboard-Mockup.html), [Website](05-Website.html) and [ATS integration plan](04-Job-Parsing-and-ATS-Integration.md).
 
 Companion: [High-level implementation plan](02-Implementation-Plan.md)
 
 ## 1. Purpose and product promise
 
-Jobluvo helps individual job seekers discover suitable jobs, prepare accurate application materials, submit applications, and manage employer responses from a website and iOS/Android apps. The initial job inventory and parsing focus on the United States, while accommodating applicants living elsewhere.
+Jobluvo helps individual job seekers discover suitable jobs, prepare accurate application materials, submit applications, and manage employer responses from a website and iOS/Android apps. Jobluvo is not restricted by country: the user chooses the countries they want to work in, and the only real limit on what anyone sees is which employer boards are in the registry. The location parser handles US locations best today and is being widened as boards outside the US arrive.
 
 The intended commercial promise is **more completed applications for a lower subscription price**, with an engaging mobile experience for people who want to choose their opportunities and an autonomous mode for people who want the search handled for them.
 
@@ -24,7 +24,7 @@ Success means suitable, accurate, verified applications and useful employer conv
 |---|---|
 | Working name | Jobluvo. Brand/domain availability has not been checked. |
 | Customer | Individual job seekers. |
-| Initial market | US job inventory and US-focused parsing; broader geographic expansion later. |
+| Market | Not restricted by country. The user chooses the countries they want to work in, the hard filter honours that choice, and the only real limit on what anyone sees is which employer boards are in the registry. The location parser handles US locations best today and is being widened as boards outside the US arrive. |
 | Initial delivery | Website, iOS app, Android app. The website includes the actual product dashboard. |
 | Positioning | Lower prices and more applications than Tsenta. |
 | Discovery | Continuous discovery from sources; users should not have to find every job themselves. |

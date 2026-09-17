@@ -35,24 +35,29 @@ const MAX_FAILURES = 3;
 const CHUNK = 150;
 
 /*
- * last_polled_at has exactly one writer: the claim. It is also the ORDER BY
+ * last_attempt_at has exactly one writer: the claim. It is also the ORDER BY
  * key with NULLS FIRST, so a source that is polled without being claimed
  * would sit at the front of the queue on every run and, once the registry
  * outgrows one batch, starve the long tail. The post-poll updates name their
  * columns and never touch it, and every entry point that polls a source goes
  * through claimBatch or claimTenant.
+ *
+ * The claim also sets last_status to "polling". A poll that finishes writes
+ * ok, not_modified, failed or paused and stamps last_success_at on success.
+ * A source left at "polling" with an attempt newer than its last success is
+ * a poll the platform killed mid way; nothing else leaves that shape.
  */
 
 /**
- * Claims up to `batch` active sources with the oldest last_polled_at in one
+ * Claims up to `batch` active sources with the oldest last_attempt_at in one
  * statement, so an overlapping run cannot pick the same ones.
  */
 export async function claimBatch(db: DbPool, batch: number): Promise<Source[]> {
   const claimed = await db.execute<Record<string, unknown>>(sql`
-    update sources set last_polled_at = now()
+    update sources set last_attempt_at = now(), last_status = 'polling'
     where id in (
       select id from sources where active
-      order by last_polled_at nulls first
+      order by last_attempt_at nulls first
       limit ${batch} for update skip locked
     )
     returning *
@@ -63,7 +68,7 @@ export async function claimBatch(db: DbPool, batch: number): Promise<Source[]> {
 /** Claims one tenant by name, active or not, for a manual poll. */
 export async function claimTenant(db: DbPool, tenant: string): Promise<Source[]> {
   const claimed = await db.execute<Record<string, unknown>>(sql`
-    update sources set last_polled_at = now() where tenant = ${tenant} returning *
+    update sources set last_attempt_at = now(), last_status = 'polling' where tenant = ${tenant} returning *
   `);
   return claimed.rows.map(rowToSource);
 }
@@ -94,21 +99,27 @@ export async function ingestSource(db: DbPool, source: Source): Promise<SourceRu
   };
   const adapter = ADAPTERS[source.family];
   try {
-    const known = await knownJobs(db, source.id);
+    // The adapter needs the known map before it fetches, to decide which
+    // details to request; a slightly stale view there costs at most an extra
+    // detail fetch. The map the upsert and the closing logic use is read again
+    // inside the transaction, after the employer lock, so an overlapping run
+    // cannot hand this one a picture the lock was meant to prevent.
+    const preview = await knownJobs(db, source.id);
     const result = await adapter.fetch(source, {
       detailBudget: env().DETAIL_FETCH_BATCH,
-      known: new Map([...known].map(([k, v]) => [k, { listHash: v.listHash, detailPending: v.detailPending, hasBody: v.hasBody }])),
+      known: new Map([...preview].map(([k, v]) => [k, { listHash: v.listHash, detailPending: v.detailPending, hasBody: v.hasBody }])),
     });
 
     if (result.notModified) {
       run.status = "not_modified";
       await db
         .update(sources)
-        .set({ lastStatus: "not_modified", lastError: null, consecutiveFailures: 0 })
+        .set({ lastStatus: "not_modified", lastSuccessAt: new Date(), lastError: null, consecutiveFailures: 0 })
         .where(eq(sources.id, source.id));
     } else {
       await db.transaction(async (tx) => {
         await lockEmployer(tx, source);
+        const known = await knownJobs(tx, source.id);
         const outcome = await applyPostings(tx, source, result.postings, known);
         Object.assign(run, outcome);
         await tx
@@ -116,6 +127,7 @@ export async function ingestSource(db: DbPool, source: Source): Promise<SourceRu
           .set({
             etag: result.etag ?? source.etag,
             lastStatus: "ok",
+            lastSuccessAt: new Date(),
             lastError: null,
             consecutiveFailures: 0,
             jobCount: sql`(select count(*) from jobs where source_id = ${source.id} and closed_at is null)`,
@@ -315,18 +327,20 @@ export async function applyPostings(tx: Tx, source: Source, postings: RawPosting
   out.linked = await linkChanged(tx, changed);
 
   // Closing: present resets the counter, absent advances it, two misses close.
-  if (seen.length) {
-    const absent = await tx
-      .update(jobs)
-      .set({ missedPolls: sql`${jobs.missedPolls} + 1` })
-      .where(and(eq(jobs.sourceId, source.id), isNull(jobs.closedAt), notInArray(jobs.nativeId, seen)))
-      .returning({ id: jobs.id, missedPolls: jobs.missedPolls });
-    const toClose = absent.filter((j) => j.missedPolls >= 2).map((j) => j.id);
-    if (toClose.length) {
-      await tx.update(jobs).set({ closedAt: now }).where(inArray(jobs.id, toClose));
-      out.closed = toClose.length;
-      await recomputeCanonicalFor(tx, toClose);
-    }
+  // A valid empty snapshot is a snapshot: every open job of the source is
+  // absent from it and counts a miss, so two empty polls close the board. A
+  // failed fetch never reaches here, and a list plus detail adapter only
+  // returns once it has every page, so a short page never reaches here either.
+  const absent = await tx
+    .update(jobs)
+    .set({ missedPolls: sql`${jobs.missedPolls} + 1` })
+    .where(and(eq(jobs.sourceId, source.id), isNull(jobs.closedAt), seen.length ? notInArray(jobs.nativeId, seen) : sql`true`))
+    .returning({ id: jobs.id, missedPolls: jobs.missedPolls });
+  const toClose = absent.filter((j) => j.missedPolls >= 2).map((j) => j.id);
+  if (toClose.length) {
+    await tx.update(jobs).set({ closedAt: now }).where(inArray(jobs.id, toClose));
+    out.closed = toClose.length;
+    await recomputeCanonicalFor(tx, toClose);
   }
   return out;
 }
@@ -365,7 +379,18 @@ async function refreshBoilerplate(
   postings: RawPosting[],
   known: Map<string, Known>,
 ): Promise<{ version: number; paragraphs: string[] }> {
-  const texts = postings.filter((p) => p.descriptionHtml).map((p) => normalise(p, []).descriptionText);
+  // Detected over the board, not over this run: the bodies fetched now plus
+  // every stored complete description this run did not refetch. A list plus
+  // detail family fetches a few dozen bodies a run, and a set read from those
+  // alone shifted with the batch.
+  const fetched = postings.filter((p) => p.descriptionHtml);
+  const fetchedIds = new Set(fetched.map((p) => p.nativeId));
+  const texts = fetched.map((p) => normalise(p, []).descriptionText);
+  const stored = await tx
+    .select({ nativeId: jobs.nativeId, descriptionText: jobs.descriptionText })
+    .from(jobs)
+    .where(and(eq(jobs.sourceId, source.id), isNull(jobs.closedAt), sql`${jobs.descriptionText} <> ''`));
+  for (const r of stored) if (!fetchedIds.has(r.nativeId)) texts.push(r.descriptionText);
   const detected = detectRepeated(texts).sort();
   const same = detected.length === source.boilerplate.length && detected.every((p, i) => p === source.boilerplate[i]);
   if (same) return { version: source.boilerplateVersion, paragraphs: source.boilerplate };
@@ -417,7 +442,8 @@ function rowToSource(r: Record<string, unknown>): Source {
     companyDomain: (r.company_domain as string | null) ?? null,
     active: r.active as boolean,
     etag: (r.etag as string | null) ?? null,
-    lastPolledAt: r.last_polled_at ? new Date(r.last_polled_at as string) : null,
+    lastAttemptAt: r.last_attempt_at ? new Date(r.last_attempt_at as string) : null,
+    lastSuccessAt: r.last_success_at ? new Date(r.last_success_at as string) : null,
     lastStatus: (r.last_status as string | null) ?? null,
     lastError: (r.last_error as string | null) ?? null,
     consecutiveFailures: Number(r.consecutive_failures ?? 0),

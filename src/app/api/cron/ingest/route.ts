@@ -2,7 +2,7 @@ import { cronAuthorised, unauthorised } from "@/server/cron";
 import { ingestBatch } from "@/server/sources/ingest";
 
 /**
- * Polls the INGEST_BATCH sources with the oldest last_polled_at and returns.
+ * Polls the INGEST_BATCH sources with the oldest last_attempt_at and returns.
  *
  * vercel.json schedules this once a day, because the account is on Vercel
  * Hobby, where cron runs daily and a function gets 60 seconds. JSON has no

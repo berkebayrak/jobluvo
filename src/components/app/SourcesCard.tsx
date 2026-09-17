@@ -11,7 +11,8 @@ interface SourceRow {
   companyName: string;
   companyDomain: string | null;
   active: boolean;
-  lastPolledAt: string | null;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
   lastStatus: string | null;
   lastError: string | null;
   consecutiveFailures: number;
@@ -65,7 +66,7 @@ export function SourcesCard() {
       {rows && (
         <>
           <p className="sub" style={{ marginTop: 0 }}>
-            {rows.length} boards on {new Set(rows.map((r) => r.family)).size} application systems, {open} open jobs.
+            {rows.length} boards on {new Set(rows.map((r) => r.family)).size} application systems, {open.toLocaleString("en-US")} open jobs.
             Each board is checked once a day.
           </p>
           <div className="kvlist">
@@ -84,7 +85,7 @@ export function SourcesCard() {
                   <span style={{ color: "var(--fg-subtle)" }}>{FAMILY_LABEL[r.family] ?? r.family}</span>
                 </span>
                 <span className="v" style={{ textAlign: "right" }}>
-                  {r.active ? `${r.jobCount} open, checked ${ago(r.lastPolledAt)}` : "Paused"}
+                  {r.active ? `${r.jobCount} open, checked ${ago(r.lastSuccessAt)}` : "Paused"}
                   {r.lastError && (
                     <span style={{ display: "block", color: "var(--fg-subtle)", fontSize: "var(--text-xs)" }}>
                       {r.lastStatus === "paused" ? "Paused after 3 failures. " : "Last attempt failed. "}

@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dbPool, type Tx } from "@/db/client";
 import { jobs, sources, type Source } from "@/db/schema";
-import { applyPostings, knownJobs } from "./ingest";
+import { applyPostings, claimBatch, knownJobs } from "./ingest";
 import type { RawPosting } from "./types";
 
 /*
@@ -134,5 +134,53 @@ describe.skipIf(!hasDb)("ingest over successive SmartRecruiters polls", () => {
       expect(r.detailPending).toBe(true);
       expect(r.descriptionText).toBe("");
     });
+  });
+});
+
+describe.skipIf(!hasDb)("closing over successive snapshots", () => {
+  it("two valid empty snapshots close the listings; a single one only counts a miss", async () => {
+    await withSource(async (tx, source) => {
+      await applyPostings(tx, source, [posting()], await knownJobs(tx, source.id));
+      const one = await applyPostings(tx, source, [], await knownJobs(tx, source.id));
+      expect(one.closed).toBe(0);
+      const afterOne = await row(tx, source.id);
+      expect(afterOne.missedPolls).toBe(1);
+      expect(afterOne.closedAt).toBeNull();
+
+      const two = await applyPostings(tx, source, [], await knownJobs(tx, source.id));
+      expect(two.closed).toBe(1);
+      const afterTwo = await row(tx, source.id);
+      expect(afterTwo.closedAt).not.toBeNull();
+
+      // The listing comes back: reopened, counter reset.
+      await applyPostings(tx, source, [posting()], await knownJobs(tx, source.id));
+      const back = await row(tx, source.id);
+      expect(back.closedAt).toBeNull();
+      expect(back.missedPolls).toBe(0);
+    });
+  });
+});
+
+describe.skipIf(!hasDb)("overlapping claims", () => {
+  it("two concurrent claims never hand out the same source", async () => {
+    const db = dbPool();
+    const tenants = [`claim-test-a-${Date.now()}`, `claim-test-b-${Date.now()}`];
+    const inserted = await db
+      .insert(sources)
+      .values(tenants.map((tenant) => ({ family: "gem" as const, tenant, companyName: "Claim fixture", companyDomain: null })))
+      .returning({ id: sources.id });
+    try {
+      // Both fixtures have no attempt yet, so they sit at the front of the queue.
+      const [a, b] = await Promise.all([claimBatch(db, 1), claimBatch(db, 1)]);
+      const got = [...a, ...b].map((s) => s.id);
+      expect(got).toHaveLength(2);
+      expect(new Set(got).size).toBe(2);
+      for (const s of [...a, ...b]) {
+        expect(s.lastStatus).toBe("polling");
+        expect(s.lastAttemptAt).not.toBeNull();
+      }
+    } finally {
+      await db.delete(sources).where(sql`${sources.id} in (${sql.join(inserted.map((r) => sql`${r.id}::uuid`), sql`, `)})`);
+    }
   });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "sources" DROP COLUMN "last_polled_at";

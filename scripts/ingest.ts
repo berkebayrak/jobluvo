@@ -12,7 +12,7 @@ async function main() {
   let runs: SourceRun[];
   if (arg && !/^\d+$/.test(arg)) {
     const db = dbPool();
-    // Claimed like any other poll, so last_polled_at is stamped and the
+    // Claimed like any other poll, so last_attempt_at is stamped and the
     // scheduler never sees a polled source with a null.
     const rows = await claimTenant(db, arg);
     if (!rows.length) {

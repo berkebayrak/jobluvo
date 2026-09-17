@@ -29,6 +29,20 @@
       "when": 1789636241431,
       "tag": "0003_phase0_swipe_upsert",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789640563929,
+      "tag": "0004_phase0_attempt_success",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789640565328,
+      "tag": "0005_phase0_drop_last_polled",
+      "breakpoints": true
     }
   ]
 }

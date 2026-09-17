@@ -182,14 +182,20 @@ export async function editFact(db: DbPool | Tx, userId: string, edit: { id: stri
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
     const [fact] = await tx
-      .select({ id: profileFacts.id, kind: profileFacts.kind, status: profileFacts.status, version: profileFacts.version })
+      .select({ id: profileFacts.id, kind: profileFacts.kind, status: profileFacts.status, version: profileFacts.version, data: profileFacts.data })
       .from(profileFacts)
       .where(and(eq(profileFacts.userId, userId), eq(profileFacts.id, edit.id)));
     if (!fact) throw new EditRefused("not_found", "fact not found");
     if (fact.status !== "extracted") throw new EditRefused("not_waiting", "only a fact waiting for your decision can be edited here");
     if (fact.version !== edit.version) throw new EditRefused("changed", "this fact changed since the page loaded, check it again");
-    const schema = FACT_SCHEMAS[fact.kind as keyof typeof FACT_SCHEMAS];
-    const parsed = schema.safeParse(edit.data);
+    // A kind the editor offers but no schema covers is a deliberate refusal, not a thrown TypeError (review three finding 6).
+    const schema = Object.hasOwn(FACT_SCHEMAS, fact.kind) ? FACT_SCHEMAS[fact.kind as keyof typeof FACT_SCHEMAS] : null;
+    if (!schema) throw new EditRefused("invalid", `a ${fact.kind} fact cannot be edited here`);
+    // The evidence a skill carries in its data is the resume's own words for it, read by the scorer and the packet; an edit that
+    // does not mention it keeps it, so editing the years cannot silently erase it. The form shows it, so it can be changed on purpose.
+    const old = fact.data as Record<string, unknown>;
+    const data = fact.kind === "skill" && edit.data.evidence === undefined && typeof old.evidence === "string" ? { ...edit.data, evidence: old.evidence } : edit.data;
+    const parsed = schema.safeParse(data);
     if (!parsed.success) throw new EditRefused("invalid", parsed.error.issues.map((i) => `${i.path.join(".") || "value"}: ${i.message}`).join("; "));
     const [row] = await tx
       .update(profileFacts)

@@ -98,6 +98,24 @@ export const answerFact = z.object({
   answer: z.string().min(1),
 });
 
+/** The contact line extraction reads: name, email and location as written. At least one of them. */
+export const contactFact = z
+  .object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    location: z.string().optional(),
+  })
+  .refine((c) => [c.name, c.email, c.location].some((v) => v && v.trim()), { message: "a contact needs a name, an email or a location" });
+
+/** A link on the resume, as written; the scheme is not required because resumes print "linkedin.com/in/jack". */
+export const linkFact = z.object({ url: z.string().min(1) });
+
+/** A project the user names, with optional lines. Extraction does not produce these yet; the editor offers the kind, so it has a shape. */
+export const projectFact = z.object({
+  name: z.string().min(1),
+  notes: z.array(z.string()).optional(),
+});
+
 export type EmploymentFact = z.infer<typeof employmentFact>;
 export type EducationFact = z.infer<typeof educationFact>;
 export type SkillFact = z.infer<typeof skillFact>;
@@ -107,6 +125,7 @@ export type PreferenceFact = z.infer<typeof preferenceFact>;
 export type AuthorizationFact = z.infer<typeof authorizationFact>;
 export type SponsorshipFact = z.infer<typeof sponsorshipFact>;
 
+/** Every kind the editor may offer has a schema here; an edit on a kind without one is refused, never thrown (D-026). */
 export const FACT_SCHEMAS = {
   preference: preferenceFact,
   authorization: authorizationFact,
@@ -115,4 +134,7 @@ export const FACT_SCHEMAS = {
   education: educationFact,
   skill: skillFact,
   answer: answerFact,
+  contact: contactFact,
+  link: linkFact,
+  project: projectFact,
 } as const;

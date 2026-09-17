@@ -160,7 +160,12 @@ export async function cellStats(db: DbPool | Tx, by: "family" | "length" | "seni
  * attempts, so this is a floor on the calls and the worst case prices each
  * row at the kind's mean cost per call, beside the recorded spend. It is
  * the counter for the timeout budgets in D-015: a rising count says the
- * margin over the observed max was wrong. Extraction stores no error text
+ * margin over the observed max was wrong. The floor depends on the mark
+ * surviving the store: matches.error keeps the raw message, and
+ * packets.error is assembled by `storedError` in packet/run.ts so the last
+ * attempt's message is never truncated away behind an earlier attempt's
+ * text. Whoever changes either error text changes what this counts.
+ * Extraction stores no error text
  * on a row yet, so its unknown calls are not countable until the document
  * gets a status column (review finding 5, item 9).
  */

@@ -6,7 +6,7 @@ import type { ScoringJob } from "@/server/match/score";
 import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { resumeFacts } from "@/server/match/profile";
 import { unknownCostStats } from "@/server/match/report";
-import { tailorJob } from "./run";
+import { ERROR_STORE, tailorJob } from "./run";
 import * as tailor from "./tailor";
 
 vi.mock("./tailor", async (importOriginal) => {
@@ -301,6 +301,30 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       expect(rows(after).unknownRows! - rows(before).unknownRows!).toBe(1);
       expect(rows(after).usdWorstCase! - rows(before).usdWorstCase!).toBeCloseTo(rows(after).usdMeanPerCall, 4);
       expect(after.find((x) => x.kind === "extract")?.unknownRows ?? null).toBeNull();
+    });
+  });
+
+  it("a long parse failure, then a timeout: the stored error keeps the unknown cost mark and the count still moves by one", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      const before = await unknownCostStats(tx);
+      // Thirty changes with every field missing: the schema error lists ninety issue paths, well over the 500 character store on its own.
+      const fat = { ...invented, text: JSON.stringify({ summary: null, summary_facts: [], changes: Array.from({ length: 30 }, () => ({})), skills: [] }) };
+      call()
+        .mockResolvedValueOnce(fat)
+        .mockRejectedValueOnce(new tailor.TailorError(`call timed out after 20000ms, ${UNKNOWN_COST_MARK}: the provider may have completed and billed it`, "gpt-5.6-luna", null, 0, 20000));
+      const out = await tailorJob(tx, facts, job);
+      expect(out.status).toBe("failed");
+      expect(out.attemptLog[0].error!.length).toBeGreaterThan(ERROR_STORE);
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.error!.length).toBeLessThanOrEqual(ERROR_STORE);
+      expect(p.error).toContain("attempt 1 failed: model output does not match the change set schema");
+      expect(p.error).toContain("...");
+      expect(p.error).toContain(`attempt 2 failed: call timed out after 20000ms, ${UNKNOWN_COST_MARK}`);
+      expect(p.error).toBe(out.error);
+      const after = await unknownCostStats(tx);
+      const rows = (s: typeof after) => s.find((x) => x.kind === "tailor")!;
+      expect(rows(after).unknownRows! - rows(before).unknownRows!).toBe(1);
     });
   });
 

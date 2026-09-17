@@ -151,6 +151,7 @@ interface FeedPage {
   jobs: FeedJob[];
   total: number;
   inventory: { jobs: number; companies: number };
+  hidden: { total: number; reasons: Record<string, number> };
   facets: { loc: string[]; workplace: string[]; co: string[]; level: string[] };
   viewer?: Viewer;
 }
@@ -182,6 +183,7 @@ function JobsScreen() {
   const [rows, setRows] = React.useState<FeedJob[] | null>(null);
   const [total, setTotal] = React.useState(0);
   const [inventory, setInventory] = React.useState({ jobs: 0, companies: 0 });
+  const [hidden, setHidden] = React.useState(0);
   const [facets, setFacets] = React.useState(EMPTY_FACETS);
   const [viewer, setViewer] = React.useState<Viewer | undefined>(undefined);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -210,6 +212,7 @@ function JobsScreen() {
           setRows(d.jobs);
           setTotal(d.total);
           setInventory(d.inventory);
+          setHidden(d.hidden?.total ?? 0);
           setFacets(d.facets);
           setViewer(d.viewer);
           setLoadError(null);
@@ -311,7 +314,7 @@ function JobsScreen() {
       ? "Loading jobs."
       : activeCount > 0 || query
         ? `${num(total)} of ${num(inventory.jobs)} jobs shown.`
-        : `${num(inventory.jobs)} open jobs from ${num(inventory.companies)} companies. Scores arrive once your profile is confirmed.`;
+        : `${num(inventory.jobs)} open jobs from ${num(inventory.companies)} companies.${hidden ? ` ${num(hidden)} more do not fit your profile.` : ""} Scores arrive once your profile is confirmed.`;
 
   return (
     <>

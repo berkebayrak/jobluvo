@@ -1,12 +1,17 @@
 import { sql, type SQL } from "drizzle-orm";
 import { dbHttp } from "@/db/client";
 import type { JobLocation } from "@/db/schema";
+import { hardFilterSql, type FilterFacts } from "@/server/match/hardFilter";
 
 /**
  * The job feed for one user: one card per dedupe group, the canonical job
  * being the earliest open member; closed jobs, jobs still waiting for a
  * SmartRecruiters detail, and jobs the user has swiped are excluded as live
  * conditions, so Undo brings a job straight back.
+ *
+ * The hard filter is applied here, before anything is ranked or shown
+ * (JOB-06). Jobs it hides are counted by reason so the page can say how many
+ * the profile keeps out, rather than silently showing fewer.
  *
  * Filtering and paging happen here, not on the client. The page shows the
  * inventory's real size and company count, every filter option that exists
@@ -61,10 +66,12 @@ export interface FeedPage {
   jobs: FeedJob[];
   offset: number;
   limit: number;
-  /** Jobs matching the filters, across the whole inventory. */
+  /** Jobs matching the chips, across the whole inventory. */
   total: number;
-  /** The inventory before any filter: what the user has to choose from. */
+  /** The inventory before any chip: open jobs that pass the user's hard filter. */
   inventory: { jobs: number; companies: number };
+  /** Open jobs the hard filter keeps out, by first failing reason. Empty with no profile. */
+  hidden: { total: number; reasons: Record<string, number> };
   /** Every value present in the inventory, so an option always matches something. */
   facets: { loc: string[]; workplace: string[]; co: string[]; level: string[] };
 }
@@ -85,13 +92,16 @@ const LOCATION_LABEL = sql`case
 
 const textList = (xs: string[]) => sql.join(xs.map((x) => sql`${x}`), sql`, `);
 
-function whereFor(userId: string, f: FeedFilters): SQL {
-  const parts: SQL[] = [
-    sql`j.closed_at is null`,
-    sql`not j.detail_pending`,
-    sql`(l.job_id is null or g.canonical_job_id = j.id)`,
-    sql`not exists (select 1 from swipe_decisions s where s.user_id = ${userId} and s.job_id = j.id)`,
-  ];
+/** Open, visible to the user: not closed, not waiting for a detail, canonical, not swiped. */
+function visibleWhere(userId: string): SQL {
+  return sql`j.closed_at is null
+    and not j.detail_pending
+    and (l.job_id is null or g.canonical_job_id = j.id)
+    and not exists (select 1 from swipe_decisions s where s.user_id = ${userId} and s.job_id = j.id)`;
+}
+
+function chipsWhere(f: FeedFilters): SQL[] {
+  const parts: SQL[] = [];
   const hay = (word: string) => {
     const like = `%${word}%`;
     return sql`(j.title ilike ${like} or j.company_name ilike ${like}
@@ -105,7 +115,7 @@ function whereFor(userId: string, f: FeedFilters): SQL {
   if (f.level?.length) parts.push(sql`j.seniority in (${textList(f.level)})`);
   if (f.sponsor) parts.push(sql`j.sponsorship = 'offered'`);
   for (const w of f.exclude ?? []) if (w.trim()) parts.push(sql`not ${hay(w.trim())}`);
-  return sql.join(parts, sql` and `);
+  return parts;
 }
 
 const FROM = sql`from jobs j
@@ -114,16 +124,19 @@ const FROM = sql`from jobs j
 
 export async function feedForUser(
   userId: string,
-  opts: { limit?: number; offset?: number; filters?: FeedFilters } = {},
+  opts: { limit?: number; offset?: number; filters?: FeedFilters; facts?: FilterFacts | null } = {},
 ): Promise<FeedPage> {
   const limit = Math.min(Math.max(opts.limit ?? FEED_PAGE, 1), 500);
   const offset = Math.max(opts.offset ?? 0, 0);
-  const filters = opts.filters ?? {};
   const db = dbHttp();
-  const where = whereFor(userId, filters);
-  const inventoryWhere = whereFor(userId, {});
 
-  const [page, counts, facets] = await Promise.all([
+  const visible = visibleWhere(userId);
+  const reason = opts.facts ? hardFilterSql(opts.facts) : null;
+  const passes: SQL = reason ? sql`(${reason}) is null` : sql`true`;
+  const inventoryWhere = sql`${visible} and ${passes}`;
+  const where = sql.join([inventoryWhere, ...chipsWhere(opts.filters ?? {})], sql` and `);
+
+  const [page, counts, facets, hidden] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select
         j.id, l.group_id, j.family, j.company_name, j.company_domain, j.title, j.locations, j.workplace,
@@ -156,16 +169,24 @@ export async function feedForUser(
       select distinct 'level', j.seniority ${FROM} where ${inventoryWhere} and j.seniority is not null
       order by 1, 2
     `),
+    reason
+      ? db.execute<{ reason: string; n: number }>(sql`
+          select (${reason}) as reason, count(*)::int as n ${FROM} where ${visible} and (${reason}) is not null group by 1 order by 2 desc
+        `)
+      : Promise.resolve({ rows: [] as { reason: string; n: number }[] }),
   ]);
 
   const c = counts.rows[0];
   const facet = (kind: string) => facets.rows.filter((r) => r.kind === kind).map((r) => r.value);
+  const reasons: Record<string, number> = {};
+  for (const r of hidden.rows) reasons[r.reason] = Number(r.n);
   return {
     jobs: page.rows.map(rowToJob),
     offset,
     limit,
     total: Number(c?.total ?? 0),
     inventory: { jobs: Number(c?.inventory_jobs ?? 0), companies: Number(c?.inventory_companies ?? 0) },
+    hidden: { total: Object.values(reasons).reduce((a, b) => a + b, 0), reasons },
     facets: { loc: facet("loc"), workplace: facet("workplace"), co: facet("co"), level: facet("level") },
   };
 }

@@ -76,6 +76,8 @@ export function locationLabel(j: FeedJob): string {
 
 export interface Viewer {
   needsSponsorship: boolean;
+  /** False until a confirmed preference fact exists; the feed is unfiltered until then. */
+  hasProfile?: boolean;
 }
 
 /** The first 120 characters of a sentence, cut at a word, without a leading list dash from the source HTML. */

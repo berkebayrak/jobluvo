@@ -1,5 +1,6 @@
-import { neon } from "@neondatabase/serverless";
-import { firstFailingReasonSql } from "@/server/match/hardFilter";
+import { sql } from "drizzle-orm";
+import { dbHttp } from "@/db/client";
+import { hardFilterSql, type FilterFacts } from "@/server/match/hardFilter";
 import { authorizationFact, preferenceFact, sponsorshipFact, type PreferenceFact } from "@/server/profile/facts";
 
 /**
@@ -25,14 +26,13 @@ const SCENARIOS: { name: string; prefs: PreferenceFact }[] = [
 ];
 
 async function main() {
-  const sql = neon(process.env.DATABASE_URL!);
+  const db = dbHttp();
 
-  const facts = (await sql`
-    select f.kind, f.data from profile_facts f join users u on u.id = f.user_id
-    where u.email = 'jack.miller@jobluvo.com' and f.status = 'confirmed' and f.kind in ('authorization', 'sponsorship', 'preference')`) as {
-    kind: string;
-    data: unknown;
-  }[];
+  const facts = (
+    await db.execute<{ kind: string; data: unknown }>(sql`
+      select f.kind, f.data from profile_facts f join users u on u.id = f.user_id
+      where u.email = 'jack.miller@jobluvo.com' and f.status = 'confirmed' and f.kind in ('authorization', 'sponsorship', 'preference')`)
+  ).rows;
   const auth = facts.filter((f) => f.kind === "authorization").map((f) => authorizationFact.parse(f.data));
   const sponsorshipRow = facts.find((f) => f.kind === "sponsorship");
   const sponsorship = sponsorshipRow ? sponsorshipFact.parse(sponsorshipRow.data) : null;
@@ -46,33 +46,40 @@ async function main() {
   );
   console.log(`stored preference: ${JSON.stringify(preferenceFact.parse(stored.data))}\n`);
 
-  const base = `from jobs j join sources s on s.id = j.source_id where j.closed_at is null`;
+  const base = sql`from jobs j join sources s on s.id = j.source_id where j.closed_at is null`;
   const matrix: Record<string, unknown>[] = [];
   const byFamily: Record<string, Record<string, unknown>> = {};
   for (const sc of SCENARIOS) {
-    const reason = firstFailingReasonSql(preferenceFact.parse(sc.prefs), auth, sponsorship);
-    const rows = (await sql.query(
-      `select coalesce(${reason}, 'pass') as reason, count(*)::int as jobs ${base} group by 1 order by 2 desc`,
-    )) as { reason: string; jobs: number }[];
-    const total = rows.reduce((n, r) => n + r.jobs, 0);
-    const pass = rows.find((r) => r.reason === "pass")?.jobs ?? 0;
+    const f: FilterFacts = { prefs: preferenceFact.parse(sc.prefs), auth, sponsorship };
+    const reason = hardFilterSql(f);
+    const rows = (
+      await db.execute<{ reason: string; jobs: number }>(
+        sql`select coalesce(${reason}, 'pass') as reason, count(*)::int as jobs ${base} group by 1 order by 2 desc`,
+      )
+    ).rows;
+    const total = rows.reduce((n, r) => n + Number(r.jobs), 0);
+    const pass = Number(rows.find((r) => r.reason === "pass")?.jobs ?? 0);
     const row: Record<string, unknown> = { scenario: sc.name, pass, "pass %": Math.round((1000 * pass) / total) / 10 };
-    for (const r of rows) if (r.reason !== "pass") row[r.reason] = r.jobs;
+    for (const r of rows) if (r.reason !== "pass") row[r.reason] = Number(r.jobs);
     matrix.push(row);
 
-    const fam = (await sql.query(
-      `select s.family, count(*)::int as jobs, count(*) filter (where ${reason} is null)::int as pass ${base} group by 1 order by 2 desc`,
-    )) as { family: string; jobs: number; pass: number }[];
-    for (const f of fam) {
-      byFamily[f.family] ??= { family: f.family, jobs: f.jobs };
-      byFamily[f.family][sc.name] = f.pass;
+    const fam = (
+      await db.execute<{ family: string; jobs: number; pass: number }>(
+        sql`select s.family, count(*)::int as jobs, count(*) filter (where (${reason}) is null)::int as pass ${base} group by 1 order by 2 desc`,
+      )
+    ).rows;
+    for (const r of fam) {
+      byFamily[r.family] ??= { family: r.family, jobs: Number(r.jobs) };
+      byFamily[r.family][sc.name] = Number(r.pass);
     }
   }
 
   console.log("quiet postings, sponsorship unknown, that state an eligibility restriction");
   console.table(
-    await sql.query(`select coalesce(j.eligibility::text, '(none)') as restriction, coalesce(j.eligibility_country, '') as country,
-      count(*)::int as jobs ${base} and j.sponsorship = 'unknown' group by 1, 2 order by 3 desc`),
+    (
+      await db.execute(sql`select coalesce(j.eligibility::text, '(none)') as restriction, coalesce(j.eligibility_country, '') as country,
+      count(*)::int as jobs ${base} and j.sponsorship = 'unknown' group by 1, 2 order by 3 desc`)
+    ).rows,
   );
 
   console.log("jobs passing, and the first failing reason for the rest");

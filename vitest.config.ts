@@ -5,6 +5,10 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
+    setupFiles: ["./vitest.setup.ts"],
+    /* The database backed tests share one connection pool; keep them in one worker. */
+    fileParallelism: false,
+    testTimeout: 30_000,
   },
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

@@ -7,7 +7,8 @@ import { loadScoringJobs } from "@/server/match/run";
 import type { ScoringJob } from "@/server/match/score";
 import { applyChanges, applyDocument, baseResume, factEntries, resumeHash, type Applied, type ChangeSet } from "./resume";
 import { parseChanges, parseDocument, tailorCall, TailorError, type TailorMode, type TailorResult } from "./tailor";
-import { factSet, isHard, needsReview, validateChangeSet } from "./validate";
+import { lemmasOf } from "./entities";
+import { actionable, factSet, isHard, needsReview, validateChangeSet } from "./validate";
 
 /*
  * One packet: facts and posting in, a validated tailored resume out, or an
@@ -19,10 +20,17 @@ import { factSet, isHard, needsReview, validateChangeSet } from "./validate";
  *
  * Each attempt owns its candidate, its findings and its outcome. The packet
  * is the last attempt, and a resume is stored only when that attempt parsed
- * and passed the validator. Nothing from an earlier attempt is reused: a
+ * and passed the validator. Nothing from a rejected attempt is reused: a
  * rejected candidate cannot become ready because the retry failed to parse,
  * timed out or came back incomplete. The earlier attempts stay in the error
  * text for diagnostics.
+ *
+ * A held answer earns a retry too when its findings are ones the model can
+ * act on, each naming the word to replace (D-022). That retry is asked to
+ * substitute the cited fact's own word, never to drop the line. If it comes
+ * back ready or held, the packet is the retry; if it comes back rejected or
+ * fails, the packet stays the held first answer, which was validated and is
+ * lost by nothing.
  *
  * Nothing here decides which jobs get a packet. In phase 0 that is the
  * sample and `npm run tailor`; in the product it is the user's apply
@@ -140,6 +148,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
   const store = opts.store ?? true;
   const entries = factEntries(facts);
   const base = baseResume(facts);
+  const posting = lemmasOf(`${job.title}\n${job.descriptionCore}`);
   const [jobRow] = await db.select({ contentHash: jobs.contentHash }).from(jobs).where(eq(jobs.id, job.id));
   const contentHash = jobRow?.contentHash ?? "";
   // A validator that throws on the facts is a code defect, and the packet records it as failed with no call made; a run that
@@ -177,8 +186,9 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
   if (factsError) log.push({ n: 0, outcome: "failed", candidate: null, findings: [], error: factsError });
   for (let n = 1; n <= 2 && set; n += 1) {
     const previous = log[log.length - 1];
-    // Only a rejection carries anything into the retry: the hard findings to fix. A parse failure gets a second chance with nothing to fix.
-    const retryOf = previous?.outcome === "invalid" ? previous.findings.filter((f) => f.level === "hard") : undefined;
+    // A rejection carries its hard findings into the retry; a held answer carries the findings the model can act on. A parse failure gets a second chance with nothing to fix.
+    const retryOf =
+      previous?.outcome === "invalid" ? previous.findings.filter((f) => f.level === "hard") : previous?.outcome === "needs_review" ? previous.findings.filter(actionable) : undefined;
     let call: TailorResult;
     try {
       call = await tailorCall(entries, job, { mode, model, retryOf });
@@ -198,26 +208,29 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     }
     let findings: PacketFinding[];
     try {
-      findings = validateChangeSet(candidate.cs, base, set);
+      findings = validateChangeSet(candidate.cs, base, set, posting);
     } catch (e) {
       // The same defect on a second answer would throw again; no paid retry for a code defect. The call already made keeps its cost row.
       log.push({ n, outcome: "failed", candidate: null, findings: [], error: `validator failed: ${e instanceof Error ? e.message : String(e)}` });
       break;
     }
-    // Only a hard finding earns the retry: it is a contradiction the model can fix from the finding. A review
-    // finding is the validator saying it could not read one side, and a retry cannot resolve that; it can only make
-    // the model drop the line to be safe, an omission with nobody deciding it. So a held packet is stored as it is.
+    // A hard finding earns the retry, and so does a review finding the model can act on: both name what to replace. A
+    // review finding that expresses uncertainty does not; a retry cannot resolve what the validator could not read, it
+    // can only make the model drop the line, an omission with nobody deciding it.
     const outcome: AttemptOutcome = isHard(findings) ? "invalid" : needsReview(findings) ? "needs_review" : "ready";
     log.push({ n, outcome, candidate, findings });
-    if (outcome !== "invalid") break;
+    if (!(outcome === "invalid" || (outcome === "needs_review" && findings.some(actionable)))) break;
   }
 
   // The packet is the last attempt. A resume exists only when that attempt itself parsed and had no hard finding;
   // a held packet keeps its resume for the review screen, an invalid one keeps its changes and findings, a failed one keeps neither.
-  const final = log[log.length - 1];
+  const last = log[log.length - 1];
+  const before = log[log.length - 2];
+  // A retry of a held answer that came back rejected or failed does not replace it: the held answer was validated.
+  const final = before?.outcome === "needs_review" && (last.outcome === "invalid" || last.outcome === "failed") ? before : last;
   const status = final.outcome;
   const resume = (final.outcome === "ready" || final.outcome === "needs_review") && final.candidate ? final.candidate.applied.resume : null;
-  const error = final.error ? storedError(log) : undefined;
+  const error = last.error ? storedError(log) : undefined;
   const changes = final.candidate?.cs.changes ?? [];
   const outcome: TailorOutcome = {
     jobId: job.id,

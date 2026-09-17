@@ -166,19 +166,23 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       expect(p.status).toBe("invalid");
       expect(p.resume).toBeNull();
       expect(p.findings.filter((f) => f.level === "hard")).toHaveLength(2);
-      // "Leader" opens the summary and is on no fact: soft, it travels with the packet (D-017).
-      expect(p.findings.filter((f) => f.level === "soft").map((f) => f.value)).toEqual(["Leader"]);
+      // "Leader" opens the summary, is not a verb and is on no fact: held (D-022); the packet is invalid on its hard findings regardless.
+      expect(p.findings.filter((f) => f.level === "review").map((f) => f.value)).toEqual(["Leader"]);
     });
   });
 
-  it("a name in no fact holds the packet for review with its resume stored, no retry, and nothing downstream can consume it", async () => {
+  it("a name in no fact holds the packet for review with its resume stored, one retry that names the word, and nothing downstream can consume it", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
-      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] }]));
+      const line = { bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] };
+      call().mockResolvedValueOnce(answer([line])).mockResolvedValueOnce(answer([line]));
       const held = await tailorJob(tx, facts, job);
       expect(held.status).toBe("needs_review");
-      expect(held.attempts).toBe(1);
-      expect(call()).toHaveBeenCalledTimes(1);
+      // The findings name what to replace, so the model gets one retry carrying them (D-022); the same answer again is stored held.
+      expect(held.attempts).toBe(2);
+      expect(call()).toHaveBeenCalledTimes(2);
+      const retry = call().mock.calls[1][2];
+      expect(retry.retryOf?.map((f) => f.value)).toEqual(["num:3", "KPI"]);
       // "with KPI reporting" attaches words to the 3 year program that its fact does not have, and "KPI" is on no fact: two holds, one packet.
       expect(held.findings.map((f) => [f.level, f.value])).toEqual([
         ["review", "num:3"],
@@ -196,15 +200,42 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
     });
   });
 
-  it("a soft finding travels with a ready packet, and a call that fails still writes its cost row", async () => {
+  it("a retry that substitutes the fact's word clears the hold; one that comes back rejected does not replace the held answer", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
-      // "Owned" opens the line and is on no fact: soft, measured at 12 of 12 false positives (D-017).
+      const heldLine = { bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] };
+      call().mockResolvedValueOnce(answer([heldLine])).mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      const cleared = await tailorJob(tx, facts, job);
+      expect(cleared.status).toBe("ready");
+      expect(cleared.attempts).toBe(2);
+      expect(cleared.findings).toEqual([]);
+      expect(cleared.attemptLog.map((a) => a.outcome)).toEqual(["needs_review", "ready"]);
+      expect(cleared.resume?.experience[0].bullets[0].text).toBe("Ran a 3 year cost program that cut cost 11 percent.");
+
+      call().mockReset();
+      call().mockResolvedValueOnce(answer([heldLine])).mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year program that cut cost 14 percent.", facts: ["R1.1"] }]));
+      const kept = await tailorJob(tx, facts, job);
+      expect(kept.status).toBe("needs_review");
+      expect(kept.attempts).toBe(2);
+      expect(kept.attemptLog.map((a) => a.outcome)).toEqual(["needs_review", "invalid"]);
+      // The held answer was validated; the rejected retry does not take its place.
+      expect(kept.resume?.experience[0].bullets[0].text).toBe(heldLine.text);
+      expect(kept.findings.map((f) => f.value)).toEqual(["num:3", "KPI"]);
+      const [row] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(row.status).toBe("needs_review");
+      expect(row.attempts).toBe(2);
+    });
+  });
+
+  it("a clean rewording is ready with no findings, and a call that fails still writes its cost row", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      // "Owned" opens the line: a verb, not a name (D-022). Nothing is held and nothing travels.
       call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Owned a 3 year program that cut cost 11 percent.", facts: ["R1.1"] }]));
       const ready = await tailorJob(tx, facts, job);
       expect(ready.status).toBe("ready");
       expect(ready.attempts).toBe(1);
-      expect(ready.findings.map((f) => [f.level, f.value, f.detail])).toEqual([["soft", "Owned", "sentence initial"]]);
+      expect(ready.findings).toEqual([]);
 
       call().mockReset();
       call().mockRejectedValue(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));

@@ -40,25 +40,21 @@ Both invalid packets were the same sentence on one profile, "managing six", four
 
 This is the one place the held rate is stated. Every earlier figure in the decision log points here and says superseded. When the rate changes, this section changes and the entry that changed it says so.
 
-| Held rate, 18 September 2026, under rules 1 and 2 (D-021, D-022) | Packets |
+**The live number is the fresh one.** In a sentence about what Jobluvo does, the held rate is about one in four: 20 of 80 packets on four fresh 20 job samples on 18 September 2026 under rules 1 and 2 with the posting noun in claim position (D-023). The stored packets' figure below describes history, packets the model wrote under an older prompt against an older profile, and it is what the status column states.
+
+| Held rate, 18 September 2026 | Packets |
 |---|---|
-| Packets with a candidate | 101 |
-| Held for review | 37, 36.6 percent |
-| Of those, by rule 1, an entity, posting noun or responsibility the facts do not give | 19 |
-| Of those, by rule 2, a value bound to words its fact never gave | 14 |
-| Of those, by the claim validator before both, D-017 | 4 |
-| Ready | 57 |
-| Invalid | 7 |
+| Fresh answers, four 20 job samples, final answers | 58 ready, 20 held, 2 invalid, of 80 |
+| The same answers read under the rule before the narrowing | 14 ready, 64 held, 2 invalid, of 80 |
+| Stored packets, replayed and restamped | 65 ready, 29 held, 7 invalid, of 101 |
 
-The limit, which goes beside this figure every time it is quoted: one seeded resume, one user, one vocabulary, bullets only, no summary. The true rate on a real population is unknown and could be materially different in either direction. Nobody designs capacity from 36.6 percent and nobody assumes it will fall.
+The limit, which goes beside this figure every time it is quoted: one user, the current uploaded profile, and every fresh sample fell entirely in the Ashby family, the stratified sample's draw (review three finding 17). The stored figure carries its own: one seeded resume, bullets only, no summary. The true rate on a real population is unknown and could be materially different in either direction. Nobody designs capacity from one in four and nobody assumes it will fall.
 
-This is a product fact, not only a measurement (D-022). At this rate about two in five applications are held for a person to read before anything could be sent. DOC-03, the packet review screen, is a primary flow that every user meets several times a week, to be designed and staffed as such, or the rules are retuned against real users; it is not a fallback screen before submission. A held packet costs nothing today because nothing is submitted, DOC-03 does not exist and the resume is kept for a person; a shipped invention is permanent, so while holds are free the rules buy coverage. That reasoning inverts the day DOC-03 ships.
+This is a product fact, not only a measurement (D-022). At one in four, DOC-03, the packet review screen, is a primary flow, designed and staffed as such, not a fallback screen before submission. A held packet costs nothing today because nothing is submitted, DOC-03 does not exist and the resume is kept for a person; a shipped invention is permanent. That reasoning inverts the day DOC-03 ships.
 
-On fresh answers the rate is higher: two 20 job samples on 18 September under the same rules, on the current uploaded profile, held 15 of 20 and 13 of 20 (D-022, "The retry, measured"). Same user, different profile, one board family. The figure above is the stored packets' rate because that is what the status column states; the fresh rate is the one that says how far the true rate can move.
+The tailoring term measured with the retry on the four fresh samples: USD 0.0148, 0.0139, 0.0139 and 0.0153 over 20 packets each, 36, 31, 34 and 37 calls, USD 0.00070 to 0.00077 per packet as each sample's total over its 20, against USD 0.00078 in the function above. The narrowing put the retry inclusive term back under the published figure. Those samples are Ashby only, and the function's tailoring row is restated only from a sample that spans the families the phase 0 sample did, or it says Ashby only and not comparable (D-023).
 
-The tailoring term measured with the retry on those samples: USD 0.0213 over 20 packets and USD 0.0162 over 20 packets, 39 calls each, USD 0.00107 and 0.00081 per packet, against USD 0.00078 in the function above. The function's tailoring row and the headline's "under USD 0.0009" are stated for the earlier rule and are to be restated when the band table is recomputed with this term; until then this paragraph is the current tailoring figure.
-
-Superseded figures, each true when written: 4.0 percent on 17 September under the claim validator (D-017), computed by a defective replay; 4.0 percent on 17 September confirmed by the corrected replay (#35, the correction under D-017); 15.6 percent of the 90 packets ready that day under rule 2 (D-021); 17.8 percent of 101 on 18 September under rule 2 alone, the figure this section carried before rule 1.
+Superseded figures, each true when written: 4.0 percent on 17 September under the claim validator (D-017), computed by a defective replay; 4.0 percent on 17 September confirmed by the corrected replay (#35); 15.6 percent of the 90 packets ready that day under rule 2 (D-021); 17.8 percent of 101 on 18 September under rule 2 alone; 36.6 percent of 101 stored and seven in ten on fresh answers on 18 September under rule 1 with the posting noun anywhere (D-022).
 
 ## What the extraction accuracy is not
 

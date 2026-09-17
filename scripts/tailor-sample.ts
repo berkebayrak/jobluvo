@@ -61,6 +61,17 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
     return `${xs.length}: now ready ${n("ready")}, held ${n("needs_review")}, invalid ${n("invalid")}, failed ${n("failed")}`;
   };
   console.log(`retried after a held first answer ${after("needs_review")}; retried after a rejected first answer ${after("invalid")}`);
+  // What held or rejected the first answers, what holds the packets as stored, and what the retry cleared: by message, counted by edit.
+  const byMessage = (fs: { level: string; message: string }[]) => {
+    const m = new Map<string, number>();
+    for (const f of fs) m.set(`${f.level}: ${f.message}`, (m.get(`${f.level}: ${f.message}`) ?? 0) + 1);
+    return Object.fromEntries([...m.entries()].sort((a, b) => b[1] - a[1]));
+  };
+  console.log("  first answers, findings by message:", JSON.stringify(byMessage(outcomes.flatMap((o) => o.attemptLog[0]?.findings ?? []))));
+  console.log("  stored packets, findings by message:", JSON.stringify(byMessage(outcomes.flatMap((o) => o.findings.filter((f) => f.level !== "soft")))));
+  const cleared = outcomes.filter((o) => o.attempts > 1 && o.status === "ready").flatMap((o) => o.attemptLog[0]?.findings ?? []);
+  console.log("  findings the retry cleared, by message:", JSON.stringify(byMessage(cleared)));
+  console.log("  packets held as stored, by the reasons that hold them:", JSON.stringify(byMessage(outcomes.filter((o) => o.status === "needs_review").map((o) => ({ level: "packet", message: [...new Set(o.findings.filter((f) => f.level === "review").map((f) => f.message))].sort().join(" + ") })))));
   const hard = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "hard"));
   const soft = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "soft"));
   console.log(

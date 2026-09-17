@@ -14,7 +14,12 @@ import { normaliseNumbers } from "./normalise";
  *   sentence start  the first word of a sentence, when it is not a verb the
  *                   resume style uses and does not end in "ed" or "ing"
  *   posting         a noun shaped word the job posting uses and the profile
- *                   does not, the model reaching into the job description
+ *                   does not, the model reaching into the job description,
+ *                   and only where it stands in a claim position: inside the
+ *                   object of a responsibility or creation verb. "Set up
+ *                   feedback loops" claims loops; "with attention to detail"
+ *                   is the posting's vocabulary in a rewording, which is
+ *                   what tailoring is for (D-023)
  *   object          the head noun of the object of a responsibility or
  *                   creation verb: "Led recruitment of analysts" claims
  *                   recruitment
@@ -70,7 +75,18 @@ export const RESPONSIBILITY_VERBS = new Set([
   "hired", "hire", "hiring", "negotiated", "negotiate", "negotiating", "executed", "execute", "executing", "spearheaded", "championed", "championing", "orchestrated", "steered",
   "automated", "automate", "automating", "prepared", "prepare", "preparing", "presented", "present", "presenting", "screened", "screen", "screening",
   "sized", "size", "sizing", "maintained", "maintain", "maintaining", "redesigned", "redesign", "coached", "coach", "coaching", "reported", "report", "reporting",
+  // Third person, the summary's voice: "who builds operating systems, develops teams".
+  "develops", "designs", "creates", "launches", "implements", "establishes", "sets", "recruits", "hires", "negotiates", "executes", "automates", "prepares", "presents",
+  "screens", "sizes", "maintains", "redesigns", "coaches", "reports", "owns", "manages", "leads", "runs", "heads", "oversees", "drives", "handles", "directs", "coordinates", "supervises", "delivers", "builds",
 ]);
+
+/**
+ * The summary claims without a verb: "experience in", "experienced in",
+ * "expertise in", "skilled in", "background in". What follows is a claim
+ * position like a verb's object, and a posting noun there is held.
+ */
+export const CLAIM_OPENERS = new Set(["experience", "experienced", "expertise", "skilled", "background", "proficient", "specialising", "specializing", "specialist", "track", "record"]);
+const PARTICLES = new Set(["up", "out", "off", "down", "over", "through"]);
 
 /** Objects that name no domain: "present progress", "deliver results". Claiming one asserts nothing a fact could contradict. */
 export const GENERIC_OBJECTS = new Set([
@@ -107,6 +123,9 @@ export function lemmasOf(text: string): Set<string> {
 
 export type EntitySignal = "form" | "proper" | "sentence start" | "posting" | "object";
 
+/** Where a posting noun counts: "claim", inside the object of a responsibility verb, the rule; "anywhere", the earlier rule, kept for the measurement. */
+export type PostingScope = "claim" | "anywhere";
+
 export interface EntityToken {
   token: string;
   /** The token as it is looked up. */
@@ -118,18 +137,26 @@ export interface EntityToken {
 
 const isForm = (raw: string) => /^[A-Za-z][a-z]*[A-Z]/.test(raw) || (/^[A-Z]{2,6}$/.test(raw) && raw.length <= 6) || /[+#]|\.[a-z]/i.test(raw) || (/\d/.test(raw) && /[a-z]/i.test(raw));
 
-/** The head of the object after the verb at `i`: the run of content words up to a function word, a value or punctuation, articles skipped. */
-export function objectHead(toks: Token[], i: number): string | null {
-  const run: string[] = [];
+/** The object after the verb at `i`: the indices of its run of content words up to a function word, a value or punctuation, articles skipped. */
+export function objectRun(toks: Token[], i: number): number[] {
+  const run: number[] = [];
   for (let j = i + 1; j < toks.length; j += 1) {
     const w = toks[j].low;
     if (toks[j - 1].endsClause) break;
+    // "set up", "rolled out", "experience in": the particle or preposition right after the opener is part of it.
+    if (j === i + 1 && (PARTICLES.has(w) || ((w === "in" || w === "with" || w === "of") && CLAIM_OPENERS.has(toks[i].low)))) continue;
     if (w === "a" || w === "an" || w === "the") continue;
     if (FUNCTION_WORDS.has(w) || isValue(w) || RESPONSIBILITY_VERBS.has(w) || CURRENCIES.has(w)) break;
-    run.push(toks[j].raw);
+    run.push(j);
     if (toks[j].endsClause) break;
   }
-  return run.length ? run[run.length - 1] : null;
+  return run;
+}
+
+/** The head of the object after the verb at `i`: the last word of its run. */
+export function objectHead(toks: Token[], i: number): string | null {
+  const run = objectRun(toks, i);
+  return run.length ? toks[run[run.length - 1]].raw : null;
 }
 
 /** Every verb and object head in a text, for the hint a finding carries: "the cited fact says workstream". */
@@ -145,8 +172,13 @@ export function objectsOf(text: string): { verb: string; head: string }[] {
 }
 
 /** The tokens of a line that assert something, each with the signals that say so. Pure; nothing is looked up. */
-export function entityTokens(line: string, posting: Set<string>, profile: Set<string>): EntityToken[] {
+export function entityTokens(line: string, posting: Set<string>, profile: Set<string>, scope: PostingScope = "claim"): EntityToken[] {
   const toks = tokensOf(line);
+  // Every index inside the object of a responsibility verb: the claim positions.
+  const claim = new Set<number>();
+  toks.forEach((t, i) => {
+    if (RESPONSIBILITY_VERBS.has(t.low) || CLAIM_OPENERS.has(t.low)) for (const j of objectRun(toks, i)) claim.add(j);
+  });
   const byKey = new Map<string, EntityToken>();
   const add = (signal: EntitySignal, token: string, verb?: string) => {
     const key = lemma(token.toLowerCase().replace(/[^a-z0-9+#.-]/g, ""));
@@ -163,8 +195,9 @@ export function entityTokens(line: string, posting: Set<string>, profile: Set<st
     const { raw, low } = t;
     if (FUNCTION_WORDS.has(low) || CURRENCIES.has(low) || isValue(low) || !/[a-z]/i.test(raw)) return;
     const key = lemma(low.replace(/[^a-z0-9+#.-]/g, ""));
-    // A posting noun fires wherever it stands: "feedback loops" claims loops and feedback, "salesforce workflows" claims salesforce. The light words keep "complex analysis" out.
-    if (nounShaped(low) && posting.has(key) && !profile.has(key)) add("posting", raw);
+    // A posting noun fires in a claim position: "set up feedback loops" claims loops and feedback, "implemented salesforce workflows" claims
+    // salesforce. Outside one, "with attention to detail", it is the posting's vocabulary in a rewording. The light words keep "complex analysis" out.
+    if (nounShaped(low) && posting.has(key) && !profile.has(key) && (scope === "anywhere" || claim.has(i))) add("posting", raw);
     if (isForm(raw)) add("form", raw);
     else if (/^[A-Z]/.test(raw) && !t.sentenceStart && raw !== "I") add("proper", raw);
     else if (/^[A-Z]/.test(raw) && t.sentenceStart && raw !== "I" && !RESPONSIBILITY_VERBS.has(low) && !/(ed|ing)$/.test(low)) add("sentence start", raw);
@@ -187,11 +220,11 @@ export interface CitedFact {
  * cites. Review, never hard: each names the token, and an object names the
  * word the cited fact uses in its place when one can be found.
  */
-export function entityFindings(line: string, bullet: string | null, cited: CitedFact[], profile: Set<string>, posting: Set<string>): PacketFinding[] {
+export function entityFindings(line: string, bullet: string | null, cited: CitedFact[], profile: Set<string>, posting: Set<string>, scope: PostingScope = "claim"): PacketFinding[] {
   const out: PacketFinding[] = [];
   const citedLemmas = lemmasOf(cited.map((c) => c.text).join("\n"));
   const citedObjects = cited.flatMap((c) => objectsOf(c.text));
-  for (const t of entityTokens(line, posting, profile)) {
+  for (const t of entityTokens(line, posting, profile, scope)) {
     const entity = t.signals.filter((s) => s !== "object");
     // An entity is checked against the profile, and an entity the user owns anywhere is theirs to place, even as the object of a verb.
     if (entity.length && profile.has(t.key)) continue;

@@ -62,19 +62,38 @@ describe("signals", () => {
       ["CMO", ["form"]],
       ["Arvento", ["proper"]],
     ]);
-    expect(t("Salesforce implementation specialist")).toEqual([["Salesforce", ["posting", "sentence start"]]]);
+    // A posting word outside a claim position does not fire as a posting word; the sentence start still holds it.
+    expect(t("Salesforce implementation specialist")).toEqual([["Salesforce", ["sentence start"]]]);
     // A verb at sentence start is a verb: capitalised because it is first, whatever the resume said.
     expect(t("Owned the roadmap")).toEqual([["roadmap", ["object", "posting"]]]);
     expect(t("Established repeatable practices")).toEqual([]);
     expect(t("Redesigned the division")).toEqual([["division", ["object"]]]);
     // The posting signal wants a noun: the posting's verbs and adjectives are rewording.
     // "translating" is a verb by its ending and "complex" a light adjective: neither fires. A posting noun fires wherever it stands.
-    expect(entityTokens("Translating complex requirements", lemmasOf("translating complex requirements"), profile).map((x) => x.token)).toEqual(["requirements"]);
+    expect(entityTokens("Translating complex requirements", lemmasOf("translating complex requirements"), profile, "anywhere").map((x) => x.token)).toEqual(["requirements"]);
+    // "translating" is not a responsibility verb, so nothing here stands in a claim position.
+    expect(entityTokens("Translating complex requirements", lemmasOf("translating complex requirements"), profile).map((x) => x.token)).toEqual([]);
+    // "set" opens an object run: "feedback loops" is a claim; "the roadmap" after "for" is not.
     expect(entityTokens("Set up feedback loops for the roadmap", lemmasOf("feedback loops roadmap"), profile).map((x) => [x.token, x.signals])).toEqual([
+      ["loops", ["object", "posting"]],
       ["feedback", ["posting"]],
-      ["loops", ["posting"]],
-      ["roadmap", ["posting"]],
     ]);
+    expect(entityTokens("Set up feedback loops for the roadmap", lemmasOf("feedback loops roadmap"), profile, "anywhere").map((x) => x.token)).toEqual(["loops", "feedback", "roadmap"]);
+    // The posting's vocabulary in a rewording, outside any object: not a claim (D-023).
+    const post = lemmasOf("attention to detail, senior leaders, usage trends, roadmap");
+    const postingOnly = (line: string) => entityTokens(line, post, profile).filter((x) => x.signals.includes("posting")).map((x) => x.token);
+    expect(postingOnly("Prepared the monthly pack with attention to detail")).toEqual([]);
+    expect(postingOnly("Reporting to the CEO and partnering with senior leaders")).toEqual([]);
+    expect(entityTokens("Owned the roadmap and partnered with senior leaders", post, profile).map((x) => [x.token, x.signals])).toEqual([["roadmap", ["object", "posting"]]]);
+    // The summary's claims have no verb: "experience in", "experienced in" open a claim position, and so does the third person voice.
+    const summaryPost = lemmasOf("governance, issue resolution, experience, leader, operations");
+    const summaryPosting = (line: string) => entityTokens(line, summaryPost, profile).filter((x) => x.signals.includes("posting")).map((x) => x.token);
+    expect(summaryPosting("Strategy and PMO leader experienced in issue resolution and governance")).toEqual(["issue", "resolution"]);
+    expect(summaryPosting("Strategy and PMO leader with experience in governance")).toEqual(["governance"]);
+    expect(entityTokens("Strategy and PMO leader who develops governance", summaryPost, profile).filter((x) => x.signals.includes("posting")).map((x) => [x.token, x.signals])).toEqual([["governance", ["object", "posting"]]]);
+    // "leader" and "experience" themselves are the posting's vocabulary in a rewording, not claims; what the experience is in, is.
+    expect(summaryPosting("Strategy and PMO leader with experience improving operations")).toEqual(["operations"]);
+    expect(summaryPosting("Strategy and PMO leader")).toEqual([]);
   });
 });
 
@@ -85,6 +104,8 @@ describe("findings", () => {
       ["workflows", "responsibility is not in the cited facts", "the cited fact says dashboards"],
       ["salesforce", "word from the posting appears in no confirmed fact", "the posting uses it"],
     ]);
+    // The same word outside a claim position is a rewording, and passes as a posting word; the object rule still binds the head.
+    expect(found("Built dashboards in Excel for salesforce users", "Built dashboards in Excel", lemmasOf("Salesforce experience required"))).toEqual([]);
     expect(found("Built C++ applications", "Built dashboards in Excel")).toEqual([
       ["applications", "responsibility is not in the cited facts", "the cited fact says dashboards"],
       ["C++", "name appears in no confirmed fact", "by its form"],

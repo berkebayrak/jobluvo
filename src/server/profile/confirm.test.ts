@@ -4,7 +4,7 @@ import { dbPool, type Tx } from "@/db/client";
 import { profileDocuments, profileFacts, users } from "@/db/schema";
 import { resumeFacts } from "@/server/match/profile";
 import { filterFacts } from "@/server/profile/viewer";
-import { decideFacts, documentState, PROCESSING_STALE_MS, profileView, replaceWithDocument } from "./confirm";
+import { decideFacts, documentState, editFact, PROCESSING_STALE_MS, profileView, replaceWithDocument } from "./confirm";
 
 /*
  * Confirmation over its cycle against the real database, inside one rolled
@@ -74,17 +74,17 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
 
       const emp = rows.find((r) => r.kind === "employment")!.id;
       const skill = rows.find((r) => r.kind === "skill")!.id;
-      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 1, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [] });
+      expect(await decideFacts(tx, userId, { confirm: [{ id: emp, version: 1 }], reject: [{ id: skill, version: 1 }] })).toEqual({ confirmed: 1, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [] });
       const after = (await resumeFacts(tx, userId))!;
       expect(after.employment.map((e) => e.company).sort()).toEqual(["New Co", "Old Co"]);
       expect(after.skills.map((s) => s.name)).toEqual(["Old skill"]);
       expect(after.factsHash).not.toBe(before.factsHash);
       // Another user's ids are skipped and named.
-      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [emp] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 0 }, skipped: [emp] });
+      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [{ id: emp, version: 1 }] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 0 }, skipped: [emp] });
       // A second click on the same ids moves nothing and says so.
-      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 1 }, skipped: [emp, skill] });
+      expect(await decideFacts(tx, userId, { confirm: [{ id: emp, version: 1 }], reject: [{ id: skill, version: 1 }] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 1 }, skipped: [emp, skill] });
       // A rejected fact is not revived by confirming its id; a confirmed one can still be rejected.
-      expect(await decideFacts(tx, userId, { confirm: [skill], reject: [emp] })).toEqual({ confirmed: 0, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [skill] });
+      expect(await decideFacts(tx, userId, { confirm: [{ id: skill, version: 1 }], reject: [{ id: emp, version: 1 }] })).toEqual({ confirmed: 0, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [skill] });
       expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["Old Co"]);
     });
   });
@@ -109,7 +109,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       ]);
       expect(await replaceWithDocument(tx, userId, b.id)).toEqual({ confirmed: 2, retired: 2 });
       // The stale page posts a's ids.
-      const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => r.id) });
+      const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => ({ id: r.id, version: 1 })) });
       expect(stale).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 2, reject: 0 }, skipped: aRows.map((r) => r.id) });
       // The invariant: every confirmed resume fact carries one document id, and it is b's.
       const confirmed = await tx
@@ -205,6 +205,48 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         ["newer.pdf", "check", 2, 0],
         ["older.pdf", "verified", 0, 1],
       ]);
+    });
+  });
+
+  it("an edit of a waiting fact moves its version and keeps it waiting; a decision or a replacement bound to the old version is refused", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
+      const [emp, skill] = await tx
+        .insert(profileFacts)
+        .values([
+          {
+            userId,
+            documentId: doc.id,
+            kind: "employment",
+            origin: "upload",
+            status: "extracted",
+            evidence: "Head of Strategy, New Co",
+            data: { company: "New Co", title: "Head of Strategy", start: "2022-03", bullets: ["Cut cost 11 percent.", "Ran the planning cycle."] },
+          },
+          { userId, documentId: doc.id, kind: "skill", origin: "upload", status: "extracted", evidence: "SQL", data: { name: "SQL" } },
+        ])
+        .returning({ id: profileFacts.id, version: profileFacts.version });
+      expect([emp.version, skill.version]).toEqual([1, 1]);
+      // The user fixes the second bullet, at the version the page showed.
+      const edited = await editFact(tx, userId, { id: emp.id, version: 1, data: { company: "New Co", title: "Head of Strategy", start: "2022-03", bullets: ["Cut cost 11 percent.", "Ran the annual planning cycle."] } });
+      expect(edited.version).toBe(2);
+      const [row] = await tx.select().from(profileFacts).where(eq(profileFacts.id, emp.id));
+      expect(row).toMatchObject({ status: "extracted", origin: "edit", version: 2, evidence: "Head of Strategy, New Co" });
+      expect((row.data as { bullets: string[] }).bullets[1]).toBe("Ran the annual planning cycle.");
+      // The same edit again, at the old version, is refused; so is one the schema refuses; so is one on a confirmed fact.
+      await expect(editFact(tx, userId, { id: emp.id, version: 1, data: row.data as Record<string, unknown> })).rejects.toMatchObject({ reason: "changed" });
+      await expect(editFact(tx, userId, { id: emp.id, version: 2, data: { company: "New Co", title: "Head", start: "March 2022", bullets: [] } })).rejects.toMatchObject({ reason: "invalid", message: expect.stringContaining("start") });
+      await expect(editFact(tx, userId, { id: "00000000-0000-0000-0000-000000000000", version: 1, data: {} })).rejects.toMatchObject({ reason: "not_found" });
+      // A confirm bound to the version the stale page showed is skipped; at the current version it moves.
+      expect(await decideFacts(tx, userId, { confirm: [{ id: emp.id, version: 1 }] })).toMatchObject({ confirmed: 0, skipped: [emp.id] });
+      expect(await decideFacts(tx, userId, { confirm: [{ id: emp.id, version: 2 }] })).toMatchObject({ confirmed: 1, skipped: [] });
+      await expect(editFact(tx, userId, { id: emp.id, version: 2, data: row.data as Record<string, unknown> })).rejects.toMatchObject({ reason: "not_waiting" });
+      expect((await resumeFacts(tx, userId))!.employment.find((e) => e.company === "New Co")!.bullets[1]).toBe("Ran the annual planning cycle.");
+      // A replacement bound to what a stale page showed is refused when the waiting facts differ; bound to the current set it runs.
+      await expect(replaceWithDocument(tx, userId, doc.id, [{ id: emp.id, version: 2 }, { id: skill.id, version: 1 }])).rejects.toMatchObject({ reason: "changed" });
+      await expect(replaceWithDocument(tx, userId, doc.id, [{ id: skill.id, version: 2 }])).rejects.toMatchObject({ reason: "changed" });
+      expect(await replaceWithDocument(tx, userId, doc.id, [{ id: skill.id, version: 1 }])).toEqual({ confirmed: 1, retired: 2 });
     });
   });
 

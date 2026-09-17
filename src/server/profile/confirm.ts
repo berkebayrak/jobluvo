@@ -1,6 +1,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { DbHttp, DbPool, Tx } from "@/db/client";
 import { profileDocuments, profileFacts, type ProfileFact } from "@/db/schema";
+import type { FactRef } from "./decision";
+import { FACT_SCHEMAS } from "./facts";
 
 /*
  * Confirmation (ID-03). Nothing extracted is read by the filter, the scorer
@@ -118,37 +120,83 @@ export interface DecideResult {
  * same rows, and a decide racing a replace without the lock could confirm a
  * fact the replacement is retiring.
  */
-export async function decideFacts(db: DbPool | Tx, userId: string, decision: { confirm?: string[]; reject?: string[] }): Promise<DecideResult> {
+export async function decideFacts(db: DbPool | Tx, userId: string, decision: { confirm?: FactRef[]; reject?: FactRef[] }): Promise<DecideResult> {
   const confirm = decision.confirm ?? [];
   const reject = decision.reject ?? [];
+  // Every decision names the version it saw; one update per version named. There is no unbound form.
+  const groups = (refs: FactRef[]) => {
+    const by = new Map<number, string[]>();
+    for (const r of refs) by.set(r.version, [...(by.get(r.version) ?? []), r.id]);
+    return [...by.entries()];
+  };
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
     const moved = new Set<string>();
-    if (confirm.length) {
+    for (const [version, ids] of groups(confirm)) {
       const rows = await tx
         .update(profileFacts)
         .set({ status: "confirmed", updatedAt: new Date() })
-        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, confirm), eq(profileFacts.status, "extracted")))
+        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), eq(profileFacts.status, "extracted"), eq(profileFacts.version, version)))
         .returning({ id: profileFacts.id });
       for (const r of rows) moved.add(r.id);
     }
     const confirmed = moved.size;
     let rejected = 0;
-    if (reject.length) {
+    for (const [version, ids] of groups(reject)) {
       const rows = await tx
         .update(profileFacts)
         .set({ status: "rejected", updatedAt: new Date() })
-        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, reject), inArray(profileFacts.status, ["extracted", "confirmed"])))
+        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), inArray(profileFacts.status, ["extracted", "confirmed"]), eq(profileFacts.version, version)))
         .returning({ id: profileFacts.id });
-      rejected = rows.length;
+      rejected += rows.length;
       for (const r of rows) moved.add(r.id);
     }
     return {
       confirmed,
       rejected,
       asked: { confirm: confirm.length, reject: reject.length },
-      skipped: [...confirm, ...reject].filter((id) => !moved.has(id)),
+      skipped: [...confirm, ...reject].map((r) => r.id).filter((id) => !moved.has(id)),
     };
+  });
+}
+
+/** An edit that changed nothing, with the reason the screen shows. */
+export class EditRefused extends Error {
+  constructor(
+    public reason: "not_found" | "not_waiting" | "changed" | "invalid",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Replaces a waiting fact's data with what the user typed. Only a fact
+ * waiting for a decision can be edited here, at the version the page
+ * showed; the data must satisfy the kind's schema in facts.ts, the origin
+ * becomes "edit", the version moves on, and the fact stays waiting, so
+ * what the user confirms next is the text they wrote and nothing else. The
+ * evidence stays: it is what the resume said, which the edit corrects.
+ */
+export async function editFact(db: DbPool | Tx, userId: string, edit: { id: string; version: number; data: Record<string, unknown> }): Promise<{ id: string; version: number; data: Record<string, unknown> }> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
+    const [fact] = await tx
+      .select({ id: profileFacts.id, kind: profileFacts.kind, status: profileFacts.status, version: profileFacts.version })
+      .from(profileFacts)
+      .where(and(eq(profileFacts.userId, userId), eq(profileFacts.id, edit.id)));
+    if (!fact) throw new EditRefused("not_found", "fact not found");
+    if (fact.status !== "extracted") throw new EditRefused("not_waiting", "only a fact waiting for your decision can be edited here");
+    if (fact.version !== edit.version) throw new EditRefused("changed", "this fact changed since the page loaded, check it again");
+    const schema = FACT_SCHEMAS[fact.kind as keyof typeof FACT_SCHEMAS];
+    const parsed = schema.safeParse(edit.data);
+    if (!parsed.success) throw new EditRefused("invalid", parsed.error.issues.map((i) => `${i.path.join(".") || "value"}: ${i.message}`).join("; "));
+    const [row] = await tx
+      .update(profileFacts)
+      .set({ data: parsed.data, origin: "edit", version: fact.version + 1, updatedAt: new Date() })
+      .where(and(eq(profileFacts.id, fact.id), eq(profileFacts.version, fact.version)))
+      .returning({ id: profileFacts.id, version: profileFacts.version, data: profileFacts.data });
+    return { id: row.id, version: row.version, data: row.data as Record<string, unknown> };
   });
 }
 
@@ -169,7 +217,7 @@ export const profileLockKey = (userId: string) => `profile:${userId}`;
 /** A replacement that changed nothing, with the reason the screen shows. */
 export class ReplaceRefused extends Error {
   constructor(
-    public reason: "not_found" | "processing" | "failed" | "nothing_to_confirm",
+    public reason: "not_found" | "processing" | "failed" | "nothing_to_confirm" | "changed",
     message: string,
   ) {
     super(message);
@@ -196,7 +244,7 @@ export class ReplaceRefused extends Error {
  * refusal says which, so the screen never shows a click that did nothing
  * as done.
  */
-export async function replaceWithDocument(db: DbPool | Tx, userId: string, documentId: string): Promise<{ confirmed: number; retired: number }> {
+export async function replaceWithDocument(db: DbPool | Tx, userId: string, documentId: string, seen?: FactRef[]): Promise<{ confirmed: number; retired: number }> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
     const [doc] = await tx
@@ -205,13 +253,19 @@ export async function replaceWithDocument(db: DbPool | Tx, userId: string, docum
       .where(and(eq(profileDocuments.id, documentId), eq(profileDocuments.userId, userId)));
     if (!doc) throw new ReplaceRefused("not_found", "document not found");
     const pending = await tx
-      .select({ id: profileFacts.id })
+      .select({ id: profileFacts.id, version: profileFacts.version })
       .from(profileFacts)
       .where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, documentId), eq(profileFacts.status, "extracted")));
     const state = documentState({ status: doc.status, uploadedAt: doc.uploadedAt, extracted: pending.length, confirmed: 0, rejected: 0 });
     if (state === "processing") throw new ReplaceRefused("processing", `${doc.filename} is still being read`);
     if (state === "failed") throw new ReplaceRefused("failed", `${doc.filename} could not be read, so there is nothing to confirm`);
     if (pending.length === 0) throw new ReplaceRefused("nothing_to_confirm", `nothing left to confirm from ${doc.filename}`);
+    // Bound to what the page displayed: the same waiting facts at the same versions, or nothing moves.
+    if (seen) {
+      const shown = new Map(seen.map((s) => [s.id, s.version]));
+      const same = pending.length === shown.size && pending.every((p) => shown.get(p.id) === p.version);
+      if (!same) throw new ReplaceRefused("changed", `the facts from ${doc.filename} changed since the page loaded, check them again`);
+    }
     const retiredRows = await tx
       .update(profileFacts)
       .set({ status: "rejected", updatedAt: new Date() })

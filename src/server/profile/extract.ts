@@ -310,13 +310,18 @@ export async function extractUpload(
     ms: result.ms,
     run: opts.run ?? null,
   });
+  // The facts and the document's ready state land together or not at all (D-027): a document could otherwise be left
+  // processing or failed with its facts stored, refused by Confirm all and yet confirmable one by one. The model call stays
+  // outside the transaction; only the stores are in it.
   try {
-    if (result.facts.length) {
-      await db.insert(profileFacts).values(
-        result.facts.map((f) => ({ userId, documentId: doc.id, kind: f.kind, data: f.data, evidence: f.evidence, origin: "upload" as const, status: "extracted" as const })),
-      );
-    }
-    await db.update(profileDocuments).set({ status: "ready" }).where(eq(profileDocuments.id, doc.id));
+    await db.transaction(async (tx) => {
+      if (result.facts.length) {
+        await tx.insert(profileFacts).values(
+          result.facts.map((f) => ({ userId, documentId: doc.id, kind: f.kind, data: f.data, evidence: f.evidence, origin: "upload" as const, status: "extracted" as const })),
+        );
+      }
+      await tx.update(profileDocuments).set({ status: "ready" }).where(eq(profileDocuments.id, doc.id));
+    });
   } catch (e) {
     await fail(`storing the facts failed: ${e instanceof Error ? e.message : String(e)}`);
     throw e;

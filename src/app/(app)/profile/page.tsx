@@ -508,12 +508,13 @@ export default function ProfilePage() {
                         <b style={{ color: "var(--fg)", fontWeight: 500 }}>From {doc.filename}</b>
                         <div className="sub">
                           Uploaded {day(doc.uploadedAt)}. {group.length} waiting for you.
+                          {doc.state === "processing" ? " Still being read; decide when it is done." : doc.state === "failed" ? " Could not be read; these facts cannot be confirmed." : ""}
                         </div>
                       </span>
                       <Button
                         size="sm"
                         variant="primary"
-                        disabled={busy === "decide" || editing !== null}
+                        disabled={busy === "decide" || editing !== null || doc.state !== "check"}
                         onClick={() => void decide({ replaceWith: doc.id, seen: group.map((f) => ({ id: f.id, version: f.version })) }, "Confirmed. Your profile is this resume now.")}
                       >
                         Confirm all {group.length}
@@ -543,13 +544,13 @@ export default function ProfilePage() {
                           </span>
                           {editing === f.id ? null : (
                             <span className="row" style={{ gap: 6, flexShrink: 0 }}>
-                              <Button size="sm" variant="ghost" disabled={busy === "decide" || editing !== null} onClick={() => setEditing(f.id)}>
+                              <Button size="sm" variant="ghost" disabled={busy === "decide" || editing !== null || doc.state !== "check"} onClick={() => setEditing(f.id)}>
                                 Edit
                               </Button>
-                              <Button size="sm" variant="ghost" disabled={busy === "decide" || editing !== null} onClick={() => void decide({ reject: [ref] }, "Rejected. It stays off your resumes.")}>
+                              <Button size="sm" variant="ghost" disabled={busy === "decide" || editing !== null || doc.state !== "check"} onClick={() => void decide({ reject: [ref] }, "Rejected. It stays off your resumes.")}>
                                 Reject
                               </Button>
-                              <Button size="sm" disabled={busy === "decide" || editing !== null} onClick={() => void decide({ confirm: [ref] }, "Confirmed.")}>
+                              <Button size="sm" disabled={busy === "decide" || editing !== null || doc.state !== "check"} onClick={() => void decide({ confirm: [ref] }, "Confirmed.")}>
                                 Confirm
                               </Button>
                             </span>

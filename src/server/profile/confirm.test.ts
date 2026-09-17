@@ -284,6 +284,28 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
     });
   });
 
+  it("a fact waits with its document: a single decision skips it and an edit is refused while the document is not ready, and a user entered fact still moves", async () => {
+    await withUser(async (tx, userId) => {
+      const [reading] = await tx.insert(profileDocuments).values({ userId, filename: "reading.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing" }).returning({ id: profileDocuments.id });
+      const [failed] = await tx.insert(profileDocuments).values({ userId, filename: "failed.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "failed", error: "x" }).returning({ id: profileDocuments.id });
+      const [a, b, own] = await tx
+        .insert(profileFacts)
+        .values([
+          { userId, documentId: reading.id, kind: "skill", origin: "upload", status: "extracted", evidence: "SQL", data: { name: "SQL" } },
+          { userId, documentId: failed.id, kind: "skill", origin: "upload", status: "extracted", evidence: "Excel", data: { name: "Excel" } },
+          { userId, documentId: null, kind: "skill", origin: "user", status: "extracted", evidence: null, data: { name: "Typed skill" } },
+        ])
+        .returning({ id: profileFacts.id, version: profileFacts.version });
+      const r = await decideFacts(tx, userId, { confirm: [{ id: a.id, version: a.version }, { id: own.id, version: own.version }], reject: [{ id: b.id, version: b.version }] });
+      expect(r).toMatchObject({ confirmed: 1, rejected: 0, skipped: [a.id, b.id] });
+      await expect(editFact(tx, userId, { id: a.id, version: a.version, data: { name: "SQL", years: 6 } })).rejects.toMatchObject({ reason: "not_ready", message: "reading.pdf is still being read" });
+      await expect(editFact(tx, userId, { id: b.id, version: b.version, data: { name: "Excel" } })).rejects.toMatchObject({ reason: "not_ready", message: "failed.pdf could not be read" });
+      // Once the document is ready the same decision moves.
+      await tx.update(profileDocuments).set({ status: "ready" }).where(eq(profileDocuments.id, reading.id));
+      expect(await decideFacts(tx, userId, { confirm: [{ id: a.id, version: a.version }] })).toMatchObject({ confirmed: 1, skipped: [] });
+    });
+  });
+
   it("documentState reads every state from the status and the counts", () => {
     const now = Date.now();
     const at = (ms: number) => new Date(now - ms);

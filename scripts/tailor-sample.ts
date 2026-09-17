@@ -28,6 +28,7 @@ import { currentUserId } from "@/server/user";
  *   npm run tailor-sample -- --dry               print the sample, call nothing
  *   npm run tailor-sample -- --tag sample-x      the run tag prefix, default sample-<today>
  *   npm run tailor-sample -- --model gpt-5.6-x   another priced model
+ *   npm run tailor-sample -- --no-store          cost rows only, never a packet: a measurement that leaves the stored packets as they are
  */
 
 function arg(name: string): string | undefined {
@@ -92,6 +93,7 @@ async function main() {
   const dry = arg("dry") === "true";
   const model = arg("model");
   const tag = arg("tag") ?? `sample-${new Date().toISOString().slice(0, 10)}`;
+  const store = arg("no-store") !== "true";
   const db = dbPool();
   const userId = await currentUserId();
   const [facts, filter] = await Promise.all([resumeFacts(db, userId), filterFacts(userId, db)]);
@@ -110,7 +112,7 @@ async function main() {
 
   if (only !== "document") {
     const run = `${tag}-changes`;
-    const outcomes = await pool(jobs, 5, (job) => tailorJob(db, facts, job, { mode: "changes", model, run, store: true }));
+    const outcomes = await pool(jobs, 5, (job) => tailorJob(db, facts, job, { mode: "changes", model, run, store }));
     summarise(run, outcomes);
   }
   if (only !== "changes") {

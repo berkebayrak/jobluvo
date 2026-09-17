@@ -3,7 +3,7 @@ import { dbPool } from "@/db/client";
 import { packets, users } from "@/db/schema";
 import { resumeFacts } from "@/server/match/profile";
 import { applyChanges, baseResume, renderResume } from "@/server/packet/resume";
-import { tailorForUser } from "@/server/packet/run";
+import { consumableResume, tailorForUser } from "@/server/packet/run";
 import { currentUserId } from "@/server/user";
 
 /**
@@ -33,9 +33,13 @@ async function main() {
     if (d.before) console.log(`  - ${d.before}`);
     console.log(`  + ${d.after}`);
   }
-  if (out.resume) {
+  // Rendered only through the one door downstream: a held packet's resume stays with its findings until a person resolves it.
+  const consumable = consumableResume(out);
+  if (consumable) {
     const [u] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
-    console.log(`\n${renderResume(u.name, out.resume)}`);
+    console.log(`\n${renderResume(u.name, consumable)}`);
+  } else if (out.resume) {
+    console.log(`\nheld for review: the resume is stored with the findings above and is not consumable until a person resolves them (D-017)`);
   }
 }
 

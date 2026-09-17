@@ -1,161 +1,90 @@
 import type { PacketFinding, ResumeDocument } from "@/db/schema";
-import type { ChangeSet } from "./resume";
-import type { FactEntry } from "./resume";
+import { claimsOf, contradiction, metricsAgree, sameValue, type Claim, type FactClaim } from "./claims";
+import { fmt } from "./normalise";
+import type { ChangeSet, FactEntry } from "./resume";
+
+export { normaliseNumbers } from "./normalise";
 
 /*
  * The guarantee behind "nothing is added that is not on your profile".
  *
- * Every value in a proposed line, a number, an amount, a percentage, a
- * date, is normalised and looked up in the values of the facts the line
- * cites. A value that is in none of them is a hard finding and rejects the
- * packet, whether it is on another line of the profile or nowhere at all.
- * Everything else is soft and travels with the packet: a cited fact that
- * does not exist, a capitalised name that appears in no fact, an edit to a
- * line the resume does not have.
+ * Every value in a proposed line is read as a claim (claims.ts): the
+ * number, what kind of value it is, its unit, the words it measures,
+ * whether it is a result or a target, which way it moved. It must be
+ * supported by a claim of a fact the line cites, and support means the
+ * same value with the same kind, unit and role and no contradicting
+ * direction. A value in none of the cited facts, or one whose meaning
+ * changed on the way, is a hard finding and rejects the packet: the model
+ * can fix a contradiction from the finding, so a hard finding earns one
+ * retry, then the packet is invalid.
  *
- * Both sides go through the same normaliser, so eight and 8, USD 2.3M
- * and 2.3 million, Jan 2023 and January 2023 compare equal. When the
- * validator fires on a legitimate rephrasing the normaliser is what gets
- * fixed. The rule is never loosened.
+ * Two things the validator cannot decide are held for a person, level
+ * review, with no retry: a value whose metric words differ or cannot be
+ * read (shared words are a poor synonym test, and churn rewritten as
+ * customer attrition is true), and a name, a tool, an employer, a
+ * qualification, that appears in no fact. A retry cannot resolve an
+ * unknown; it can only make the model drop the line to be safe, an
+ * omission with nobody deciding it.
+ *
+ * A line under one employer may cite employment facts of that employer
+ * only. The number is real, the win is real, and the employer is wrong is
+ * the most valuable lie a resume can tell, and no value check sees it.
+ * Hard: there is no ambiguity in a role id. The summary draws on every
+ * role and is not restricted.
+ *
+ * Everything else is soft and travels with the packet: a cited fact that
+ * does not exist, an edit to a line the resume does not have, and a value
+ * supported by a line the user typed rather than the resume's words, which
+ * the review screen can then say.
  */
-
-const UNITS: Record<string, number> = {
-  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
-};
-const TENS: Record<string, number> = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
-const SCALES: Record<string, number> = { hundred: 100, thousand: 1_000, k: 1_000, million: 1_000_000, mn: 1_000_000, m: 1_000_000, billion: 1_000_000_000, bn: 1_000_000_000, b: 1_000_000_000 };
-const MONTHS: Record<string, string> = {
-  jan: "01", january: "01", feb: "02", february: "02", mar: "03", march: "03", apr: "04", april: "04", may: "05",
-  jun: "06", june: "06", jul: "07", july: "07", aug: "08", august: "08", sep: "09", sept: "09", september: "09",
-  oct: "10", october: "10", nov: "11", november: "11", dec: "12", december: "12",
-};
-const CURRENCIES: Record<string, string> = { usd: "usd", $: "usd", us$: "usd", eur: "eur", "€": "eur", gbp: "gbp", "£": "gbp", cad: "cad", try: "try" };
-
-const fmt = (n: number) => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(6))));
 
 /**
- * Text with every number written in digits: word numbers composed
- * ("twenty five" 25, "two million" 2000000), suffixes expanded ("9.2M"
- * 9200000, "400k" 400000), thousands separators dropped, hyphens between a
- * number and a word opened ("3-year" "3 year"). Lower case.
+ * Sentence initial names are checked like any other name. Whether a miss
+ * holds the packet (review) or only travels with it (soft) is decided from
+ * the measurement over the stored edits, where a capitalised verb the
+ * resume never used is the false positive to count.
  */
-export function normaliseNumbers(text: string): string {
-  let t = text.toLowerCase().replace(/[–—]/g, " ").replace(/(\d),(\d{3})(?!\d)/g, "$1$2").replace(/(\d),(\d{3})(?!\d)/g, "$1$2");
-  // A hyphen carries no value: "3-year", "three-year", "two-thirds" all open up. The one in a YYYY-MM date stays.
-  t = t.replace(/-(?!(?:0[1-9]|1[0-2])(?![\d.]))/g, " ");
-  t = t.replace(/(\d+(?:\.\d+)?)\s?(k|m|mn|b|bn|million|billion|thousand)\b/g, (_, n: string, s: string) => fmt(Number(n) * SCALES[s]));
-  t = t.replace(/(\d+)(st|nd|rd|th)\b/g, "$1");
-  const words = t.split(/(\s+|[^a-z0-9.%$€£])/);
-  const out: string[] = [];
-  let num: number | null = null;
-  let pendingSpace = false;
-  const flush = () => {
-    if (num !== null) out.push(fmt(num));
-    num = null;
-  };
-  const lastToken = () => {
-    let i = out.length - 1;
-    while (i >= 0 && /^\s*$/.test(out[i])) i -= 1;
-    return i;
-  };
-  for (const w of words) {
-    if (w === "") continue;
-    if (/^\s+$/.test(w)) {
-      if (num === null) out.push(w);
-      else pendingSpace = true;
-      continue;
-    }
-    if (w in UNITS) num = (num ?? 0) + UNITS[w];
-    else if (w in TENS) num = (num ?? 0) + TENS[w];
-    else if (w === "hundred") num = (num ?? 1) * 100;
-    else if (w === "thousand" || w === "million" || w === "billion") {
-      if (num === null) {
-        const i = lastToken();
-        if (i >= 0 && /^\d+(\.\d+)?$/.test(out[i])) {
-          num = Number(out[i]);
-          out.splice(i);
-        }
-      }
-      num = (num ?? 1) * SCALES[w];
-      flush();
-      pendingSpace = false;
-    } else if ((w === "a" || w === "and") && num !== null) {
-      // "two hundred and five", "a hundred": part of the number, not a word between numbers.
-    } else {
-      flush();
-      if (pendingSpace) out.push(" ");
-      pendingSpace = false;
-      out.push(w);
-    }
-  }
-  flush();
-  return out.join("").replace(/\s+/g, " ").trim();
-}
+export const SENTENCE_INITIAL_NAMES: "review" | "soft" = "soft";
 
 /**
  * The values a text asserts, as canonical keys: "pct:11", "money:usd:9200000",
  * "date:2023-01", "year:2023", "num:4". With `broad`, the looser forms are
  * emitted as well (a percentage also as its number, a month date also as its
- * year), which is how the allowed set is built: broad on the fact side,
- * specific on the proposed side.
+ * year). Kept for the reports; the validator matches on claims.
  */
 export function valuesOf(text: string, broad = false): Set<string> {
   const out = new Set<string>();
-  let t = normaliseNumbers(text);
-  t = t.replace(/(\d+(?:\.\d+)?)\s?(%|percent|pct|per cent)(?![a-z])/g, (_, n: string) => {
-    out.add(`pct:${fmt(Number(n))}`);
-    if (broad) out.add(`num:${fmt(Number(n))}`);
-    return " ";
-  });
-  t = t.replace(/(usd|us\$|eur|gbp|cad|try|\$|€|£)\s?(\d+(?:\.\d+)?)/g, (_, c: string, n: string) => {
-    out.add(`money:${CURRENCIES[c]}:${fmt(Number(n))}`);
-    if (broad) out.add(`num:${fmt(Number(n))}`);
-    return " ";
-  });
-  t = t.replace(/(\d+(?:\.\d+)?)\s?(usd|eur|gbp|cad|try)\b/g, (_, n: string, c: string) => {
-    out.add(`money:${CURRENCIES[c]}:${fmt(Number(n))}`);
-    if (broad) out.add(`num:${fmt(Number(n))}`);
-    return " ";
-  });
-  t = t.replace(/\b((?:19|20)\d{2})-(0[1-9]|1[0-2])\b/g, (_, y: string, m: string) => {
-    out.add(`date:${y}-${m}`);
-    if (broad) out.add(`year:${y}`);
-    return " ";
-  });
-  t = t.replace(/\b([a-z]+)\.? ((?:19|20)\d{2})\b/g, (all, mon: string, y: string) => {
-    if (!(mon in MONTHS)) return all;
-    out.add(`date:${y}-${MONTHS[mon]}`);
-    if (broad) out.add(`year:${y}`);
-    return " ";
-  });
-  t = t.replace(/\b((?:19|20)\d{2})\b/g, (_, y: string) => {
-    out.add(`year:${y}`);
-    return " ";
-  });
-  for (const m of t.matchAll(/(?<![a-z\d.])(\d+(?:\.\d+)?)(?![\d.]*[a-z])/g)) out.add(`num:${fmt(Number(m[1]))}`);
+  for (const c of claimsOf(text)) {
+    out.add(c.key);
+    if (!broad) continue;
+    if (c.kind === "pct" || c.kind === "money") out.add(`num:${fmt(c.value as number)}`);
+    if (c.kind === "date") out.add(`year:${String(c.value).slice(0, 4)}`);
+  }
   return out;
 }
 
 const STOP = new Set(["i", "a", "the", "and", "or", "of", "to", "in", "for", "with", "at", "on", "by", "from", "as", "an"]);
 
-/** Capitalised words and all caps tokens, as the names a line drops. Sentence initial words are skipped. */
-export function namesOf(text: string): string[] {
+function nameRuns(text: string, initial: boolean): string[] {
   const names: string[] = [];
   const sentences = text.split(/(?<=[.!?])\s+/);
   for (const s of sentences) {
     const words = s.split(/\s+/);
     let run: string[] = [];
+    let runStartsSentence = false;
     const flush = () => {
-      if (run.length) names.push(run.join(" "));
+      if (run.length && runStartsSentence === initial) names.push(run.join(" "));
       run = [];
+      runStartsSentence = false;
     };
     words.forEach((raw, i) => {
       const w = raw.replace(/^[("']+|[)",.;:'!?]+$/g, "");
       const cap = /^[A-Z][A-Za-z&.-]*$/.test(w) && !STOP.has(w.toLowerCase());
       const acronym = /^[A-Z][A-Z&]{1,6}$/.test(w);
-      if ((cap && i > 0) || acronym) run.push(w);
-      else flush();
+      if (cap || acronym) {
+        if (!run.length) runStartsSentence = i === 0 && !acronym;
+        run.push(w);
+      } else flush();
       // A comma, semicolon or slash after the word ends the name: "SQL, Power BI" is two names, not one.
       if (/[,;/]$/.test(raw)) flush();
     });
@@ -164,45 +93,104 @@ export function namesOf(text: string): string[] {
   return names;
 }
 
+/** Capitalised words and all caps tokens, as the names a line drops. Sentence initial words are in `initialNamesOf`. */
+export const namesOf = (text: string): string[] => nameRuns(text, false);
+
+/** The capitalised run that opens a sentence: "Salesforce implementation specialist" gives "Salesforce", "Led the team" gives "Led". */
+export const initialNamesOf = (text: string): string[] => nameRuns(text, true);
+
 export interface FactSet {
   entries: FactEntry[];
-  /** Every value of every fact, broad. */
-  allowed: Set<string>;
-  /** Per fact id, its values, broad. */
-  byId: Map<string, Set<string>>;
+  entryById: Map<string, FactEntry>;
+  /** Per fact id, its claims. */
+  byId: Map<string, FactClaim[]>;
+  /** Every claim of every fact. */
+  all: FactClaim[];
   /** All fact text, lower case, for the name check. */
   corpus: string;
 }
 
 export function factSet(entries: FactEntry[]): FactSet {
-  const allowed = new Set<string>();
-  const byId = new Map<string, Set<string>>();
+  const byId = new Map<string, FactClaim[]>();
+  const all: FactClaim[] = [];
   for (const e of entries) {
-    const v = valuesOf(e.text, true);
-    byId.set(e.id, v);
-    for (const k of v) allowed.add(k);
+    const claims = claimsOf(e.text).map((c) => ({ ...c, factId: e.id, role_of_fact: e.role, source: e.source }));
+    byId.set(e.id, claims);
+    all.push(...claims);
   }
-  return { entries, allowed, byId, corpus: entries.map((e) => e.text).join("\n").toLowerCase() };
+  return { entries, entryById: new Map(entries.map((e) => [e.id, e])), byId, all, corpus: entries.map((e) => e.text).join("\n").toLowerCase() };
 }
 
-/** Checks one proposed line. Hard for a value in no fact; soft for a name in no fact and for a citation that does not carry a value. */
+/** The role a line belongs to: R2 for the bullet R2.3 and for the heading R2; null for the summary and anything else. */
+export function roleOfLine(bullet: string | null): string | null {
+  if (!bullet) return null;
+  const m = /^(R\d+)(?:\.\d+)?$/.exec(bullet);
+  return m ? m[1] : null;
+}
+
+/** Checks one proposed line against the facts it cites. */
 export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet): PacketFinding[] {
   const out: PacketFinding[] = [];
-  const values = valuesOf(line);
   for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "soft", bullet, message: "cited fact does not exist", value: id });
-  // A value must appear in a fact the line cites, not merely somewhere on the
-  // profile. "Six" once passed because six was on another line; that is the
-  // gap this closes. Measured before it shipped over the 520 edits of the
-  // first sample: 5 rejected, all the same invention, 0 legitimate edits.
-  const citedValues = new Set(cited.flatMap((id) => [...(facts.byId.get(id) ?? [])]));
-  for (const v of values) {
-    if (citedValues.has(v)) continue;
-    if (!facts.allowed.has(v)) out.push({ level: "hard", bullet, message: "value appears in no confirmed fact", value: v });
-    else if (!cited.length) out.push({ level: "hard", bullet, message: "value with no fact cited for it", value: v });
-    else out.push({ level: "hard", bullet, message: "value is on the profile but not in the cited facts", value: v });
+
+  // A line under one employer may cite that employer's employment facts only.
+  const role = roleOfLine(bullet);
+  if (role) {
+    for (const id of cited) {
+      const e = facts.entryById.get(id);
+      if (e && e.kind === "employment" && e.role !== role) {
+        out.push({ level: "hard", bullet, message: "cites a fact from another role", value: id, detail: `${id} belongs to ${e.role}; this line is under ${role}` });
+      }
+    }
   }
+
+  const citedClaims = cited.flatMap((id) => facts.byId.get(id) ?? []);
+  for (const p of claimsOf(line)) {
+    const same = citedClaims.filter((c) => sameValue(c, p));
+    if (!same.length) {
+      // A value must appear in a fact the line cites, not merely somewhere on the
+      // profile. "Six" once passed because six was on another line; that is the
+      // gap this closes. Measured before it shipped over the 520 edits of the
+      // first sample: 5 rejected, all the same invention, 0 legitimate edits.
+      if (!facts.all.some((c) => sameValue(c, p))) out.push({ level: "hard", bullet, message: "value appears in no confirmed fact", value: p.key });
+      else if (!cited.length) out.push({ level: "hard", bullet, message: "value with no fact cited for it", value: p.key });
+      else out.push({ level: "hard", bullet, message: "value is on the profile but not in the cited facts", value: p.key });
+      continue;
+    }
+    const supports = same.filter((c) => contradiction(c, p) === null);
+    if (!supports.length) {
+      const why = contradiction(same[0], p)!;
+      out.push({ level: "hard", bullet, message: `value does not mean what the fact means: ${why}`, value: p.key, detail: `fact: ${same[0].clause} / line: ${p.clause}` });
+      continue;
+    }
+    const agreement = supports.map((c) => metricsAgree(c, p));
+    const at = (k: "yes" | "unreadable" | "differ") => supports[agreement.indexOf(k)];
+    if (agreement.includes("yes")) {
+      const c = at("yes");
+      if (c.source.origin === "edit") out.push({ level: "soft", bullet, message: "value is from a line you typed, not the resume's words", value: p.key, origin: "edit", detail: c.clause });
+      continue;
+    }
+    const c = agreement.includes("unreadable") ? at("unreadable") : at("differ");
+    out.push({
+      level: "review",
+      bullet,
+      message: agreement.includes("unreadable") ? "value matched on kind, unit and role only; the metric could not be read" : "the fact and the line measure different things",
+      value: p.key,
+      detail: `fact: ${c.clause} / line: ${p.clause}`,
+      ...(c.source.origin === "edit" ? { origin: "edit" as const } : {}),
+    });
+  }
+
   for (const n of namesOf(line)) {
-    if (!nameOnProfile(n, facts.corpus)) out.push({ level: "soft", bullet, message: "name appears in no confirmed fact", value: n });
+    if (!nameOnProfile(n, facts.corpus)) out.push({ level: "review", bullet, message: "name appears in no confirmed fact", value: n });
+  }
+  for (const n of initialNamesOf(line)) {
+    if (nameOnProfile(n, facts.corpus)) continue;
+    // "Power BI reporting" opens with a name that is on the profile whole. "Built PMO" does not: the opening word may be a verb,
+    // so it is looked up on its own and the rest as an ordinary name, and only the parts on no fact are reported.
+    const [first, ...rest] = n.split(" ");
+    if (!nameOnProfile(first, facts.corpus)) out.push({ level: SENTENCE_INITIAL_NAMES, bullet, message: "name appears in no confirmed fact", value: first, detail: "sentence initial" });
+    if (rest.length && !nameOnProfile(rest.join(" "), facts.corpus)) out.push({ level: "review", bullet, message: "name appears in no confirmed fact", value: rest.join(" ") });
   }
   return out;
 }
@@ -242,3 +230,6 @@ export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: Fa
 }
 
 export const isHard = (f: PacketFinding[]) => f.some((x) => x.level === "hard");
+export const needsReview = (f: PacketFinding[]) => !isHard(f) && f.some((x) => x.level === "review");
+
+export type { Claim, FactClaim };

@@ -101,6 +101,21 @@ export function renderProfile(p: {
   return out.join("\n");
 }
 
+/**
+ * Where one fact came from: its row, and whether it is the resume's words
+ * (upload, with evidence), a line the user typed over them (edit), or a
+ * fact the user entered (user). The validator carries this into every
+ * claim, so a number the resume supports and a number the user asserted
+ * can be told apart on the packet. Not part of the facts hash: the hash is
+ * over the facts' content, and the same content from a different row is
+ * the same profile.
+ */
+export interface FactSource {
+  rowId: string;
+  origin: "upload" | "user" | "edit";
+  hasEvidence: boolean;
+}
+
 /** The confirmed facts the scorer and the tailor both read, parsed, in a stable order, with the two hashes. */
 export interface ResumeFacts {
   userId: string;
@@ -109,13 +124,52 @@ export interface ResumeFacts {
   education: EducationFact[];
   skills: SkillFact[];
   answers: AnswerFact[];
+  /** Aligned with employment, education and skills by index. */
+  sources: { employment: FactSource[]; education: FactSource[]; skills: FactSource[] };
   prefsHash: string;
   factsHash: string;
 }
 
+export interface FactRow {
+  id: string;
+  kind: string;
+  data: unknown;
+  origin: "upload" | "user" | "edit";
+  evidence: string | null;
+}
+
+/**
+ * The facts from their rows. Exported on its own so a measurement can
+ * rebuild the profile a packet was built on from the rows that were
+ * confirmed then, and check it by the hash the packet carries.
+ */
+export function buildResumeFacts(userId: string, rows: FactRow[]): ResumeFacts | null {
+  const pref = rows.filter((r) => r.kind === "preference").map((r) => preferenceFact.safeParse(r.data)).find((r) => r.success);
+  if (!pref?.success) return null;
+  const parse = <T>(kind: string, schema: { safeParse(v: unknown): { success: boolean; data?: T } }): { data: T; source: FactSource }[] =>
+    rows
+      .filter((r) => r.kind === kind)
+      .map((r) => ({ parsed: schema.safeParse(r.data), source: { rowId: r.id, origin: r.origin, hasEvidence: !!r.evidence } }))
+      .flatMap((r) => (r.parsed.success && r.parsed.data !== undefined ? [{ data: r.parsed.data, source: r.source }] : []))
+      .sort((a, b) => (canonical(a.data) < canonical(b.data) ? -1 : 1));
+  const employment = parse<EmploymentFact>("employment", employmentFact).sort((a, b) => (a.data.start < b.data.start ? 1 : -1));
+  const education = parse<EducationFact>("education", educationFact).sort((a, b) => ((a.data.end ?? "") < (b.data.end ?? "") ? 1 : -1));
+  const skills = parse<SkillFact>("skill", skillFact);
+  const answers = parse<AnswerFact>("answer", answerFact).map((a) => a.data);
+  const facts = { employment: employment.map((e) => e.data), education: education.map((e) => e.data), skills: skills.map((s) => s.data), answers };
+  return {
+    userId,
+    prefs: pref.data,
+    ...facts,
+    sources: { employment: employment.map((e) => e.source), education: education.map((e) => e.source), skills: skills.map((s) => s.source) },
+    prefsHash: sha256(canonical(pref.data)),
+    factsHash: sha256(canonical(facts)),
+  };
+}
+
 export async function resumeFacts(db: DbHttp | DbPool | Tx, userId: string): Promise<ResumeFacts | null> {
   const rows = await db
-    .select({ kind: profileFacts.kind, data: profileFacts.data })
+    .select({ id: profileFacts.id, kind: profileFacts.kind, data: profileFacts.data, origin: profileFacts.origin, evidence: profileFacts.evidence })
     .from(profileFacts)
     .where(
       and(
@@ -124,28 +178,7 @@ export async function resumeFacts(db: DbHttp | DbPool | Tx, userId: string): Pro
         inArray(profileFacts.kind, ["preference", "employment", "education", "skill", "answer"]),
       ),
     );
-  const pref = rows.filter((r) => r.kind === "preference").map((r) => preferenceFact.safeParse(r.data)).find((r) => r.success);
-  if (!pref?.success) return null;
-  const parse = <T>(kind: string, schema: { safeParse(v: unknown): { success: boolean; data?: T } }): T[] =>
-    rows
-      .filter((r) => r.kind === kind)
-      .map((r) => schema.safeParse(r.data))
-      .flatMap((r) => (r.success && r.data !== undefined ? [r.data] : []))
-      .sort((a, b) => (canonical(a) < canonical(b) ? -1 : 1));
-  const employment = parse<EmploymentFact>("employment", employmentFact).sort((a, b) => (a.start < b.start ? 1 : -1));
-  const education = parse<EducationFact>("education", educationFact).sort((a, b) => ((a.end ?? "") < (b.end ?? "") ? 1 : -1));
-  const skills = parse<SkillFact>("skill", skillFact);
-  const answers = parse<AnswerFact>("answer", answerFact);
-  return {
-    userId,
-    prefs: pref.data,
-    employment,
-    education,
-    skills,
-    answers,
-    prefsHash: sha256(canonical(pref.data)),
-    factsHash: sha256(canonical({ employment, education, skills, answers })),
-  };
+  return buildResumeFacts(userId, rows);
 }
 
 export async function scoringProfile(db: DbHttp | DbPool | Tx, userId: string): Promise<ScoringProfile | null> {

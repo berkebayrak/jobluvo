@@ -7,7 +7,7 @@ import { loadScoringJobs } from "@/server/match/run";
 import type { ScoringJob } from "@/server/match/score";
 import { applyChanges, applyDocument, baseResume, factEntries, resumeHash, type Applied, type ChangeSet } from "./resume";
 import { parseChanges, parseDocument, tailorCall, TailorError, type TailorMode, type TailorResult } from "./tailor";
-import { factSet, isHard, validateChangeSet } from "./validate";
+import { factSet, isHard, needsReview, validateChangeSet } from "./validate";
 
 /*
  * One packet: facts and posting in, a validated tailored resume out, or an
@@ -37,7 +37,24 @@ export interface TailorOptions {
   store?: boolean;
 }
 
-export type AttemptOutcome = "ready" | "invalid" | "failed";
+/**
+ * ready: parsed and passed. needs_review: parsed, no hard finding, held
+ * for a person on a review finding, with its resume stored but not
+ * consumable. invalid: a hard finding after the retry, no resume. failed:
+ * no answer to validate.
+ */
+export type AttemptOutcome = "ready" | "needs_review" | "invalid" | "failed";
+
+/**
+ * The one door a packet's resume leaves through. Only a ready packet's
+ * resume may be handed to anything downstream; a needs_review packet keeps
+ * its resume for the review screen and nothing else, an invalid or failed
+ * one has none. Submission does not ship before the screen that resolves a
+ * held packet exists (D-017).
+ */
+export function consumableResume(p: { status: string; resume: ResumeDocument | null }): ResumeDocument | null {
+  return p.status === "ready" ? p.resume : null;
+}
 
 /** One call to the model and what became of it. */
 export interface TailorAttempt {
@@ -171,15 +188,19 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
       continue;
     }
     const findings = validateChangeSet(candidate.cs, base, set);
-    log.push({ n, outcome: isHard(findings) ? "invalid" : "ready", candidate, findings });
-    if (!isHard(findings)) break;
+    // Only a hard finding earns the retry: it is a contradiction the model can fix from the finding. A review
+    // finding is the validator saying it could not read one side, and a retry cannot resolve that; it can only make
+    // the model drop the line to be safe, an omission with nobody deciding it. So a held packet is stored as it is.
+    const outcome: AttemptOutcome = isHard(findings) ? "invalid" : needsReview(findings) ? "needs_review" : "ready";
+    log.push({ n, outcome, candidate, findings });
+    if (outcome !== "invalid") break;
   }
 
-  // The packet is the last attempt. A resume exists only when that attempt itself parsed and passed the validator;
-  // an invalid one keeps its changes and findings for review, a failed one keeps neither.
+  // The packet is the last attempt. A resume exists only when that attempt itself parsed and had no hard finding;
+  // a held packet keeps its resume for the review screen, an invalid one keeps its changes and findings, a failed one keeps neither.
   const final = log[log.length - 1];
   const status = final.outcome;
-  const resume = final.outcome === "ready" && final.candidate ? final.candidate.applied.resume : null;
+  const resume = (final.outcome === "ready" || final.outcome === "needs_review") && final.candidate ? final.candidate.applied.resume : null;
   const error = final.error ? storedError(log) : undefined;
   const changes = final.candidate?.cs.changes ?? [];
   const outcome: TailorOutcome = {

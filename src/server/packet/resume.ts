@@ -1,6 +1,6 @@
 import type { ResumeChange, ResumeDocument } from "@/db/schema";
 import { sha256 } from "@/server/jobs/normalize";
-import type { ResumeFacts } from "@/server/match/profile";
+import type { FactSource, ResumeFacts } from "@/server/match/profile";
 
 /*
  * The resume as a document built from confirmed facts, and the edits the
@@ -14,26 +14,35 @@ import type { ResumeFacts } from "@/server/match/profile";
 export interface FactEntry {
   id: string;
   text: string;
+  /** The kind of fact the line is, and for an employment line the role id it belongs to (R1 for R1 and R1.3). */
+  kind: "employment" | "education" | "skill";
+  role: string | null;
+  /** The row behind the line and where it came from, carried into every claim built from it. */
+  source: FactSource;
 }
 
 const span = (start?: string, end?: string) => (start ? `${start} to ${end ?? "present"}` : end ? `to ${end}` : "");
 
+const UNKNOWN_SOURCE: FactSource = { rowId: "", origin: "user", hasEvidence: false };
+
 /** Every confirmed fact as one line of text with its id, the set the validator and the prompt both read. */
 export function factEntries(f: ResumeFacts): FactEntry[] {
   const out: FactEntry[] = [];
+  const src = f.sources ?? { employment: [], education: [], skills: [] };
   f.employment.forEach((e, i) => {
     const rid = `R${i + 1}`;
-    out.push({ id: rid, text: `${e.title}, ${e.company}${e.location ? `, ${e.location}` : ""}, ${span(e.start, e.end)}` });
-    e.bullets.forEach((b, j) => out.push({ id: `${rid}.${j + 1}`, text: b }));
+    const source = src.employment[i] ?? UNKNOWN_SOURCE;
+    out.push({ id: rid, text: `${e.title}, ${e.company}${e.location ? `, ${e.location}` : ""}, ${span(e.start, e.end)}`, kind: "employment", role: rid, source });
+    e.bullets.forEach((b, j) => out.push({ id: `${rid}.${j + 1}`, text: b, kind: "employment", role: rid, source }));
   });
   f.education.forEach((e, i) => {
     const head = [e.degree, e.field, e.institution].filter(Boolean).join(", ");
     const when = span(e.start, e.end);
-    out.push({ id: `E${i + 1}`, text: `${head}${when ? `, ${when}` : ""}${e.notes?.length ? `. ${e.notes.join(" ")}` : ""}` });
+    out.push({ id: `E${i + 1}`, text: `${head}${when ? `, ${when}` : ""}${e.notes?.length ? `. ${e.notes.join(" ")}` : ""}`, kind: "education", role: null, source: src.education[i] ?? UNKNOWN_SOURCE });
   });
   f.skills.forEach((s, i) => {
     const detail = [s.years != null ? `${s.years} years` : null, s.evidence].filter(Boolean).join("; ");
-    out.push({ id: `S${i + 1}`, text: `${s.name}${detail ? ` (${detail})` : ""}` });
+    out.push({ id: `S${i + 1}`, text: `${s.name}${detail ? ` (${detail})` : ""}`, kind: "skill", role: null, source: src.skills[i] ?? UNKNOWN_SOURCE });
   });
   // Answers (salary expectation, notice period) are what the user tells an
   // application form, never resume content: not listed, so the model cannot

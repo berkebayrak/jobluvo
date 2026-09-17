@@ -6,7 +6,7 @@ import type { ScoringJob } from "@/server/match/score";
 import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { resumeFacts } from "@/server/match/profile";
 import { unknownCostStats } from "@/server/match/report";
-import { ERROR_STORE, tailorJob } from "./run";
+import { consumableResume, ERROR_STORE, tailorJob } from "./run";
 import * as tailor from "./tailor";
 
 vi.mock("./tailor", async (importOriginal) => {
@@ -155,18 +155,42 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("invalid");
       expect(p.resume).toBeNull();
-      expect(p.findings).toHaveLength(2);
+      expect(p.findings.filter((f) => f.level === "hard")).toHaveLength(2);
+      // "Leader" opens the summary and is on no fact: soft, it travels with the packet (D-017).
+      expect(p.findings.filter((f) => f.level === "soft").map((f) => f.value)).toEqual(["Leader"]);
+    });
+  });
+
+  it("a name in no fact holds the packet for review with its resume stored, no retry, and nothing downstream can consume it", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] }]));
+      const held = await tailorJob(tx, facts, job);
+      expect(held.status).toBe("needs_review");
+      expect(held.attempts).toBe(1);
+      expect(call()).toHaveBeenCalledTimes(1);
+      expect(held.findings.map((f) => [f.level, f.value])).toEqual([["review", "KPI"]]);
+      expect(held.resume?.experience[0].bullets[0].text).toBe("Ran a 3 year program with KPI reporting, cutting cost 11 percent.");
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("needs_review");
+      expect(p.resume).not.toBeNull();
+      expect(p.resumeHash).not.toBeNull();
+      // The one door downstream: a held packet's resume does not leave through it, a ready one's does.
+      expect(consumableResume(p)).toBeNull();
+      expect(consumableResume({ ...p, status: "ready" })).toEqual(p.resume);
+      expect(consumableResume({ ...p, status: "invalid", resume: null })).toBeNull();
     });
   });
 
   it("a soft finding travels with a ready packet, and a call that fails still writes its cost row", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
-      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] }]));
+      // "Owned" opens the line and is on no fact: soft, measured at 12 of 12 false positives (D-017).
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Owned a 3 year program that cut cost 11 percent.", facts: ["R1.1"] }]));
       const ready = await tailorJob(tx, facts, job);
       expect(ready.status).toBe("ready");
       expect(ready.attempts).toBe(1);
-      expect(ready.findings.map((f) => [f.level, f.value])).toEqual([["soft", "KPI"]]);
+      expect(ready.findings.map((f) => [f.level, f.value, f.detail])).toEqual([["soft", "Owned", "sentence initial"]]);
 
       call().mockReset();
       call().mockRejectedValue(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));

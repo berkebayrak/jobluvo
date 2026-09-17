@@ -56,7 +56,7 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
   const hard = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "hard"));
   const soft = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "soft"));
   console.log(
-    `\n${run}: ready ${by("ready")}, invalid ${by("invalid")}, failed ${by("failed")}, retried ${retried}, usd ${usd.toFixed(4)}, ` +
+    `\n${run}: ready ${by("ready")}, held for review ${by("needs_review")}, invalid ${by("invalid")}, failed ${by("failed")}, retried ${retried}, usd ${usd.toFixed(4)}, ` +
       `changes per packet ${(outcomes.reduce((a, o) => a + o.changes, 0) / Math.max(1, outcomes.length)).toFixed(1)}, ` +
       `max cached tokens ${Math.max(0, ...outcomes.map((o) => o.tokensCached))}`,
   );
@@ -68,8 +68,11 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
   console.log("  hard findings on the stored attempt:", JSON.stringify(count(hard)));
   console.log("  soft findings on the stored attempt:", JSON.stringify(count(soft)));
   // The wrong citation rate, tracked across samples: edits whose cited facts do not carry a value the edit uses.
+  // Matched on the message across every level, never on a level: the message moved from soft to hard when the
+  // cited value rule shipped, and a level filter printed "0" for two samples because it found nothing, not
+  // because nothing was wrong (review finding 16). Counted by packet and edit, so R1.1 in two jobs is two.
   const edits = outcomes.reduce((a, o) => a + o.changes, 0);
-  const wrong = new Set(soft.filter((f) => f.message.includes("not in the cited facts")).map((f) => f.bullet)).size;
+  const wrong = new Set(outcomes.flatMap((o) => o.findings.filter((f) => f.message.includes("not in the cited facts")).map((f) => `${o.jobId}:${f.bullet}`))).size;
   console.log(`  wrong citations: ${wrong} of ${edits} edits, ${edits ? ((100 * wrong) / edits).toFixed(2) : "0"} per 100`);
   for (const o of outcomes.filter((x) => x.status !== "ready").slice(0, 8)) {
     console.log(`  ${o.status} ${o.jobId}: ${o.error ?? o.findings.filter((f) => f.level === "hard").map((f) => `${f.bullet}: ${f.message} ${f.value ?? ""}`).join("; ")}`);

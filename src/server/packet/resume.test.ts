@@ -16,6 +16,7 @@ const FACTS: ResumeFacts = {
     { name: "Pricing" },
   ],
   answers: [{ question: "Salary expectation", answer: "USD 150,000" }],
+  sources: { employment: [{ rowId: "row", origin: "upload" as const, hasEvidence: true }, { rowId: "row", origin: "upload" as const, hasEvidence: true }], education: [{ rowId: "row", origin: "upload" as const, hasEvidence: true }], skills: [{ rowId: "row", origin: "upload" as const, hasEvidence: true }, { rowId: "row", origin: "upload" as const, hasEvidence: true }, { rowId: "row", origin: "upload" as const, hasEvidence: true }] },
   prefsHash: "p",
   factsHash: "f",
 };

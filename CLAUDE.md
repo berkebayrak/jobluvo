@@ -174,6 +174,8 @@ npm run pass-rate    # hard filter pass rate across ingested jobs, by family and
 npm run boilerplate-report  # what the boilerplate rule strips per board, and what a rule change releases
 npm run freshness    # jobs arriving per day and how many pass the filter, by board date and by first seen
 npm run dedupe-report  # what a dedupe rule change releases and what it withholds, before it ships
+npm run validator-report  # what the claim validator says about every stored packet; -- --apply restamps them under the rules as they stand
+npm run cost-report  # cost per call by run, wrong citations, and calls of unknown cost
 ```
 
 ## Layout

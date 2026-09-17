@@ -11,8 +11,11 @@ Jobs are picked one card at a time in a swipe view, or applied to automatically 
 lanes with the user's own rules and a daily cap. Two named agents live in a side panel:
 Maya for job search and interview prep, Daniel for career coaching.
 
-Initial market is the United States. Web first, with iOS and Android to follow. The
-website includes the actual product dashboard, not just marketing.
+Jobluvo is not restricted by country. The user chooses the countries they want to work
+in, the hard filter honours that choice, and the only real limit on what anyone sees is
+which employer boards are in the registry. The location parser handles US locations best
+today and is being widened as boards outside the US arrive. Web first, with iOS and
+Android to follow. The website includes the actual product dashboard, not just marketing.
 
 Sources of truth:
 

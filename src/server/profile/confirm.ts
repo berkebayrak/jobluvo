@@ -120,6 +120,9 @@ export interface DecideResult {
  * same rows, and a decide racing a replace without the lock could confirm a
  * fact the replacement is retiring.
  */
+/** A fact may be decided or edited only when its document is ready, or when it has no document: a fact from a document still being read or failed waits with it (D-027). */
+const documentReady = sql`(${profileFacts.documentId} is null or exists (select 1 from ${profileDocuments} where ${profileDocuments.id} = ${profileFacts.documentId} and ${profileDocuments.status} = 'ready'))`;
+
 export async function decideFacts(db: DbPool | Tx, userId: string, decision: { confirm?: FactRef[]; reject?: FactRef[] }): Promise<DecideResult> {
   const confirm = decision.confirm ?? [];
   const reject = decision.reject ?? [];
@@ -136,7 +139,7 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
       const rows = await tx
         .update(profileFacts)
         .set({ status: "confirmed", updatedAt: new Date() })
-        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), eq(profileFacts.status, "extracted"), eq(profileFacts.version, version)))
+        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), eq(profileFacts.status, "extracted"), eq(profileFacts.version, version), documentReady))
         .returning({ id: profileFacts.id });
       for (const r of rows) moved.add(r.id);
     }
@@ -146,7 +149,7 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
       const rows = await tx
         .update(profileFacts)
         .set({ status: "rejected", updatedAt: new Date() })
-        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), inArray(profileFacts.status, ["extracted", "confirmed"]), eq(profileFacts.version, version)))
+        .where(and(eq(profileFacts.userId, userId), inArray(profileFacts.id, ids), inArray(profileFacts.status, ["extracted", "confirmed"]), eq(profileFacts.version, version), documentReady))
         .returning({ id: profileFacts.id });
       rejected += rows.length;
       for (const r of rows) moved.add(r.id);
@@ -163,7 +166,7 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
 /** An edit that changed nothing, with the reason the screen shows. */
 export class EditRefused extends Error {
   constructor(
-    public reason: "not_found" | "not_waiting" | "changed" | "invalid",
+    public reason: "not_found" | "not_waiting" | "not_ready" | "changed" | "invalid",
     message: string,
   ) {
     super(message);
@@ -182,11 +185,15 @@ export async function editFact(db: DbPool | Tx, userId: string, edit: { id: stri
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
     const [fact] = await tx
-      .select({ id: profileFacts.id, kind: profileFacts.kind, status: profileFacts.status, version: profileFacts.version, data: profileFacts.data })
+      .select({ id: profileFacts.id, kind: profileFacts.kind, status: profileFacts.status, version: profileFacts.version, data: profileFacts.data, documentId: profileFacts.documentId })
       .from(profileFacts)
       .where(and(eq(profileFacts.userId, userId), eq(profileFacts.id, edit.id)));
     if (!fact) throw new EditRefused("not_found", "fact not found");
     if (fact.status !== "extracted") throw new EditRefused("not_waiting", "only a fact waiting for your decision can be edited here");
+    if (fact.documentId) {
+      const [doc] = await tx.select({ status: profileDocuments.status, filename: profileDocuments.filename }).from(profileDocuments).where(eq(profileDocuments.id, fact.documentId));
+      if (!doc || doc.status !== "ready") throw new EditRefused("not_ready", doc?.status === "processing" ? `${doc.filename} is still being read` : `${doc?.filename ?? "the document"} could not be read`);
+    }
     if (fact.version !== edit.version) throw new EditRefused("changed", "this fact changed since the page loaded, check it again");
     // A kind the editor offers but no schema covers is a deliberate refusal, not a thrown TypeError (review three finding 6).
     const schema = Object.hasOwn(FACT_SCHEMAS, fact.kind) ? FACT_SCHEMAS[fact.kind as keyof typeof FACT_SCHEMAS] : null;

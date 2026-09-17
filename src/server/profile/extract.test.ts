@@ -114,6 +114,23 @@ const usage = { inputTokens: 1600, cachedInputTokens: 0, outputTokens: 1500, rea
 const answer = (out: ExtractOutput) => ({ text: JSON.stringify(out), usage, usd: 0.002, ms: 12000 });
 const file = { filename: "resume.pdf", bytes: Buffer.from("%PDF-1.4 fixture") };
 
+/** A transaction whose nth update throws, through nested transactions too, for a failure injected between two stores. */
+function failingOn(tx: Tx, nth: number, state = { n: 0 }): Tx {
+  return new Proxy(tx, {
+    get(target, key, receiver) {
+      if (key === "transaction") {
+        const real = Reflect.get(target, key, receiver) as Tx["transaction"];
+        return ((cb: (inner: Tx) => Promise<unknown>) => real.call(target, (inner: Tx) => cb(failingOn(inner, nth, state)))) as Tx["transaction"];
+      }
+      if (key === "update") {
+        state.n += 1;
+        if (state.n === nth) throw new Error("injected failure");
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+}
+
 afterAll(async () => {
   const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
   await g.__jobluvoPool?.end();
@@ -144,6 +161,20 @@ describe.skipIf(!hasDb)("the upload path and the document's state", () => {
       expect(view.documents).toEqual([expect.objectContaining({ id: out.documentId, status: "ready", state: "check", error: null, extracted: 6, confirmed: 0 })]);
       const cost = await tx.select({ kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId));
       expect(cost).toEqual([{ kind: "extract" }]);
+    });
+  });
+
+  it("a failure between storing the facts and marking the document ready stores nothing and fails the document", async () => {
+    await withUser(async (tx, userId) => {
+      call().mockResolvedValueOnce(answer(base));
+      // The first update the run makes is the ready mark, after the facts insert inside the same transaction; it throws.
+      await expect(extractUpload(failingOn(tx, 1), userId, file)).rejects.toThrow(/injected failure/);
+      const [d] = await tx.select({ status: profileDocuments.status, error: profileDocuments.error }).from(profileDocuments).where(eq(profileDocuments.userId, userId));
+      expect(d).toEqual({ status: "failed", error: "storing the facts failed: injected failure" });
+      const facts = await tx.select({ id: profileFacts.id }).from(profileFacts).where(eq(profileFacts.userId, userId));
+      expect(facts).toEqual([]);
+      const view = await profileView(tx, userId);
+      expect(view.documents[0]).toMatchObject({ state: "failed", extracted: 0 });
     });
   });
 

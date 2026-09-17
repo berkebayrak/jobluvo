@@ -246,6 +246,29 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       await expect(editFact(tx, userId, { id: emp.id, version: 1, data: row.data as Record<string, unknown> })).rejects.toMatchObject({ reason: "changed" });
       await expect(editFact(tx, userId, { id: emp.id, version: 2, data: { company: "New Co", title: "Head", start: "March 2022", bullets: [] } })).rejects.toMatchObject({ reason: "invalid", message: expect.stringContaining("start") });
       await expect(editFact(tx, userId, { id: "00000000-0000-0000-0000-000000000000", version: 1, data: {} })).rejects.toMatchObject({ reason: "not_found" });
+      // A skill edit that does not mention the evidence keeps it; one that names it changes it; contact, link and project edits have a schema.
+      const [skillRow] = await tx
+        .update(profileFacts)
+        .set({ data: { name: "SQL", years: 6, evidence: "Pricing dashboards in SQL" } })
+        .where(eq(profileFacts.id, skill.id))
+        .returning({ version: profileFacts.version });
+      const kept = await editFact(tx, userId, { id: skill.id, version: skillRow.version, data: { name: "SQL", years: 7 } });
+      expect(kept.data).toEqual({ name: "SQL", years: 7, evidence: "Pricing dashboards in SQL" });
+      const changed = await editFact(tx, userId, { id: skill.id, version: kept.version, data: { name: "SQL", years: 7, evidence: "Weekly pricing dashboard in SQL" } });
+      expect(changed.data).toEqual({ name: "SQL", years: 7, evidence: "Weekly pricing dashboard in SQL" });
+      const [contact, link, project] = await tx
+        .insert(profileFacts)
+        .values([
+          { userId, documentId: doc.id, kind: "contact", origin: "upload", status: "extracted", evidence: "Jack Miller", data: { name: "Jack Miller", email: "jack.miller@jobluvo.com" } },
+          { userId, documentId: doc.id, kind: "link", origin: "upload", status: "extracted", evidence: "linkedin.com/in/jack", data: { url: "linkedin.com/in/jack" } },
+          { userId, documentId: doc.id, kind: "project", origin: "upload", status: "extracted", evidence: "OKR rollout", data: { name: "OKR rollout" } },
+        ])
+        .returning({ id: profileFacts.id, version: profileFacts.version });
+      expect((await editFact(tx, userId, { id: contact.id, version: contact.version, data: { name: "Jack Miller", email: "jack@jobluvo.com", location: "Istanbul" } })).data).toEqual({ name: "Jack Miller", email: "jack@jobluvo.com", location: "Istanbul" });
+      await expect(editFact(tx, userId, { id: contact.id, version: contact.version + 1, data: { name: "", email: "" } })).rejects.toMatchObject({ reason: "invalid" });
+      expect((await editFact(tx, userId, { id: link.id, version: link.version, data: { url: "github.com/jack" } })).data).toEqual({ url: "github.com/jack" });
+      await expect(editFact(tx, userId, { id: link.id, version: link.version + 1, data: { url: "" } })).rejects.toMatchObject({ reason: "invalid" });
+      expect((await editFact(tx, userId, { id: project.id, version: project.version, data: { name: "OKR rollout", notes: ["38 teams"] } })).data).toEqual({ name: "OKR rollout", notes: ["38 teams"] });
       // A confirm bound to the version the stale page showed is skipped; at the current version it moves.
       expect(await decideFacts(tx, userId, { confirm: [{ id: emp.id, version: 1 }] })).toMatchObject({ confirmed: 0, skipped: [emp.id] });
       expect(await decideFacts(tx, userId, { confirm: [{ id: emp.id, version: 2 }] })).toMatchObject({ confirmed: 1, skipped: [] });
@@ -256,7 +279,8 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       await expect(replaceWithDocument(tx, userId, doc.id, [{ id: skill.id, version: 2 }])).rejects.toMatchObject({ reason: "changed" });
       // An empty list on a document with waiting facts is the unbound form in another shape: refused the same way.
       await expect(replaceWithDocument(tx, userId, doc.id, [])).rejects.toMatchObject({ reason: "changed" });
-      expect(await replaceWithDocument(tx, userId, doc.id, [{ id: skill.id, version: 1 }])).toEqual({ confirmed: 1, retired: 2 });
+      // Bound to the current set: the skill at its edited version and the contact, link and project added above.
+      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 4, retired: 2 });
     });
   });
 

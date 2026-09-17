@@ -85,6 +85,7 @@ const FIELDS: Record<string, FieldSpec[]> = {
   skill: [
     { key: "name", label: "Skill", type: "text" },
     { key: "years", label: "Years", type: "number" },
+    { key: "evidence", label: "Where the resume shows it", type: "text", hint: "The scorer and the tailored resume read this line" },
   ],
   answer: [
     { key: "question", label: "Question", type: "text" },
@@ -96,7 +97,10 @@ const FIELDS: Record<string, FieldSpec[]> = {
     { key: "location", label: "Location", type: "text" },
   ],
   link: [{ key: "url", label: "URL", type: "text" }],
-  project: [{ key: "name", label: "Project", type: "text" }],
+  project: [
+    { key: "name", label: "Project", type: "text" },
+    { key: "notes", label: "Lines", type: "lines", hint: "One per line" },
+  ],
 };
 
 /** The form's text for a field value, and back. */

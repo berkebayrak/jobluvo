@@ -6,6 +6,10 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-026. Every kind the editor offers has a schema, and a skill edit keeps the evidence it does not mention
+
+Closing list item 3, review three finding 6. Extraction writes contact and link facts, the review page offered Edit on them, and `FACT_SCHEMAS` had neither, so saving one threw. Contact, link and project now have schemas: a contact is name, email and location as written with at least one present; a link is the URL as written, scheme not required, because resumes print "linkedin.com/in/jack"; a project is a name with optional lines, offered by the editor though extraction does not produce it yet. An edit on a kind with no schema is refused with a message, never thrown. A skill's `data.evidence` is the resume's own words for the skill, read by the scorer and the tailored resume; the form showed name and years only and saving replaced the whole object, so editing the years erased it. The form now shows the evidence line, labelled with what reads it, and an edit that does not mention it keeps it; naming it changes it.
+
 ### D-025. Bulk confirmation is always bound to what the page displayed
 
 Closing list item 2, review three finding 5. `{ replaceWith }` alone was accepted by the schema and the helper checked the displayed facts only when `seen` was present, so a caller could confirm a document's current waiting facts without saying which facts a person reviewed, the same weakness the versioned single decisions had closed (D-017's predecessor, #33). `seen` is now required by the schema and by `replaceWithDocument`; a replacement whose waiting facts differ from the list shown, in ids or versions, is refused as changed, and an empty list on a document with waiting facts is refused the same way. The page already sent it. No trusted internal caller existed, so no separate unbound operation is kept.

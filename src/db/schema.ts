@@ -33,6 +33,7 @@ export const familyEnum = pgEnum("family", [
 export const workplaceEnum = pgEnum("workplace", ["remote", "hybrid", "onsite", "unknown"]);
 export const compPeriodEnum = pgEnum("comp_period", ["year", "hour", "unknown"]);
 export const sponsorshipEnum = pgEnum("sponsorship", ["offered", "not_offered", "unknown"]);
+export const restrictionEnum = pgEnum("restriction", ["citizenship", "permanent_residency", "right_to_work", "clearance"]);
 export const linkReasonEnum = pgEnum("link_reason", ["native", "url", "requisition", "similar"]);
 export const decisionEnum = pgEnum("decision", ["apply", "save", "skip"]);
 export const costKindEnum = pgEnum("cost_kind", ["ingest", "extract", "score", "tailor"]);
@@ -122,6 +123,10 @@ export const jobs = pgTable(
     seniority: text("seniority"),
     sponsorship: sponsorshipEnum("sponsorship").notNull().default("unknown"),
     sponsorshipEvidence: text("sponsorship_evidence"),
+    /** A stated eligibility restriction, separate from sponsorship, with the sentence as evidence. Null when the posting says nothing. */
+    eligibility: restrictionEnum("eligibility"),
+    eligibilityCountry: text("eligibility_country"),
+    eligibilityEvidence: text("eligibility_evidence"),
     descriptionText: text("description_text").notNull().default(""),
     descriptionHtml: text("description_html").notNull().default(""),
     /** description_text with the source's boilerplate removed; what hashing and similarity read. */

@@ -141,13 +141,13 @@ export function JobCard({
               style={{
                 display: "flex",
                 gap: 6,
-                color: r.startsWith("-") ? "var(--fg-subtle)" : "inherit",
+                color: r.startsWith("-") || r.startsWith("?") ? "var(--fg-subtle)" : "inherit",
               }}
             >
               <span style={{ width: 12, flex: "none" }}>
-                {r.startsWith("-") ? "-" : "+"}
+                {r.startsWith("-") ? "-" : r.startsWith("?") ? "?" : "+"}
               </span>
-              <span>{r.replace(/^[-+]\s*/, "")}</span>
+              <span>{r.replace(/^[-+?]\s*/, "")}</span>
             </div>
           ))}
         </div>

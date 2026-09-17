@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   contentHash,
+  eligibilityOf,
   descriptionCore,
   detectRepeated,
   htmlToText,
@@ -123,6 +124,40 @@ describe("parseLocations with structured fields from the feed", () => {
       { raw: "San Francisco, CA", city: "San Francisco", region: "CA", country: "US" },
       { raw: "Remote - US", remote: true, country: "US" },
     ]);
+  });
+});
+
+describe("eligibilityOf", () => {
+  it("reads a stated restriction with the sentence as evidence and the country it names", () => {
+    expect(eligibilityOf("Great team. Right to work in the UK is required. Apply now.")).toEqual({
+      restriction: "right_to_work",
+      country: "GB",
+      evidence: "Right to work in the UK is required.",
+    });
+    expect(eligibilityOf("Candidates must have the right to work in Ireland by the start date.")).toMatchObject({ restriction: "right_to_work", country: "IE" });
+    expect(eligibilityOf("Applicants are personally responsible for obtaining and maintaining the right to work in Mexico.")).toMatchObject({
+      restriction: "right_to_work",
+      country: "MX",
+    });
+    expect(eligibilityOf("Must be a U.S. citizen due to contract requirements.")).toMatchObject({ restriction: "citizenship", country: "US" });
+    expect(eligibilityOf("US citizenship is required for this role.")).toMatchObject({ restriction: "citizenship", country: "US" });
+    expect(eligibilityOf("Green card or permanent residency required.")).toMatchObject({ restriction: "permanent_residency" });
+    expect(eligibilityOf("An active Top Secret security clearance is required.")).toMatchObject({ restriction: "clearance" });
+    expect(eligibilityOf("Clearance: An active U.S. Secret clearance.")).toMatchObject({ restriction: "clearance", country: "US" });
+    expect(eligibilityOf("Must be legally authorized to work in the United States without sponsorship.")).toMatchObject({ restriction: "right_to_work", country: "US" });
+  });
+  it("finds nothing in the sentences that only mention the words", () => {
+    const none = [
+      "Datadog is proud to offer equal employment opportunity to everyone regardless of race, color, ancestry, religion, sex, national origin, sexual orientation, age, citizenship, marital status, disability.",
+      "If your position is employed by another Airbnb entity, your recruiter will inform you what states you are eligible to work from.",
+      "Clearance: An active U.S. government security clearance is preferred but not required. Candidates without an active clearance are encouraged to apply.",
+      "Support Section 16 officer transactions, including Rule 10b5-1 trading plan administration and pre-clearance coordination.",
+      "We are making Stripe's data lake a first-class citizen of the modern data ecosystem.",
+      "Manage UK and Canadian visa cases from offer stage through renewals and permanent residency.",
+      "We welcome applicants from every background.",
+      "",
+    ];
+    for (const s of none) expect(eligibilityOf(s), s).toBeUndefined();
   });
 });
 

@@ -9,7 +9,7 @@ import { JobCard } from "@/components/jobs/JobCard";
 import { SwipeCard } from "@/components/jobs/SwipeCard";
 import { Toggle } from "@/components/core/Toggle";
 import { showToast } from "@/components/feedback/Toaster";
-import { ageHoursOf, cardFields, locationLabel, type FeedJob } from "@/lib/app/jobs-client";
+import { ageHoursOf, cardFields, locationLabel, type FeedJob, type Viewer } from "@/lib/app/jobs-client";
 import { logoUrl } from "@/lib/logo";
 
 const DATE_OPTIONS: { label: string; hours: number }[] = [
@@ -150,6 +150,7 @@ function JobsScreen() {
   const [query, setQuery] = React.useState("");
 
   const [all, setAll] = React.useState<FeedJob[] | null>(null);
+  const [viewer, setViewer] = React.useState<Viewer | undefined>(undefined);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   /** Jobs swiped this session, removed from view without a refetch. */
   const [gone, setGone] = React.useState<Set<string>>(new Set());
@@ -159,9 +160,10 @@ function JobsScreen() {
     let alive = true;
     fetch("/api/jobs")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { jobs: FeedJob[] }) => {
+      .then((d: { jobs: FeedJob[]; viewer?: Viewer }) => {
         if (!alive) return;
         setAll(d.jobs);
+        setViewer(d.viewer);
         setLoadError(null);
       })
       .catch((e: unknown) => alive && setLoadError(e instanceof Error ? e.message : String(e)));
@@ -399,7 +401,7 @@ function JobsScreen() {
       {mode === "list" ? (
         <div className="jobs-grid">
           {list.map((j) => {
-            const f = cardFields(j);
+            const f = cardFields(j, viewer);
             return (
               <JobCard
                 key={j.id}
@@ -429,7 +431,7 @@ function JobsScreen() {
               <div className="stack" style={{ transform: "scale(.96)" }} />
               {job ? (
                 (() => {
-                  const f = cardFields(job);
+                  const f = cardFields(job, viewer);
                   return (
                     <SwipeCard
                       company={f.company}

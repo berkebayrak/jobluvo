@@ -17,6 +17,7 @@
     "probe": "node --env-file=.env.local --import tsx scripts/probe.ts",
     "db:reset": "node --env-file=.env.local --import tsx scripts/reset.ts",
     "db:backfill-locations": "node --env-file=.env.local --import tsx scripts/backfill-locations.ts",
+    "db:backfill-signals": "node --env-file=.env.local --import tsx scripts/backfill-signals.ts",
     "pass-rate": "node --env-file=.env.local --import tsx scripts/pass-rate.ts"
   },
   "dependencies": {

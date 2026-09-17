@@ -16,6 +16,11 @@ import type { AuthorizationFact, PreferenceFact, SponsorshipFact } from "@/serve
  *   'not remote'                the user takes remote roles only
  *   'relocation'                on site role outside the countries the user
  *                               will work on site in
+ *   'citizenship required'      the posting states a restriction the user's
+ *   'permanent residency required'   authorization facts do not meet, in the
+ *   'right to work required'    country the sentence names or, when it names
+ *   'security clearance required'    none, in the job's own countries. No
+ *                               fact can meet a clearance yet
  *   'sponsorship not offered'   the posting says no sponsorship, the user
  *                               needs it now, and holds no authorization for
  *                               that country. Unknown sponsorship passes:
@@ -59,8 +64,21 @@ export function firstFailingReasonSql(prefs: PreferenceFact, auth: Authorization
       ? `case when not ${IS_REMOTE} and not exists (select 1 from ${LOC} where l->>'country' in ${list(prefs.onsiteCountries ?? [])}) then 'relocation' end`
       : "null";
 
-  // Sponsorship: needed now, no authorization in the job's country, posting says no.
+  // Stated restrictions. The user meets one through an authorization fact in
+  // the restriction's country; with no country named, the job's own countries.
+  const meets = (countries: string[]) =>
+    `coalesce(j.eligibility_country in ${list(countries)}, exists (select 1 from ${LOC} where l->>'country' in ${list(countries)}))`;
+  const citizens = auth.filter((a) => a.basis === "citizen").map((a) => a.country);
+  const residents = auth.filter((a) => a.basis === "citizen" || a.basis === "permanent_resident").map((a) => a.country);
   const authorised = auth.filter((a) => a.basis !== "none").map((a) => a.country);
+  const restriction = `case
+    when j.eligibility = 'clearance' then 'security clearance required'
+    when j.eligibility = 'citizenship' and not ${meets(citizens)} then 'citizenship required'
+    when j.eligibility = 'permanent_residency' and not ${meets(residents)} then 'permanent residency required'
+    when j.eligibility = 'right_to_work' and not ${meets(authorised)} then 'right to work required'
+    end`;
+
+  // Sponsorship: needed now, no authorization in the job's country, posting says no.
   const sponsorshipRule =
     sponsorship?.now
       ? `case when j.sponsorship = 'not_offered'
@@ -76,5 +94,5 @@ export function firstFailingReasonSql(prefs: PreferenceFact, auth: Authorization
     ? `case when lower(j.company_name) in ${list(prefs.excludedCompanies.map((c) => c.toLowerCase()))} then 'excluded company' end`
     : "null";
 
-  return `coalesce(${location}, ${relocation}, ${sponsorshipRule}, ${employment}, ${excluded})`;
+  return `coalesce(${location}, ${relocation}, ${restriction}, ${sponsorshipRule}, ${employment}, ${excluded})`;
 }

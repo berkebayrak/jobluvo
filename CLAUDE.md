@@ -158,6 +158,7 @@ npm run ingest       # one ingest batch against the live feeds, prints a line pe
 npm run db:generate  # migration from src/db/schema.ts
 npm run db:migrate   # apply migrations over the direct Neon host
 npm run db:backfill-locations  # re-parse stored locations with the current parser, safe to repeat
+npm run db:backfill-signals    # recompute sponsorship and eligibility from stored text, safe to repeat
 npm run pass-rate    # hard filter pass rate across ingested jobs, by family and reason
 ```
 

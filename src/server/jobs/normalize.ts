@@ -323,8 +323,17 @@ export function parseCompensation(s: string | undefined): Compensation | undefin
 export type Sponsorship = "offered" | "not_offered" | "unknown";
 
 /** Only what the posting says, with the sentence kept as evidence. */
+/**
+ * Sentences of a description. A full stop ends a sentence only after a word
+ * of at least two letters and before a capital, so "U.S. citizen" and
+ * "St. Louis" stay whole.
+ */
+export function sentencesOf(text: string): string[] {
+  return text.split(/(?<=[a-z0-9)][.!?])\s+(?=[A-Z"(])|\n+/);
+}
+
 export function sponsorshipOf(text: string): { value: Sponsorship; evidence?: string } {
-  const sentences = text.split(/(?<=[.!?])\s+|\n+/);
+  const sentences = sentencesOf(text);
   const hit = sentences.find((s) => /\b(sponsor|sponsorship|visa|h-?1b|work authori[sz]ation)\b/i.test(s));
   if (!hit) return { value: "unknown" };
   const neg =
@@ -334,6 +343,60 @@ export function sponsorshipOf(text: string): { value: Sponsorship; evidence?: st
     return { value: "offered", evidence: hit.trim().slice(0, 300) };
   }
   return { value: "unknown", evidence: hit.trim().slice(0, 300) };
+}
+
+export type Restriction = "citizenship" | "permanent_residency" | "right_to_work" | "clearance";
+
+/*
+ * Sentences that mention the words but are not a restriction: equal
+ * opportunity statements, "preferred but not required", "encouraged to
+ * apply", Airbnb's "states you are eligible to work from", a visa team's job
+ * description, pre-clearance of trades.
+ */
+const RESTRICTION_GUARD =
+  /regardless of|without regard|citizenship status|discriminat|equal (employment )?opportunit|preferred but not required|not required|no clearance|encouraged to apply|pre-clearance|clearance coordination|to work from|visa cases|immigration (team|support|process)|first-class citizen|citizen services|digital citizen/i;
+const REQUIRED = /\b(required|must|mandatory|is a requirement|need(s|ed)? to|only|essential|responsible for obtaining)\b/i;
+const DEMONYMS: [RegExp, string][] = [
+  [/\b(u\.?s\.?a?\.?|united states|american)\b/i, "US"],
+  [/\b(u\.?k\.?|united kingdom|british|great britain)\b/i, "GB"],
+  [/\b(ireland|irish)\b/i, "IE"],
+  [/\b(canada|canadian)\b/i, "CA"],
+  [/\b(mexico|mexican)\b/i, "MX"],
+  [/\b(australia|australian)\b/i, "AU"],
+  [/\b(germany|german)\b/i, "DE"],
+  [/\b(france|french)\b/i, "FR"],
+  [/\b(netherlands|dutch)\b/i, "NL"],
+  [/\b(singapore|singaporean)\b/i, "SG"],
+  [/\b(india|indian)\b/i, "IN"],
+  [/\b(japan|japanese)\b/i, "JP"],
+];
+
+/**
+ * A stated eligibility restriction, separate from sponsorship: a posting
+ * that says the applicant must already be a citizen, a permanent resident,
+ * hold the right to work in a country, or hold a security clearance. The
+ * sentence is kept as evidence and the country is read from the sentence
+ * when it names one. Everything that is not clearly one of these is nothing:
+ * a posting that says nothing carries no restriction (JOB-04).
+ */
+export function eligibilityOf(text: string): { restriction: Restriction; country?: string; evidence: string } | undefined {
+  for (const raw of sentencesOf(text)) {
+    const s = raw.trim();
+    if (!s || RESTRICTION_GUARD.test(s)) continue;
+    let restriction: Restriction | undefined;
+    if (/\bclearance\b/i.test(s) && (REQUIRED.test(s) || /^clearance:\s*(an? )?active/i.test(s))) restriction = "clearance";
+    else if (/\bcitizens?(hip)?\b/i.test(s) && REQUIRED.test(s)) restriction = "citizenship";
+    else if (/\b(green card|permanent residen(t|cy)|lawful permanent)\b/i.test(s) && REQUIRED.test(s)) restriction = "permanent_residency";
+    else if (
+      /\b(right|eligib\w+|authori[sz]\w+|entitle\w+|legally (able|allowed|permitted)) to (live and )?work in\b/i.test(s) &&
+      (REQUIRED.test(s) || /without (visa |the need for |requiring )?sponsorship/i.test(s))
+    )
+      restriction = "right_to_work";
+    if (!restriction) continue;
+    const country = DEMONYMS.find(([re]) => re.test(s))?.[1];
+    return { restriction, country, evidence: s.slice(0, 300) };
+  }
+  return undefined;
 }
 
 const SENIORITY: [RegExp, string][] = [
@@ -424,6 +487,9 @@ export interface NormalisedJob {
   seniority?: string;
   sponsorship: Sponsorship;
   sponsorshipEvidence?: string;
+  eligibility?: Restriction;
+  eligibilityCountry?: string;
+  eligibilityEvidence?: string;
   descriptionText: string;
   descriptionHtml: string;
   descriptionCore: string;
@@ -437,6 +503,7 @@ export function normalise(p: RawPosting, boilerplate: string[]): NormalisedJob {
   const locations = parseLocations(p.locations, { remote: p.remote });
   const core = descriptionCore(descriptionText, boilerplate);
   const sp = sponsorshipOf(descriptionText);
+  const el = eligibilityOf(descriptionText);
   return {
     title,
     titleNorm: titleNorm(title),
@@ -449,6 +516,9 @@ export function normalise(p: RawPosting, boilerplate: string[]): NormalisedJob {
     seniority: seniorityOf(title),
     sponsorship: sp.value,
     sponsorshipEvidence: sp.evidence,
+    eligibility: el?.restriction,
+    eligibilityCountry: el?.country,
+    eligibilityEvidence: el?.evidence,
     descriptionText,
     descriptionHtml,
     descriptionCore: core,

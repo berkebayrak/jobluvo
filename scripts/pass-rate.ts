@@ -69,6 +69,12 @@ async function main() {
     }
   }
 
+  console.log("quiet postings, sponsorship unknown, that state an eligibility restriction");
+  console.table(
+    await sql.query(`select coalesce(j.eligibility::text, '(none)') as restriction, coalesce(j.eligibility_country, '') as country,
+      count(*)::int as jobs ${base} and j.sponsorship = 'unknown' group by 1, 2 order by 3 desc`),
+  );
+
   console.log("jobs passing, and the first failing reason for the rest");
   console.table(matrix);
   console.log("jobs passing by family (what the registry costs)");

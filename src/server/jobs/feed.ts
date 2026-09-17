@@ -23,6 +23,9 @@ export interface FeedJob {
   compPeriod: string;
   seniority: string | null;
   sponsorship: string;
+  sponsorshipEvidence: string | null;
+  eligibility: string | null;
+  eligibilityEvidence: string | null;
   applyUrl: string;
   postedAt: string | null;
   firstSeenAt: string;
@@ -36,6 +39,7 @@ export async function feedForUser(userId: string, limit = 200): Promise<FeedJob[
     select
       j.id, l.group_id, j.family, j.company_name, j.company_domain, j.title, j.locations, j.workplace,
       j.employment_type, j.comp_min, j.comp_max, j.comp_currency, j.comp_period, j.seniority, j.sponsorship,
+      j.sponsorship_evidence, j.eligibility, j.eligibility_evidence,
       j.apply_url, j.posted_at, j.first_seen_at,
       coalesce((
         select array_agg(distinct o.family::text) from job_group_links l2 join jobs o on o.id = l2.job_id
@@ -68,6 +72,9 @@ export async function feedForUser(userId: string, limit = 200): Promise<FeedJob[
     compPeriod: r.comp_period as string,
     seniority: (r.seniority as string | null) ?? null,
     sponsorship: r.sponsorship as string,
+    sponsorshipEvidence: (r.sponsorship_evidence as string | null) ?? null,
+    eligibility: (r.eligibility as string | null) ?? null,
+    eligibilityEvidence: (r.eligibility_evidence as string | null) ?? null,
     applyUrl: r.apply_url as string,
     postedAt: r.posted_at ? new Date(r.posted_at as string).toISOString() : null,
     firstSeenAt: new Date(r.first_seen_at as string).toISOString(),

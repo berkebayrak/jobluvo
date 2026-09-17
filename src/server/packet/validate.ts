@@ -6,12 +6,12 @@ import type { FactEntry } from "./resume";
  * The guarantee behind "nothing is added that is not on your profile".
  *
  * Every value in a proposed line, a number, an amount, a percentage, a
- * date, is normalised and looked up in the set of values of every
- * confirmed fact. A value that appears in no fact is a hard finding and
- * rejects the packet. Everything else is soft and travels with the
- * packet: a citation that does not carry the value it is cited for, a
- * cited fact that does not exist, a capitalised name that appears in no
- * fact, an edit to a line the resume does not have.
+ * date, is normalised and looked up in the values of the facts the line
+ * cites. A value that is in none of them is a hard finding and rejects the
+ * packet, whether it is on another line of the profile or nowhere at all.
+ * Everything else is soft and travels with the packet: a cited fact that
+ * does not exist, a capitalised name that appears in no fact, an edit to a
+ * line the resume does not have.
  *
  * Both sides go through the same normaliser, so eight and 8, USD 2.3M
  * and 2.3 million, Jan 2023 and January 2023 compare equal. When the
@@ -189,15 +189,17 @@ export function factSet(entries: FactEntry[]): FactSet {
 export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet): PacketFinding[] {
   const out: PacketFinding[] = [];
   const values = valuesOf(line);
-  for (const v of values) {
-    if (!facts.allowed.has(v)) out.push({ level: "hard", bullet, message: "value appears in no confirmed fact", value: v });
-  }
   for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "soft", bullet, message: "cited fact does not exist", value: id });
+  // A value must appear in a fact the line cites, not merely somewhere on the
+  // profile. "Six" once passed because six was on another line; that is the
+  // gap this closes. Measured before it shipped over the 520 edits of the
+  // first sample: 5 rejected, all the same invention, 0 legitimate edits.
   const citedValues = new Set(cited.flatMap((id) => [...(facts.byId.get(id) ?? [])]));
-  if (cited.length) {
-    for (const v of values) {
-      if (facts.allowed.has(v) && !citedValues.has(v)) out.push({ level: "soft", bullet, message: "value is on the profile but not in the cited facts", value: v });
-    }
+  for (const v of values) {
+    if (citedValues.has(v)) continue;
+    if (!facts.allowed.has(v)) out.push({ level: "hard", bullet, message: "value appears in no confirmed fact", value: v });
+    else if (!cited.length) out.push({ level: "hard", bullet, message: "value with no fact cited for it", value: v });
+    else out.push({ level: "hard", bullet, message: "value is on the profile but not in the cited facts", value: v });
   }
   for (const n of namesOf(line)) {
     if (!nameOnProfile(n, facts.corpus)) out.push({ level: "soft", bullet, message: "name appears in no confirmed fact", value: n });
@@ -233,7 +235,7 @@ export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: Fa
     if (!c.text.trim()) out.push({ level: "hard", bullet: c.bullet, message: "empty line" });
     out.push(...checkLine(c.text, c.bullet, c.facts, facts));
   }
-  if (cs.summary) out.push(...checkLine(cs.summary, "summary", [], facts));
+  if (cs.summary) out.push(...checkLine(cs.summary, "summary", cs.summaryFacts, facts));
   const skillIds = new Set(base.skills.map((s) => s.id));
   for (const id of cs.skills) if (!skillIds.has(id)) out.push({ level: "soft", bullet: null, message: "no such skill; ignored", value: id });
   return out;

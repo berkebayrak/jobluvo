@@ -26,7 +26,7 @@ async function main() {
   const facts = (await resumeFacts(db, userId))!;
   const [p] = await db.select({ changes: packets.changes, resume: packets.resume }).from(packets).where(eq(packets.jobId, jobId));
   const base = baseResume(facts);
-  const { diff } = applyChanges(base, { summary: p.resume?.summary ?? null, changes: p.changes, skills: [] });
+  const { diff } = applyChanges(base, { summary: p.resume?.summary ?? null, summaryFacts: [], changes: p.changes, skills: [] });
   console.log("\ndiff");
   for (const d of diff) {
     console.log(`  ${d.bullet}${d.facts.length ? `  [${d.facts.join(", ")}]` : ""}`);

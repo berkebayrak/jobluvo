@@ -32,7 +32,7 @@ const RULES = `Every number, amount, percentage, date, employer, product and qua
 export const INSTRUCTIONS: Record<TailorMode, string> = {
   changes: `You tailor a candidate's resume to one job posting by editing a small number of lines. You are given the candidate's confirmed facts, each with an id, and the posting.
 
-Return at most ${MAX_CHANGES} changes. Each change names one existing bullet id (such as R1.2), gives the replacement text, and lists the ids of the facts that support the new text (the bullet itself and any other fact you drew on). Only rewrite a line when the posting gives a reason: to lead with what the posting asks for, to use its vocabulary where the fact allows it, or to shorten. Leave every other line alone. Optionally give a one sentence summary for the top of the resume, built only from the facts, or null. Optionally list skill ids to show first, in order, or an empty list.
+Return at most ${MAX_CHANGES} changes. Each change names one existing bullet id (such as R1.2), gives the replacement text, and lists the ids of the facts that support the new text (the bullet itself and any other fact you drew on). Every number, date or amount in the new text must come from one of the facts you cite for it; a value from an uncited fact is rejected. Only rewrite a line when the posting gives a reason: to lead with what the posting asks for, to use its vocabulary where the fact allows it, or to shorten. Leave every other line alone. Optionally give a one sentence summary for the top of the resume, built only from the facts, or null, and in "summary_facts" the ids of the facts it draws on; every number, date or amount in it must come from one of those. Optionally list skill ids to show first, in order, or an empty list.
 
 ${RULES}`,
   document: `You tailor a candidate's resume to one job posting. You are given the candidate's confirmed facts, each with an id, and the posting.
@@ -46,6 +46,7 @@ export const CHANGES_SCHEMA = {
   type: "object",
   properties: {
     summary: { type: ["string", "null"] },
+    summary_facts: { type: "array", items: { type: "string" } },
     changes: {
       type: "array",
       items: {
@@ -61,7 +62,7 @@ export const CHANGES_SCHEMA = {
     },
     skills: { type: "array", items: { type: "string" } },
   },
-  required: ["summary", "changes", "skills"],
+  required: ["summary", "summary_facts", "changes", "skills"],
   additionalProperties: false,
 } as const;
 
@@ -86,6 +87,7 @@ export const DOCUMENT_SCHEMA = {
 
 const changesOutput = z.object({
   summary: z.string().nullable(),
+  summary_facts: z.array(z.string()),
   changes: z.array(z.object({ bullet: z.string(), text: z.string(), facts: z.array(z.string()) })),
   skills: z.array(z.string()),
 });
@@ -105,6 +107,7 @@ export function parseChanges(text: string): ChangeSet {
   if (!r.success) throw new Error(`model output does not match the change set schema: ${r.error.issues.map((i) => i.path.join(".")).join(", ")}`);
   return {
     summary: r.data.summary ? tidy(r.data.summary) : null,
+    summaryFacts: r.data.summary_facts.map((f) => f.trim()),
     changes: r.data.changes.slice(0, MAX_CHANGES).map((c) => ({ bullet: c.bullet.trim(), text: tidy(c.text), facts: c.facts.map((f) => f.trim()) })),
     skills: r.data.skills.map((s) => s.trim()),
   };

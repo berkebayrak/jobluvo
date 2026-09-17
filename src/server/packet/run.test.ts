@@ -25,8 +25,8 @@ const hasDb = !!process.env.DATABASE_URL;
 class Rollback extends Error {}
 
 const usage = { inputTokens: 2000, cachedInputTokens: 1200, outputTokens: 300, reasoningTokens: 0 };
-const answer = (changes: { bullet: string; text: string; facts: string[] }[], summary: string | null = null) =>
-  ({ text: JSON.stringify({ summary, changes, skills: [] }), model: "gpt-5.6-luna", usage, usd: 0.0005, ms: 100 }) satisfies tailor.TailorResult;
+const answer = (changes: { bullet: string; text: string; facts: string[] }[], summary: string | null = null, summaryFacts: string[] = []) =>
+  ({ text: JSON.stringify({ summary, summary_facts: summaryFacts, changes, skills: [] }), model: "gpt-5.6-luna", usage, usd: 0.0005, ms: 100 }) satisfies tailor.TailorResult;
 
 async function withFixture(fn: (tx: Tx, userId: string, job: ScoringJob) => Promise<void>) {
   await dbPool()
@@ -145,7 +145,7 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       const facts = (await resumeFacts(tx, userId))!;
       call()
         .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Cut cost 14 percent.", facts: ["R1.1"] }]))
-        .mockResolvedValueOnce(answer([{ bullet: "R1.2", text: "Own the planning cycle for 7 business units.", facts: ["R1.2"] }], "Leader since 2019."));
+        .mockResolvedValueOnce(answer([{ bullet: "R1.2", text: "Own the planning cycle for 7 business units.", facts: ["R1.2"] }], "Leader since 2019.", ["R1"]));
       const out = await tailorJob(tx, facts, job);
       expect(out.status).toBe("invalid");
       expect(out.attempts).toBe(2);
@@ -160,11 +160,11 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
   it("a soft finding travels with a ready packet, and a call that fails still writes its cost row", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
-      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year program, cutting cost 11 percent.", facts: ["R1.2"] }]));
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] }]));
       const ready = await tailorJob(tx, facts, job);
       expect(ready.status).toBe("ready");
       expect(ready.attempts).toBe(1);
-      expect(ready.findings.map((f) => f.level)).toEqual(["soft", "soft"]);
+      expect(ready.findings.map((f) => [f.level, f.value])).toEqual([["soft", "KPI"]]);
 
       call().mockReset();
       call().mockRejectedValue(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));

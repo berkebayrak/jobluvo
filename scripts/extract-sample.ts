@@ -36,14 +36,14 @@ function accuracy(facts: ExtractedFact[]) {
   const degrees = JACK_RESUME.education.filter((e) => edu.some((x) => x.institution === e.institution && x.degree === e.degree)).length;
   const skillNames = new Set(facts.filter((f) => f.kind === "skill").map((f) => (f.data as { name: string }).name));
   const skills = JACK_RESUME.skills.filter(([n]) => skillNames.has(n)).length;
-  const ans = facts.filter((f) => f.kind === "answer").map((f) => f.data as { question: string; answer: string });
-  const answers = JACK_RESUME.answers.filter(([q, a]) => ans.some((x) => x.question === q && x.answer === a)).length;
+  const ans = facts.filter((f) => f.kind === "answer");
   return {
     roles: `${roles}/${JACK_RESUME.employment.length}`,
     bullets: `${bullets}/${bulletsAll.length}`,
     degrees: `${degrees}/${JACK_RESUME.education.length}`,
     skills: `${skills}/${JACK_RESUME.skills.length}`,
-    answers: `${answers}/${JACK_RESUME.answers.length}`,
+    /** The resume states no answers; any read back would be invented. */
+    answers: ans.length,
     extra: facts.length - (emp.length + edu.length + skillNames.size + ans.length),
   };
 }

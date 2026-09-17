@@ -22,7 +22,9 @@ const FACTS: ResumeFacts = {
 
 describe("facts and the base resume", () => {
   it("numbers every fact so the model can cite it and the validator can find it", () => {
-    expect(factEntries(FACTS).map((e) => e.id)).toEqual(["R1", "R1.1", "R1.2", "R2", "R2.1", "E1", "S1", "S2", "S3", "A1"]);
+    expect(factEntries(FACTS).map((e) => e.id)).toEqual(["R1", "R1.1", "R1.2", "R2", "R2.1", "E1", "S1", "S2", "S3"]);
+    // The salary answer is not on the resume and cannot be cited.
+    expect(factEntries(FACTS).some((e) => e.text.includes("150,000"))).toBe(false);
     expect(factEntries(FACTS).find((e) => e.id === "R1")!.text).toBe("Head of Strategy, Arvento, Istanbul, Turkey, 2022-03 to present");
     expect(factEntries(FACTS).find((e) => e.id === "S1")!.text).toBe("Strategy (8 years)");
   });
@@ -39,6 +41,7 @@ describe("applying a change set", () => {
   it("replaces named lines, adds the summary, orders skills, and the diff is the change set", () => {
     const { resume, diff, dropped } = applyChanges(base, {
       summary: "Strategy leader.",
+      summaryFacts: ["R1"],
       changes: [
         { bullet: "R1.2", text: "Own the annual planning cycle with finance.", facts: ["R1.2"] },
         { bullet: "R1.2", text: "Own the annual planning cycle with finance.", facts: ["R1.2"] },
@@ -52,13 +55,13 @@ describe("applying a change set", () => {
     expect(resume.skills.map((s) => s.id)).toEqual(["S3", "S1", "S2"]);
     expect(dropped).toEqual([{ bullet: "R9.1", text: "Nothing", facts: [] }]);
     expect(diff).toEqual([
-      { bullet: "summary", before: "", after: "Strategy leader.", facts: [] },
+      { bullet: "summary", before: "", after: "Strategy leader.", facts: ["R1"] },
       { bullet: "R1.2", before: "Own the annual planning cycle.", after: "Own the annual planning cycle with finance.", facts: ["R1.2"] },
     ]);
     // The base is untouched and the hash follows the content.
     expect(base.summary).toBeNull();
     expect(resumeHash(resume)).not.toBe(resumeHash(base));
-    expect(resumeHash(applyChanges(base, { summary: null, changes: [], skills: [] }).resume)).toBe(resumeHash(base));
+    expect(resumeHash(applyChanges(base, { summary: null, summaryFacts: [], changes: [], skills: [] }).resume)).toBe(resumeHash(base));
   });
   it("a whole document answer is reconciled onto the base by role and position, and its diff is only what changed", () => {
     const { resume, diff } = applyDocument(base, {
@@ -70,12 +73,12 @@ describe("applying a change set", () => {
       ],
       skills: ["sql", "Strategy"],
     });
-    expect(diff).toEqual([{ bullet: "R1.2", before: "Own the annual planning cycle.", after: "Ran the annual planning cycle.", facts: [] }]);
+    expect(diff).toEqual([{ bullet: "R1.2", before: "Own the annual planning cycle.", after: "Ran the annual planning cycle.", facts: ["R1.2"] }]);
     expect(resume.experience).toHaveLength(2);
     expect(resume.skills.map((s) => s.id)).toEqual(["S2", "S1", "S3"]);
   });
   it("renders a plain document", () => {
-    const text = renderResume("Jack Miller", applyChanges(base, { summary: "Strategy leader.", changes: [], skills: [] }).resume);
+    const text = renderResume("Jack Miller", applyChanges(base, { summary: "Strategy leader.", summaryFacts: [], changes: [], skills: [] }).resume);
     expect(text.split("\n").slice(0, 5)).toEqual(["Jack Miller", "", "Strategy leader.", "", "Experience"]);
     expect(text).toContain("- Led a 3 year cost program.");
     expect(text.endsWith("Skills\nStrategy, SQL, Pricing")).toBe(true);

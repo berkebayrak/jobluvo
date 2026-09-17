@@ -144,6 +144,6 @@ export function jackResumeLines(): string[] {
   }
   lines.push("", "SKILLS", "");
   for (const [name, years, evidence] of JACK_RESUME.skills) lines.push(`${name} (${years} years): ${evidence}`);
-  lines.push("", "OTHER", "", `Salary expectation: ${JACK_RESUME.answers[0][1]}`, `Notice period: ${JACK_RESUME.answers[1][1]}`);
+  // No salary expectation or notice period: those are answers to application questions, not resume content.
   return lines;
 }

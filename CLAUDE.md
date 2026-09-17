@@ -25,6 +25,8 @@ Sources of truth:
 - `design/docs/02-Implementation-Plan.md` high level implementation plan.
 - `design/docs/04-Job-Parsing-and-ATS-Integration.md` discovery and execution per
   platform.
+- `design/docs/06-Decision-Log.md` decisions taken during build that the other docs
+  assume but do not state, newest first, each with what it was measured against.
 
 When product facts and this file disagree, the docs win. Update this file to match.
 
@@ -168,6 +170,8 @@ npm run db:backfill-locations  # re-parse stored locations with the current pars
 npm run db:backfill-signals    # recompute sponsorship and eligibility from stored text, safe to repeat
 npm run pass-rate    # hard filter pass rate across ingested jobs, by family and reason
 npm run boilerplate-report  # what the boilerplate rule strips per board, and what a rule change releases
+npm run freshness    # jobs arriving per day and how many pass the filter, by board date and by first seen
+npm run dedupe-report  # what a dedupe rule change releases and what it withholds, before it ships
 ```
 
 ## Layout

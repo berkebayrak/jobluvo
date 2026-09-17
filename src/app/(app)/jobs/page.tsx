@@ -188,6 +188,20 @@ function JobsScreen() {
   const [viewer, setViewer] = React.useState<Viewer | undefined>(undefined);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
+  /*
+   * Which set of filters the rows on screen belong to. Every filter change
+   * bumps it, and a Show more page is thrown away when it comes back to a
+   * different generation, so a slow second page can never be appended under
+   * filters it was not asked for.
+   */
+  const generation = React.useRef(0);
+  /*
+   * Jobs whose decision is in flight or already recorded. The upsert leaves
+   * one row however many times it is called, but each call here moves the
+   * counters, so a second tap on the same card must do nothing. An id leaves
+   * the set only when the post fails or when Undo puts the job back.
+   */
+  const deciding = React.useRef<Set<string>>(new Set());
 
   const search = React.useMemo(() => {
     const p = new URLSearchParams();
@@ -204,11 +218,13 @@ function JobsScreen() {
 
   React.useEffect(() => {
     let alive = true;
+    generation.current += 1;
+    const mine = generation.current;
     const timer = window.setTimeout(() => {
       fetch(`/api/jobs?${search}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((d: FeedPage) => {
-          if (!alive) return;
+          if (!alive || generation.current !== mine) return;
           setRows(d.jobs);
           setTotal(d.total);
           setInventory(d.inventory);
@@ -227,14 +243,16 @@ function JobsScreen() {
 
   function showMore() {
     if (!rows || loadingMore) return;
+    const mine = generation.current;
     setLoadingMore(true);
     fetch(`/api/jobs?${search}&offset=${rows.length}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: FeedPage) => {
+        if (generation.current !== mine) return;
         setRows((cur) => [...(cur ?? []), ...d.jobs]);
         setTotal(d.total);
       })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => generation.current === mine && setLoadError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingMore(false));
   }
 
@@ -259,8 +277,11 @@ function JobsScreen() {
   const job = list[0];
 
   async function decide(j: FeedJob, decision: Decision) {
+    if (deciding.current.has(j.id)) return;
+    deciding.current.add(j.id);
     const ok = await postDecision(j.id, decision);
     if (!ok) {
+      deciding.current.delete(j.id);
       showToast({ text: "Could not save that. Try again." });
       return;
     }
@@ -280,6 +301,7 @@ function JobsScreen() {
       actionLabel: "Undo",
       onAction: async () => {
         if (await undoDecision(j.id)) {
+          deciding.current.delete(j.id);
           setRows((cur) => {
             const next = [...(cur ?? [])];
             next.splice(Math.max(0, index), 0, j);
@@ -295,7 +317,7 @@ function JobsScreen() {
   }
 
   function swipe(decision: Decision) {
-    if (!job) return;
+    if (!job || deciding.current.has(job.id)) return;
     if (decision === "save") {
       void decide(job, decision);
       return;

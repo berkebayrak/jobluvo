@@ -200,6 +200,10 @@ export async function applyPostings(tx: Tx, source: Source, postings: RawPosting
   const now = new Date();
 
   const bp = await refreshBoilerplate(tx, source, postings, known);
+  // When the boilerplate set moved, every listed job is rewritten with a new
+  // core and hash whether or not its text changed. The snapshot tells the two
+  // apart after the upsert, so only a real change reaches the rework claim.
+  const before = bp.version !== source.boilerplateVersion ? await rawSnapshot(tx, source.id) : null;
 
   const full: NewJob[] = [];
   /*
@@ -316,6 +320,16 @@ export async function applyPostings(tx: Tx, source: Source, postings: RawPosting
     }
   }
 
+  if (before) {
+    const after = await rawSnapshot(tx, source.id);
+    const same: { id: string; old: string }[] = [];
+    for (const [id, a] of after) {
+      const b = before.get(id);
+      if (b && b.raw === a.raw && b.hash !== a.hash) same.push({ id, old: b.hash });
+    }
+    await copyMatchHash(tx, same);
+  }
+
   for (const pending of [false, true]) {
     const rows = touchOnly.filter((c) => c.pending === pending);
     for (let i = 0; i < rows.length; i += CHUNK) {
@@ -375,16 +389,12 @@ function mergeDuplicates(postings: RawPosting[]): RawPosting[] {
  * the version increments and every existing job of the source that was
  * hashed under the old version is rehashed in the same transaction.
  *
- * WHEN `matches` EXISTS this function must also run, in the same
- * transaction and right after the rehash below:
- *   update matches m set content_hash = j.content_hash
- *   from jobs j where j.id = m.job_id and j.source_id = <this source>
- * so a boilerplate recompute never looks like changed content and never
- * triggers a paid rescore. The whole board re-poll on 17 Sep 2026 is the
- * event this rule exists for; it must land before the first model call.
- * Matches,
- * when they exist, copy the new hash so a recompute never triggers a paid
- * rescore; that copy lands with the profile pull request.
+ * A rehash changes content_hash without changing content. The matches of
+ * the rehashed rows get the new hash copied over (`copyMatchHash`), so the
+ * rework claim never reads a boilerplate recompute as changed content and
+ * pays for a rescore. The rows this poll upserts are covered the same way in
+ * `applyPostings`, from a snapshot taken before the upsert. The whole board
+ * re-poll on 17 Sep 2026 is the event this rule exists for.
  */
 async function refreshBoilerplate(
   tx: Tx,
@@ -428,7 +438,36 @@ async function refreshBoilerplate(
         .where(eq(jobs.id, r.id));
     }
   }
+  const byId = new Map([...known.values()].map((k) => [k.id, k.contentHash]));
+  await copyMatchHash(tx, stale.map((id) => ({ id, old: byId.get(id)! })));
   return { version, paragraphs: detected };
+}
+
+/**
+ * Sets matches.content_hash to the job's current hash for the given jobs,
+ * only where the match still carried the job's previous hash. A match that
+ * was already stale, because the content itself changed on an earlier poll
+ * and no rescore has run yet, keeps its stale hash and its place in the
+ * rework queue.
+ */
+async function copyMatchHash(tx: Tx, pairs: { id: string; old: string }[]): Promise<void> {
+  for (let i = 0; i < pairs.length; i += CHUNK) {
+    const chunk = pairs.slice(i, i + CHUNK);
+    await tx.execute(sql`
+      update matches m set content_hash = j.content_hash, updated_at = now()
+      from jobs j join (values ${sql.join(chunk.map((p) => sql`(${p.id}::uuid, ${p.old})`), sql`, `)}) v(id, old) on v.id = j.id
+      where m.job_id = j.id and m.content_hash = v.old and j.content_hash <> v.old
+    `);
+  }
+}
+
+/** Every open job of the source with its hash and a digest of the text the hash is computed from. */
+async function rawSnapshot(tx: Tx, sourceId: string): Promise<Map<string, { hash: string; raw: string }>> {
+  const r = await tx.execute<{ id: string; hash: string; raw: string }>(sql`
+    select id, content_hash as hash, md5(title || E'\n' || locations::text || E'\n' || description_text) as raw
+    from jobs where source_id = ${sourceId} and closed_at is null
+  `);
+  return new Map(r.rows.map((x) => [x.id, { hash: x.hash, raw: x.raw }]));
 }
 
 /**

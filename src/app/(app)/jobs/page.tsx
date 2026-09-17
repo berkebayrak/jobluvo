@@ -465,6 +465,7 @@ function JobsScreen() {
                   salary={f.salary}
                   ats={f.ats}
                   posted={f.posted}
+                  match={f.match}
                   reasons={f.reasons}
                   onApply={() => decide(j, "apply")}
                   onSave={() => decide(j, "save")}
@@ -505,6 +506,7 @@ function JobsScreen() {
                       posted={f.posted}
                       salary={f.salary}
                       ats={f.ats}
+                      match={f.match}
                       reasons={f.reasons}
                       footnote="Resume Strategy v3 will be tailored for this role."
                       stamp={stamp}

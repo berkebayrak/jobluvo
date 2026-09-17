@@ -11,6 +11,8 @@ export interface CardFields {
   salary: string;
   ats: string;
   posted: string;
+  /** Absent until scored. */
+  match?: number;
   reasons: string[];
 }
 
@@ -102,7 +104,9 @@ export function sponsorshipLine(j: FeedJob, viewer?: Viewer): string | undefined
 }
 
 export function cardFields(j: FeedJob, viewer?: Viewer): CardFields {
-  const reasons: string[] = [];
+  // The score's own lines first, then what the posting says about sponsorship,
+  // then where else it is listed. Unknowns carry the question glyph.
+  const reasons: string[] = j.match ? [...j.match.reasons, ...j.match.unknowns.map((u) => `? ${u}`)] : [];
   const sp = sponsorshipLine(j, viewer);
   if (sp) reasons.push(sp);
   if (j.alsoOn.length) reasons.push(`Also listed on ${j.alsoOn.map((f) => FAMILY_LABEL[f] ?? f).join(", ")}`);
@@ -114,6 +118,7 @@ export function cardFields(j: FeedJob, viewer?: Viewer): CardFields {
     salary: salaryOf(j),
     ats: FAMILY_LABEL[j.family] ?? j.family,
     posted: ageOf(j.postedAt ?? j.firstSeenAt),
+    match: j.match?.score,
     reasons,
   };
 }

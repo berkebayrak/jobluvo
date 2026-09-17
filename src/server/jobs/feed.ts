@@ -50,6 +50,16 @@ export interface FeedJob {
   /** Families this job is also listed on, through its group. */
   alsoOn: string[];
   copies: number;
+  /** The viewer's score for this job, once the cron has produced one. Null renders as not scored. */
+  match: FeedMatch | null;
+}
+
+export interface FeedMatch {
+  score: number;
+  band: string;
+  /** For lines plain, against lines prefixed "-". */
+  reasons: string[];
+  unknowns: string[];
 }
 
 export interface FeedFilters {
@@ -119,10 +129,11 @@ function visibleWhere(userId: string): SQL {
 
 /**
  * `vis`, every open undecided job with its group and its first failing
- * reason, and `rep`, one row per group: the earliest member that passes, or
+ * reason, and `rep`, one row per group. Exported because the scoring claim
+ * scores exactly what the feed would show: the earliest member that passes, or
  * the earliest member when none passes. A job with no group is its own group.
  */
-function withRep(userId: string, reason: SQL | null): SQL {
+export function withRep(userId: string, reason: SQL | null): SQL {
   return sql`with vis as (
       select j.id, l.group_id, j.first_seen_at, (${reason ?? sql`null`})::text as reason
       ${FROM}
@@ -179,12 +190,14 @@ export async function feedForUser(
         j.employment_type, j.comp_min, j.comp_max, j.comp_currency, j.comp_period, j.seniority, j.sponsorship,
         j.sponsorship_evidence, j.eligibility, j.eligibility_evidence,
         j.apply_url, j.posted_at, j.first_seen_at,
+        mt.score as match_score, mt.band as match_band, mt.reasons as match_reasons, mt.unknowns as match_unknowns,
         coalesce((
           select array_agg(distinct o.family::text) from job_group_links l2 join jobs o on o.id = l2.job_id
           where l2.group_id = l.group_id and o.id <> j.id and o.closed_at is null
         ), '{}') as also_on,
         case when l.group_id is null then 1 else (select count(*) from job_group_links l3 where l3.group_id = l.group_id) end as copies
       ${REP}
+      left join matches mt on mt.user_id = ${userId} and mt.job_id = j.id and mt.status = 'scored'
       where ${where}
       order by coalesce(j.posted_at, j.first_seen_at) desc, j.id
       limit ${limit} offset ${offset}
@@ -255,5 +268,14 @@ function rowToJob(r: Record<string, unknown>): FeedJob {
     firstSeenAt: new Date(r.first_seen_at as string).toISOString(),
     alsoOn: (r.also_on as string[]) ?? [],
     copies: Number(r.copies ?? 1),
+    match:
+      r.match_score == null
+        ? null
+        : {
+            score: Number(r.match_score),
+            band: String(r.match_band ?? ""),
+            reasons: (r.match_reasons as string[]) ?? [],
+            unknowns: (r.match_unknowns as string[]) ?? [],
+          },
   };
 }

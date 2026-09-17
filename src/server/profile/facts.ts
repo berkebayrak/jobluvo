@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 /*
- * The shape of `profile_facts.data`, one schema per kind. The three kinds
- * that feed the hard filter are here in full; the resume kinds arrive with
- * extraction.
+ * The shape of `profile_facts.data`, one schema per kind. Three kinds feed
+ * the hard filter; employment, education, skill and answer are what the
+ * scorer reads as the profile. Extraction will write the same shapes.
  *
  * ID-05: location, relocation, remote preference, employment types and
  * exclusions are preferences the user states. ID-06: work authorization and
@@ -64,6 +64,45 @@ export const sponsorshipFact = z.object({
   note: z.string().optional(),
 });
 
+const yearMonth = z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM");
+
+/** One role. `end` absent means current. Bullets are the resume's own lines, not a summary of them. */
+export const employmentFact = z.object({
+  company: z.string().min(1),
+  title: z.string().min(1),
+  location: z.string().optional(),
+  start: yearMonth,
+  end: yearMonth.optional(),
+  bullets: z.array(z.string().min(1)).min(1),
+});
+
+export const educationFact = z.object({
+  institution: z.string().min(1),
+  degree: z.string().min(1),
+  field: z.string().optional(),
+  start: yearMonth.optional(),
+  end: yearMonth.optional(),
+  notes: z.array(z.string().min(1)).optional(),
+});
+
+/** One skill per row, as extraction produces them. */
+export const skillFact = z.object({
+  name: z.string().min(1),
+  years: z.number().int().nonnegative().optional(),
+  evidence: z.string().optional(),
+});
+
+/** A standing answer to an application question, in the user's words. */
+export const answerFact = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1),
+});
+
+export type EmploymentFact = z.infer<typeof employmentFact>;
+export type EducationFact = z.infer<typeof educationFact>;
+export type SkillFact = z.infer<typeof skillFact>;
+export type AnswerFact = z.infer<typeof answerFact>;
+
 export type PreferenceFact = z.infer<typeof preferenceFact>;
 export type AuthorizationFact = z.infer<typeof authorizationFact>;
 export type SponsorshipFact = z.infer<typeof sponsorshipFact>;
@@ -72,4 +111,8 @@ export const FACT_SCHEMAS = {
   preference: preferenceFact,
   authorization: authorizationFact,
   sponsorship: sponsorshipFact,
+  employment: employmentFact,
+  education: educationFact,
+  skill: skillFact,
+  answer: answerFact,
 } as const;

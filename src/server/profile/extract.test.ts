@@ -4,7 +4,7 @@ import { dbPool, type Tx } from "@/db/client";
 import { costEvents, profileDocuments, profileFacts, users } from "@/db/schema";
 import * as client from "@/server/llm/client";
 import { unknownCostStats } from "@/server/match/report";
-import { profileView } from "./confirm";
+import { PROCESSING_STALE_MS, profileView } from "./confirm";
 import { extractUpload, factsFrom, type ExtractOutput } from "./extract";
 import { textPdf, wrap } from "./pdf";
 
@@ -166,6 +166,28 @@ describe.skipIf(!hasDb)("the upload path and the document's state", () => {
       expect(await tx.select().from(profileFacts).where(eq(profileFacts.userId, userId))).toEqual([]);
       const cost = await tx.select({ kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId));
       expect(cost).toEqual([{ kind: "extract" }]);
+    });
+  });
+
+  it("a processing document the function died on, older than the view's window with no error text, is counted as stale; a fresh one is not", async () => {
+    await withUser(async (tx, userId) => {
+      const before = await unknownCostStats(tx);
+      await tx.insert(profileDocuments).values([
+        { userId, filename: "fresh.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing" },
+        { userId, filename: "died.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing", uploadedAt: new Date(Date.now() - PROCESSING_STALE_MS - 1000) },
+      ]);
+      const after = await unknownCostStats(tx);
+      const rows = (s: typeof after) => s.find((x) => x.kind === "extract")!;
+      expect(rows(after).staleRows! - rows(before).staleRows!).toBe(1);
+      expect(rows(after).unknownRows).toBe(rows(before).unknownRows);
+      // The stale row is priced into the worst case, the fresh one is not.
+      expect(rows(after).usdWorstCase! - rows(before).usdWorstCase!).toBeCloseTo(rows(after).usdMeanPerCall, 4);
+      // The view reads the same two rows the same way.
+      const view = await profileView(tx, userId);
+      expect(view.documents.map((d) => [d.filename, d.state])).toEqual([
+        ["fresh.pdf", "processing"],
+        ["died.pdf", "failed"],
+      ]);
     });
   });
 

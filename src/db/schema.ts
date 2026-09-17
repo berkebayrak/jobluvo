@@ -38,6 +38,7 @@ export const linkReasonEnum = pgEnum("link_reason", ["native", "url", "requisiti
 export const decisionEnum = pgEnum("decision", ["apply", "save", "skip"]);
 export const costKindEnum = pgEnum("cost_kind", ["ingest", "extract", "score", "tailor"]);
 export const matchStatusEnum = pgEnum("match_status", ["pending", "scored", "failed"]);
+export const packetStatusEnum = pgEnum("packet_status", ["ready", "invalid", "failed"]);
 export const factKindEnum = pgEnum("fact_kind", [
   "contact",
   "link",
@@ -64,6 +65,29 @@ export interface JobLocation {
   countryName?: string;
   remote?: boolean;
   raw: string;
+}
+
+/** The tailored resume as the packet renders it. Every id points at a confirmed fact (src/server/packet/resume.ts). */
+export interface ResumeDocument {
+  summary: string | null;
+  experience: { id: string; heading: string; bullets: { id: string; text: string }[] }[];
+  education: { id: string; text: string }[];
+  skills: { id: string; text: string }[];
+}
+
+/** One edit the model proposed: the bullet it replaces, the new text, and the facts it says support it. */
+export interface ResumeChange {
+  bullet: string;
+  text: string;
+  facts: string[];
+}
+
+/** What the validator found. "hard" rejects the packet; "soft" is shown with it. */
+export interface PacketFinding {
+  level: "hard" | "soft";
+  bullet: string | null;
+  message: string;
+  value?: string;
 }
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
@@ -271,6 +295,47 @@ export const matches = pgTable(
   ],
 );
 
+/**
+ * One tailored resume for one user and job (DOC-01, DOC-03). The model
+ * proposes edits against the confirmed facts, the code assembles the
+ * document, and the validator decides whether it may be shown: a value
+ * that appears in no confirmed fact rejects the packet, one retry, then
+ * it is stored as invalid rather than passed. The three hashes bind the
+ * packet to the facts, the job and the rendered text (DOC-05).
+ */
+export const packets = pgTable(
+  "packets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    status: packetStatusEnum("status").notNull(),
+    /** "changes": the model emitted edits and the code assembled the document. "document": the model emitted the whole resume. */
+    mode: text("mode").notNull(),
+    model: text("model").notNull(),
+    attempts: integer("attempts").notNull().default(1),
+    resume: jsonb("resume").$type<ResumeDocument>(),
+    changes: jsonb("changes").$type<ResumeChange[]>().notNull().default([]),
+    findings: jsonb("findings").$type<PacketFinding[]>().notNull().default([]),
+    factsHash: text("facts_hash").notNull(),
+    contentHash: text("content_hash").notNull(),
+    resumeHash: text("resume_hash"),
+    tokensIn: integer("tokens_in").notNull().default(0),
+    tokensCached: integer("tokens_cached").notNull().default(0),
+    tokensOut: integer("tokens_out").notNull().default(0),
+    usd: real("usd").notNull().default(0),
+    ms: integer("ms").notNull().default(0),
+    error: text("error"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("packets_user_job").on(t.userId, t.jobId)],
+);
+
 /** The observed cost worksheet. Model calls add tokens and usd; ingest adds time. */
 export const costEvents = pgTable(
   "cost_events",
@@ -345,4 +410,5 @@ export type Source = typeof sources.$inferSelect;
 export type ProfileFact = typeof profileFacts.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Match = typeof matches.$inferSelect;
+export type Packet = typeof packets.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;

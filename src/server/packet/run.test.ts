@@ -1,0 +1,180 @@
+import { eq, sql } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { dbPool, type Tx } from "@/db/client";
+import { costEvents, jobs, packets, profileFacts, sources, users } from "@/db/schema";
+import type { ScoringJob } from "@/server/match/score";
+import { resumeFacts } from "@/server/match/profile";
+import { tailorJob } from "./run";
+import * as tailor from "./tailor";
+
+vi.mock("./tailor", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./tailor")>();
+  return { ...real, tailorCall: vi.fn() };
+});
+const call = () => vi.mocked(tailor.tailorCall);
+
+/*
+ * The packet run over its cycle against the real database, with the model
+ * stubbed: an answer with an invented value is rejected, the retry carries
+ * the findings, a second rejection is stored as invalid rather than passed,
+ * and every paid call leaves a cost row. Skipped without DATABASE_URL.
+ */
+
+const hasDb = !!process.env.DATABASE_URL;
+
+class Rollback extends Error {}
+
+const usage = { inputTokens: 2000, cachedInputTokens: 1200, outputTokens: 300, reasoningTokens: 0 };
+const answer = (changes: { bullet: string; text: string; facts: string[] }[], summary: string | null = null) =>
+  ({ text: JSON.stringify({ summary, changes, skills: [] }), model: "gpt-5.6-luna", usage, usd: 0.0005, ms: 100 }) satisfies tailor.TailorResult;
+
+async function withFixture(fn: (tx: Tx, userId: string, job: ScoringJob) => Promise<void>) {
+  await dbPool()
+    .transaction(async (tx) => {
+      const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const [user] = await tx
+        .insert(users)
+        .values({ name: "Packet fixture", email: `packet-${stamp}@test.invalid`, jobluvoAddress: `packet-${stamp}@test.invalid` })
+        .returning({ id: users.id });
+      await tx.insert(profileFacts).values([
+        { userId: user.id, kind: "preference", origin: "user", status: "confirmed", data: { targetCountries: ["US"], relocation: "yes", remote: "remote_ok" } },
+        {
+          userId: user.id,
+          kind: "employment",
+          origin: "user",
+          status: "confirmed",
+          data: { company: "Arvento", title: "Head of Strategy", start: "2022-03", bullets: ["Ran a 3 year cost program that cut cost 11 percent.", "Own the annual planning cycle."] },
+        },
+        { userId: user.id, kind: "skill", origin: "user", status: "confirmed", data: { name: "Financial modelling", years: 10 } },
+      ]);
+      const [src] = await tx
+        .insert(sources)
+        .values({ family: "greenhouse", tenant: `packet-test-${stamp}`, companyName: "Fixture Co", companyDomain: null })
+        .returning({ id: sources.id });
+      const [row] = await tx
+        .insert(jobs)
+        .values({
+          sourceId: src.id,
+          family: "greenhouse",
+          nativeId: "j",
+          title: "Strategy Lead",
+          titleNorm: "strategy lead",
+          companyName: "Fixture Co",
+          locations: [{ raw: "New York, NY", city: "New York", region: "NY", country: "US" }],
+          workplace: "onsite",
+          descriptionText: "Own planning.",
+          descriptionHtml: "<p>Own planning.</p>",
+          descriptionCore: "Own planning.",
+          contentHash: "hash-j",
+          applyUrl: "https://example.com/j",
+          applyUrlNorm: "https://example.com/j",
+        })
+        .returning({ id: jobs.id });
+      const job: ScoringJob = {
+        id: row.id,
+        title: "Strategy Lead",
+        companyName: "Fixture Co",
+        locations: [],
+        workplace: "onsite",
+        employmentType: null,
+        seniority: null,
+        compRaw: null,
+        compMin: null,
+        compMax: null,
+        compCurrency: null,
+        compPeriod: "unknown",
+        descriptionCore: "Own planning.",
+      };
+      await fn(tx, user.id, job);
+      throw new Rollback();
+    })
+    .catch((e) => {
+      if (!(e instanceof Rollback)) throw e;
+    });
+}
+
+afterAll(async () => {
+  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
+  await g.__jobluvoPool?.end();
+});
+
+afterEach(() => call().mockReset());
+
+describe.skipIf(!hasDb)("packet run over its attempts", () => {
+  beforeAll(async () => {
+    try {
+      await dbPool().execute(sql`select 1`);
+    } catch (e) {
+      throw new Error(`DATABASE_URL is set but the database cannot be reached: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
+
+  it("rejects an invented value, retries once with the findings, and stores the corrected answer as ready", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call()
+        .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent.", facts: ["R1.1"] }]))
+        .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      const out = await tailorJob(tx, facts, job, { run: "test" });
+      expect(out.status).toBe("ready");
+      expect(out.attempts).toBe(2);
+      expect(out.findings.filter((f) => f.level === "hard")).toEqual([]);
+      expect(out.changes).toBe(1);
+      expect(out.tokensIn).toBe(4000);
+      expect(out.usd).toBeCloseTo(0.001, 8);
+      // The retry carried the rejection.
+      const retry = call().mock.calls[1][2];
+      expect(retry.retryOf).toEqual([expect.objectContaining({ level: "hard", bullet: "R1.1", value: "pct:14" })]);
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("ready");
+      expect(p.attempts).toBe(2);
+      expect(p.resume?.experience[0].bullets[0].text).toBe("Led a 3 year cost program that cut cost 11 percent.");
+      expect(p.contentHash).toBe("hash-j");
+      expect(p.factsHash).toBe(facts.factsHash);
+      expect(p.resumeHash).not.toBeNull();
+      const cost = await tx.select({ run: costEvents.run, kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toEqual([
+        { run: "test", kind: "tailor" },
+        { run: "test", kind: "tailor" },
+      ]);
+    });
+  });
+
+  it("stores a second rejection as invalid with its findings, never as a pass", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call()
+        .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Cut cost 14 percent.", facts: ["R1.1"] }]))
+        .mockResolvedValueOnce(answer([{ bullet: "R1.2", text: "Own the planning cycle for 7 business units.", facts: ["R1.2"] }], "Leader since 2019."));
+      const out = await tailorJob(tx, facts, job);
+      expect(out.status).toBe("invalid");
+      expect(out.attempts).toBe(2);
+      expect(out.findings.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:7", "year:2019"]);
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("invalid");
+      expect(p.resume).toBeNull();
+      expect(p.findings).toHaveLength(2);
+    });
+  });
+
+  it("a soft finding travels with a ready packet, and a call that fails still writes its cost row", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year program, cutting cost 11 percent.", facts: ["R1.2"] }]));
+      const ready = await tailorJob(tx, facts, job);
+      expect(ready.status).toBe("ready");
+      expect(ready.attempts).toBe(1);
+      expect(ready.findings.map((f) => f.level)).toEqual(["soft", "soft"]);
+
+      call().mockReset();
+      call().mockRejectedValue(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));
+      const failed = await tailorJob(tx, facts, job);
+      expect(failed.status).toBe("failed");
+      expect(failed.error).toContain("incomplete");
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("failed");
+      const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toHaveLength(2);
+    });
+  });
+});

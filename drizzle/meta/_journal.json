@@ -57,6 +57,13 @@
       "when": 1789650107258,
       "tag": "0007_phase0_scoring",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789652520885,
+      "tag": "0008_phase0_packets",
+      "breakpoints": true
     }
   ]
 }

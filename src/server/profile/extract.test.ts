@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
-import { factsFrom, type ExtractOutput } from "./extract";
+import { eq, sql } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { dbPool, type Tx } from "@/db/client";
+import { costEvents, profileDocuments, profileFacts, users } from "@/db/schema";
+import * as client from "@/server/llm/client";
+import { unknownCostStats } from "@/server/match/report";
+import { PROCESSING_STALE_MS, profileView } from "./confirm";
+import { extractUpload, factsFrom, type ExtractOutput } from "./extract";
 import { textPdf, wrap } from "./pdf";
+
+vi.mock("@/server/llm/client", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/server/llm/client")>();
+  return { ...real, structuredCall: vi.fn() };
+});
+const call = () => vi.mocked(client.structuredCall);
 
 const base: ExtractOutput = {
   name: "Jack Miller",
@@ -66,5 +78,131 @@ describe("the PDF writer", () => {
     expect(pdf).toContain("/Count 2");
     const startxref = Number(/startxref\n(\d+)/.exec(pdf)![1]);
     expect(pdf.slice(startxref, startxref + 4)).toBe("xref");
+  });
+});
+
+/*
+ * The upload path against the real database with the model stubbed: the
+ * document is processing during the call, ready with its facts after it,
+ * and failed with the reason when the call fails, so a document with no
+ * facts is never mistaken for a verified one. A call of unknown cost leaves
+ * its mark on the document, where the cost report counts it. Skipped
+ * without DATABASE_URL.
+ */
+
+const hasDb = !!process.env.DATABASE_URL;
+
+class Rollback extends Error {}
+
+async function withUser(fn: (tx: Tx, userId: string) => Promise<void>) {
+  await dbPool()
+    .transaction(async (tx) => {
+      const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const [user] = await tx
+        .insert(users)
+        .values({ name: "Upload fixture", email: `upload-${stamp}@test.invalid`, jobluvoAddress: `upload-${stamp}@test.invalid` })
+        .returning({ id: users.id });
+      await fn(tx, user.id);
+      throw new Rollback();
+    })
+    .catch((e) => {
+      if (!(e instanceof Rollback)) throw e;
+    });
+}
+
+const usage = { inputTokens: 1600, cachedInputTokens: 0, outputTokens: 1500, reasoningTokens: 0 };
+const answer = (out: ExtractOutput) => ({ text: JSON.stringify(out), usage, usd: 0.002, ms: 12000 });
+const file = { filename: "resume.pdf", bytes: Buffer.from("%PDF-1.4 fixture") };
+
+afterAll(async () => {
+  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
+  await g.__jobluvoPool?.end();
+});
+
+afterEach(() => call().mockReset());
+
+describe.skipIf(!hasDb)("the upload path and the document's state", () => {
+  beforeAll(async () => {
+    try {
+      await dbPool().execute(sql`select 1`);
+    } catch (e) {
+      throw new Error(`DATABASE_URL is set but the database cannot be reached: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
+
+  it("a successful upload leaves a ready document with its facts extracted, and the view says check", async () => {
+    await withUser(async (tx, userId) => {
+      call().mockImplementationOnce(async () => {
+        // During the call the document is processing.
+        const [d] = await tx.select({ status: profileDocuments.status }).from(profileDocuments).where(eq(profileDocuments.userId, userId));
+        expect(d.status).toBe("processing");
+        return answer(base);
+      });
+      const out = await extractUpload(tx, userId, file);
+      expect(out.facts).toBe(6);
+      const view = await profileView(tx, userId);
+      expect(view.documents).toEqual([expect.objectContaining({ id: out.documentId, status: "ready", state: "check", error: null, extracted: 6, confirmed: 0 })]);
+      const cost = await tx.select({ kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toEqual([{ kind: "extract" }]);
+    });
+  });
+
+  it("an upload whose extractor finds nothing is ready and empty, never verified", async () => {
+    await withUser(async (tx, userId) => {
+      call().mockResolvedValueOnce(answer({ ...base, name: null, email: null, location: null, links: [], employment: [], education: [], skills: [], answers: [] }));
+      const out = await extractUpload(tx, userId, file);
+      expect(out.facts).toBe(0);
+      const view = await profileView(tx, userId);
+      expect(view.documents[0]).toMatchObject({ status: "ready", state: "empty", extracted: 0, confirmed: 0 });
+    });
+  });
+
+  it("a failed call leaves a failed document with the reason and its cost row, and no facts", async () => {
+    await withUser(async (tx, userId) => {
+      call().mockRejectedValueOnce(new client.CallError("response incomplete: max_output_tokens", usage, 0.002, 40000));
+      await expect(extractUpload(tx, userId, file)).rejects.toThrow(/incomplete/);
+      const view = await profileView(tx, userId);
+      expect(view.documents[0]).toMatchObject({ status: "failed", state: "failed", error: "response incomplete: max_output_tokens", extracted: 0 });
+      expect(await tx.select().from(profileFacts).where(eq(profileFacts.userId, userId))).toEqual([]);
+      const cost = await tx.select({ kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toEqual([{ kind: "extract" }]);
+    });
+  });
+
+  it("a processing document the function died on, older than the view's window with no error text, is counted as stale; a fresh one is not", async () => {
+    await withUser(async (tx, userId) => {
+      const before = await unknownCostStats(tx);
+      await tx.insert(profileDocuments).values([
+        { userId, filename: "fresh.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing" },
+        { userId, filename: "died.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing", uploadedAt: new Date(Date.now() - PROCESSING_STALE_MS - 1000) },
+      ]);
+      const after = await unknownCostStats(tx);
+      const rows = (s: typeof after) => s.find((x) => x.kind === "extract")!;
+      expect(rows(after).staleRows! - rows(before).staleRows!).toBe(1);
+      expect(rows(after).unknownRows).toBe(rows(before).unknownRows);
+      // The stale row is priced into the worst case, the fresh one is not.
+      expect(rows(after).usdWorstCase! - rows(before).usdWorstCase!).toBeCloseTo(rows(after).usdMeanPerCall, 4);
+      // The view reads the same two rows the same way.
+      const view = await profileView(tx, userId);
+      expect(view.documents.map((d) => [d.filename, d.state])).toEqual([
+        ["fresh.pdf", "processing"],
+        ["died.pdf", "failed"],
+      ]);
+    });
+  });
+
+  it("a call of unknown cost leaves its mark on the document, no cost row, and the cost report counts it", async () => {
+    await withUser(async (tx, userId) => {
+      const before = await unknownCostStats(tx);
+      call().mockRejectedValueOnce(new client.CallUnknownError(`call timed out after 40000ms, ${client.UNKNOWN_COST_MARK}: the provider may have completed and billed it`, 40000));
+      await expect(extractUpload(tx, userId, file)).rejects.toThrow(/cost unknown/);
+      const view = await profileView(tx, userId);
+      expect(view.documents[0]).toMatchObject({ status: "failed", state: "failed" });
+      expect(view.documents[0].error).toContain(client.UNKNOWN_COST_MARK);
+      expect(await tx.select().from(costEvents).where(eq(costEvents.userId, userId))).toEqual([]);
+      const after = await unknownCostStats(tx);
+      const rows = (s: typeof after) => s.find((x) => x.kind === "extract")!;
+      expect(rows(after).unknownRows! - rows(before).unknownRows!).toBe(1);
+    });
   });
 });

@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
 import { UNKNOWN_COST_MARK } from "@/server/llm/client";
+import { STALE_CLAIM_MINUTES } from "@/server/match/claim";
+import { PROCESSING_STALE_MS } from "@/server/profile/confirm";
 
 /*
  * The cost per model call, as a distribution, from cost_events. One block
@@ -156,22 +158,46 @@ export async function cellStats(db: DbPool | Tx, by: "family" | "length" | "seni
 /*
  * Calls of unknown cost: a timeout or a lost connection returns no usage,
  * so nothing reaches cost_events and the only trace is the message on the
- * match or packet row (UNKNOWN_COST_MARK). A row counts once, whatever its
- * attempts, so this is a floor on the calls and the worst case prices each
- * row at the kind's mean cost per call, beside the recorded spend. It is
- * the counter for the timeout budgets in D-015: a rising count says the
- * margin over the observed max was wrong. The floor depends on the mark
- * surviving the store: matches.error keeps the raw message, and
- * packets.error is assembled by `storedError` in packet/run.ts so the last
- * attempt's message is never truncated away behind an earlier attempt's
- * text. Whoever changes either error text changes what this counts.
- * Extraction stores no error text
- * on a row yet, so its unknown calls are not countable until the document
- * gets a status column (review finding 5, item 9).
+ * match, packet or document row (UNKNOWN_COST_MARK). A row counts once,
+ * whatever its attempts, so this is a floor on the calls, and the worst
+ * case prices each row at the kind's mean cost per call, beside the
+ * recorded spend. It is the counter for the timeout budgets in D-015: a
+ * rising count says the margin over the observed max was wrong.
+ *
+ * The floor depends on the mark surviving the store: matches.error keeps
+ * the raw message, packets.error is assembled by `storedError` in
+ * packet/run.ts so the last attempt's message is never truncated away
+ * behind an earlier attempt's text, and profile_documents.error keeps the
+ * raw message of a failed extraction. Whoever changes any of the three
+ * changes what this counts.
+ *
+ * A killed function is the other way a paid call leaves no row, and no
+ * catch runs, so no mark is written. What each kind leaves behind, read
+ * from the code on 17 Sep 2026:
+ *
+ *   extract  the document stays `processing` with a null error. The view
+ *            reads one older than PROCESSING_STALE_MS as failed; the same
+ *            constant counts it here as `staleRows`, its own column,
+ *            because a marked error is a call that timed out and a stale
+ *            row is a function that died, different problems.
+ *   score    the claim sets the row `pending` with claimed_at, and the
+ *            scoring writes scored or failed afterwards, so a kill mid
+ *            call leaves `pending` with a null error. The claim reclaims
+ *            it after STALE_CLAIM_MINUTES while attempts are under the
+ *            cap, so it is visible here only until then, counted as
+ *            `staleRows` from the same constant; after the reclaim the
+ *            only trace is attempts plus one, which a failed retry also
+ *            leaves, and at the cap the row stays pending for good and
+ *            stays in this count (review finding 11 D).
+ *   tailor   the packet row is written after the loop and the cost row
+ *            after each call, so a kill mid call leaves nothing at all:
+ *            not countable until the attempt history table (D-016).
  */
 export interface UnknownCostStats {
   kind: string;
   unknownRows: number | null;
+  /** Rows a killed function left behind with no error text: a processing document or a pending match older than its stale window. Null where nothing is left to count. */
+  staleRows: number | null;
   usdMeanPerCall: number;
   usdWorstCase: number | null;
   usdRecorded: number;
@@ -185,22 +211,35 @@ export async function unknownCostStats(db: DbPool | Tx): Promise<UnknownCostStat
       select kind::text as kind, avg(usd) as mean, sum(usd) as total
       from cost_events where kind in ('score', 'tailor', 'extract') group by 1
     ), u as (
-      select 'score' as kind, count(*)::int as n from matches where error like ${like}
+      select 'score' as kind, count(*) filter (where error like ${like})::int as n,
+        count(*) filter (where status = 'pending' and error is null and claimed_at < now() - make_interval(mins => ${STALE_CLAIM_MINUTES}))::int as stale
+      from matches where error like ${like} or status = 'pending'
       union all
-      select 'tailor' as kind, count(*)::int as n from packets where error like ${like}
+      select 'tailor' as kind, count(*)::int as n, null::int as stale from packets where error like ${like}
+      union all
+      select 'extract' as kind, count(*) filter (where error like ${like})::int as n,
+        count(*) filter (where status = 'processing' and error is null and uploaded_at < now() - make_interval(secs => ${PROCESSING_STALE_MS / 1000}))::int as stale
+      from profile_documents where error like ${like} or status = 'processing'
     )
-    select k.kind, u.n, k.mean, k.total from k left join u on u.kind = k.kind order by 1
+    select k.kind, u.n, u.stale, k.mean, k.total from k left join u on u.kind = k.kind order by 1
   `);
   return r.rows.map((x) => {
     const n = x.n === null || x.n === undefined ? null : num(x.n);
+    const stale = x.stale === null || x.stale === undefined ? null : num(x.stale);
     const mean = num(x.mean);
+    const notes: Record<string, string> = {
+      score: "marked: timed out or lost the connection; stale: pending past the reclaim window, a killed cron, gone from here once reclaimed",
+      tailor: "marked: timed out or lost the connection; a killed function leaves no row, not countable until the attempt history",
+      extract: "marked: timed out or lost the connection; stale: processing past the view's window, a killed upload function",
+    };
     return {
       kind: String(x.kind),
       unknownRows: n,
+      staleRows: stale,
       usdMeanPerCall: Number(mean.toFixed(6)),
-      usdWorstCase: n === null ? null : Number((n * mean).toFixed(4)),
+      usdWorstCase: n === null ? null : Number(((n + (stale ?? 0)) * mean).toFixed(4)),
       usdRecorded: Number(num(x.total).toFixed(4)),
-      note: n === null ? "not countable: no error text stored per document" : "rows whose latest attempt timed out or lost the connection",
+      note: notes[String(x.kind)] ?? "",
     };
   });
 }

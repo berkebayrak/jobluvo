@@ -16,7 +16,7 @@ async function main() {
   console.table(await cellStats(db, by));
   console.log("wrong citations by run, from the packets on hand");
   console.table(await citationStats(db));
-  console.log("calls of unknown cost: rows whose latest attempt timed out or lost the connection, worst case at the kind's mean per call, beside the recorded USD");
+  console.log("calls of unknown cost: marked rows timed out or lost the connection, stale rows are what a killed function left behind; worst case at the kind's mean per call, beside the recorded USD");
   console.table(await unknownCostStats(db));
 }
 

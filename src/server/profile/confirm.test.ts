@@ -4,7 +4,7 @@ import { dbPool, type Tx } from "@/db/client";
 import { profileDocuments, profileFacts, users } from "@/db/schema";
 import { resumeFacts } from "@/server/match/profile";
 import { filterFacts } from "@/server/profile/viewer";
-import { decideFacts, profileView, replaceWithDocument } from "./confirm";
+import { decideFacts, documentState, PROCESSING_STALE_MS, profileView, replaceWithDocument } from "./confirm";
 
 /*
  * Confirmation over its cycle against the real database, inside one rolled
@@ -57,7 +57,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
   it("extracted facts are not read until confirmed; a single confirm and reject move one fact each", async () => {
     await withUser(async (tx, userId) => {
       await tx.insert(profileFacts).values(seedFacts(userId));
-      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       const rows = await tx
         .insert(profileFacts)
         .values([
@@ -92,7 +92,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
   it("after a replacement, a stale confirm of the old document's fact id does not put a second document into the confirmed profile", async () => {
     await withUser(async (tx, userId) => {
       await tx.insert(profileFacts).values(seedFacts(userId));
-      const [a] = await tx.insert(profileDocuments).values({ userId, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const [a] = await tx.insert(profileDocuments).values({ userId, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       const aRows = await tx
         .insert(profileFacts)
         .values([
@@ -102,7 +102,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         .returning({ id: profileFacts.id });
       expect(await replaceWithDocument(tx, userId, a.id)).toEqual({ confirmed: 2, retired: 2 });
       // The page that showed document a is still open when the user replaces with document b.
-      const [b] = await tx.insert(profileDocuments).values({ userId, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const [b] = await tx.insert(profileDocuments).values({ userId, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       await tx.insert(profileFacts).values([
         { userId, documentId: b.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "B Co", title: "Head", start: "2023-03", bullets: ["B line."] } },
         { userId, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
@@ -126,7 +126,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
   it("replacing with a document confirms its facts, retires the resume facts before it, and leaves the user's own answers alone", async () => {
     await withUser(async (tx, userId) => {
       await tx.insert(profileFacts).values(seedFacts(userId));
-      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       await tx.insert(profileFacts).values([
         { userId, documentId: doc.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "New Co", title: "Head of Strategy", start: "2022-03", bullets: ["New line."] } },
         { userId, documentId: doc.id, kind: "education", origin: "upload", status: "extracted", evidence: "x", data: { institution: "Koc University", degree: "MBA" } },
@@ -142,16 +142,90 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       // Retired facts are kept as rejected, not deleted.
       const old = await tx.select({ status: profileFacts.status }).from(profileFacts).where(and(eq(profileFacts.userId, userId), eq(profileFacts.origin, "user"), eq(profileFacts.kind, "employment")));
       expect(old).toEqual([{ status: "rejected" }]);
-      // Doing it again changes nothing.
-      expect(await replaceWithDocument(tx, userId, doc.id)).toEqual({ confirmed: 0, retired: 0 });
-      await expect(replaceWithDocument(tx, userId, "00000000-0000-0000-0000-000000000000")).rejects.toThrow(/document not found/);
+      // Doing it again changes nothing and says why.
+      await expect(replaceWithDocument(tx, userId, doc.id)).rejects.toMatchObject({ reason: "nothing_to_confirm", message: "nothing left to confirm from resume.pdf" });
+      await expect(replaceWithDocument(tx, userId, "00000000-0000-0000-0000-000000000000")).rejects.toMatchObject({ reason: "not_found" });
+      expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["New Co"]);
     });
+  });
+
+  it("a document still being read, one that failed, or one the function died on is refused before anything is retired", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [reading] = await tx.insert(profileDocuments).values({ userId, filename: "reading.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing" }).returning({ id: profileDocuments.id });
+      const [failed] = await tx
+        .insert(profileDocuments)
+        .values({ userId, filename: "failed.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "failed", error: "response incomplete: max_output_tokens" })
+        .returning({ id: profileDocuments.id });
+      const [died] = await tx
+        .insert(profileDocuments)
+        .values({ userId, filename: "died.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing", uploadedAt: new Date(Date.now() - PROCESSING_STALE_MS - 1000) })
+        .returning({ id: profileDocuments.id });
+      // Even with facts attached, a processing or failed document cannot replace the profile.
+      await tx.insert(profileFacts).values([{ userId, documentId: reading.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "Half read" } }]);
+      await expect(replaceWithDocument(tx, userId, reading.id)).rejects.toMatchObject({ reason: "processing", message: "reading.pdf is still being read" });
+      await expect(replaceWithDocument(tx, userId, failed.id)).rejects.toMatchObject({ reason: "failed" });
+      await expect(replaceWithDocument(tx, userId, died.id)).rejects.toMatchObject({ reason: "failed" });
+      const f = (await resumeFacts(tx, userId))!;
+      expect(f.employment.map((e) => e.company)).toEqual(["Old Co"]);
+      expect(f.skills.map((s) => s.name)).toEqual(["Old skill"]);
+      // The view says each state in its own word, never "verified" for a document with no confirmed facts.
+      const view = await profileView(tx, userId);
+      const state = (id: string) => view.documents.find((d) => d.id === id)!.state;
+      expect(state(reading.id)).toBe("processing");
+      expect(state(failed.id)).toBe("failed");
+      expect(state(died.id)).toBe("failed");
+      expect(view.documents.find((d) => d.id === failed.id)!.error).toBe("response incomplete: max_output_tokens");
+    });
+  });
+
+  it("with two documents waiting, confirming the older one explicitly confirms only that one and leaves the newer waiting", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [older] = await tx
+        .insert(profileDocuments)
+        .values({ userId, filename: "older.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready", uploadedAt: new Date(Date.now() - 60_000) })
+        .returning({ id: profileDocuments.id });
+      const [newer] = await tx.insert(profileDocuments).values({ userId, filename: "newer.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
+      await tx.insert(profileFacts).values([
+        { userId, documentId: older.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "Older Co", title: "Head", start: "2022-03", bullets: ["Older line."] } },
+        { userId, documentId: newer.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "Newer Co", title: "Head", start: "2023-03", bullets: ["Newer line."] } },
+        { userId, documentId: newer.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "Newer skill" } },
+      ]);
+      const view = await profileView(tx, userId);
+      expect(view.documents.map((d) => [d.filename, d.state, d.extracted])).toEqual([
+        ["newer.pdf", "check", 2],
+        ["older.pdf", "check", 1],
+      ]);
+      expect(await replaceWithDocument(tx, userId, older.id)).toEqual({ confirmed: 1, retired: 2 });
+      const f = (await resumeFacts(tx, userId))!;
+      expect(f.employment.map((e) => e.company)).toEqual(["Older Co"]);
+      const after = await profileView(tx, userId);
+      expect(after.documents.map((d) => [d.filename, d.state, d.extracted, d.confirmed])).toEqual([
+        ["newer.pdf", "check", 2, 0],
+        ["older.pdf", "verified", 0, 1],
+      ]);
+    });
+  });
+
+  it("documentState reads every state from the status and the counts", () => {
+    const now = Date.now();
+    const at = (ms: number) => new Date(now - ms);
+    const d = (status: "processing" | "ready" | "failed", counts: Partial<{ extracted: number; confirmed: number; rejected: number }> = {}, age = 0) =>
+      documentState({ status, uploadedAt: at(age), extracted: 0, confirmed: 0, rejected: 0, ...counts }, now);
+    expect(d("processing")).toBe("processing");
+    expect(d("processing", {}, PROCESSING_STALE_MS + 1)).toBe("failed");
+    expect(d("failed", { confirmed: 5 })).toBe("failed");
+    expect(d("ready", { extracted: 1, confirmed: 3 })).toBe("check");
+    expect(d("ready", { confirmed: 3 })).toBe("verified");
+    expect(d("ready", { rejected: 3 })).toBe("rejected");
+    expect(d("ready")).toBe("empty");
   });
 
   it("a failure between the retirement and the confirmation rolls the retirement back", async () => {
     await withUser(async (tx, userId) => {
       await tx.insert(profileFacts).values(seedFacts(userId));
-      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       await tx.insert(profileFacts).values([{ userId, documentId: doc.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "New Co", title: "Head", start: "2022-03", bullets: ["New line."] } }]);
       // The replacement's second update, the confirmation, fails. The first, the retirement, has already run inside the same transaction.
       await expect(replaceWithDocument(failingOn(tx, 2), userId, doc.id)).rejects.toThrow(/injected failure/);
@@ -168,8 +242,9 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
   it("a document with no extracted facts retires nothing", async () => {
     await withUser(async (tx, userId) => {
       await tx.insert(profileFacts).values(seedFacts(userId));
-      const [empty] = await tx.insert(profileDocuments).values({ userId, filename: "failed.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
-      expect(await replaceWithDocument(tx, userId, empty.id)).toEqual({ confirmed: 0, retired: 0 });
+      const [empty] = await tx.insert(profileDocuments).values({ userId, filename: "failed.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
+      await expect(replaceWithDocument(tx, userId, empty.id)).rejects.toMatchObject({ reason: "nothing_to_confirm", message: "nothing left to confirm from failed.pdf" });
+      expect((await profileView(tx, userId)).documents.find((d) => d.id === empty.id)!.state).toBe("empty");
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["Old Co"]);
       expect(f.skills.map((s) => s.name)).toEqual(["Old skill"]);
@@ -185,8 +260,8 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       .returning({ id: users.id });
     try {
       await db.insert(profileFacts).values(seedFacts(user.id));
-      const [a] = await db.insert(profileDocuments).values({ userId: user.id, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
-      const [b] = await db.insert(profileDocuments).values({ userId: user.id, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const [a] = await db.insert(profileDocuments).values({ userId: user.id, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
+      const [b] = await db.insert(profileDocuments).values({ userId: user.id, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       await db.insert(profileFacts).values([
         { userId: user.id, documentId: a.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "A Co", title: "Head", start: "2022-03", bullets: ["A line."] } },
         { userId: user.id, documentId: a.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "A skill" } },

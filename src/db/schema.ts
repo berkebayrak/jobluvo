@@ -53,6 +53,8 @@ export const factKindEnum = pgEnum("fact_kind", [
 ]);
 export const factOriginEnum = pgEnum("fact_origin", ["upload", "user", "edit"]);
 export const factStatusEnum = pgEnum("fact_status", ["extracted", "confirmed", "rejected"]);
+/** Where an uploaded document's extraction stands: the call is running, it returned, or it failed. */
+export const documentStatusEnum = pgEnum("document_status", ["processing", "ready", "failed"]);
 
 export type Family = (typeof familyEnum.enumValues)[number];
 
@@ -377,6 +379,10 @@ export const profileDocuments = pgTable("profile_documents", {
   bytesPhase0: bytea("bytes_phase0").notNull(),
   text: text("text").notNull(),
   pageCount: integer("page_count").notNull().default(0),
+  /** Set to processing before the extraction call, ready when its facts are stored, failed when the call or the storing failed. */
+  status: documentStatusEnum("status").notNull().default("processing"),
+  /** Why it failed. A call of unknown cost leaves its mark here, so the cost report can count it (D-015). */
+  error: text("error"),
   uploadedAt: ts("uploaded_at").notNull().defaultNow(),
 });
 

@@ -20,28 +20,76 @@ import { profileDocuments, profileFacts, type ProfileFact } from "@/db/schema";
 
 const RESUME_KINDS = ["contact", "link", "employment", "education", "project", "skill", "answer"] as const;
 
+/**
+ * What the screen says about a document, from its extraction status and
+ * its facts. Each state is its own word so a failed or empty document is
+ * never shown as verified:
+ *
+ *   processing  the call is running
+ *   failed      the call or the storing failed, or a processing document is
+ *               older than the call budget, which means the function died
+ *   check       ready, with facts waiting for a decision
+ *   verified    ready, its facts confirmed, none waiting
+ *   rejected    ready, its facts all rejected or retired by a later resume
+ *   empty       ready, the extractor found nothing
+ */
+export type DocumentState = "processing" | "failed" | "check" | "verified" | "rejected" | "empty";
+
+/** A processing document older than this is read as failed: the upload function has a 60 s ceiling and the call 40 s. */
+export const PROCESSING_STALE_MS = 90_000;
+
+export interface ProfileDocumentView {
+  id: string;
+  filename: string;
+  uploadedAt: string;
+  status: "processing" | "ready" | "failed";
+  state: DocumentState;
+  error: string | null;
+  extracted: number;
+  confirmed: number;
+  rejected: number;
+}
+
 export interface ProfileView {
-  documents: { id: string; filename: string; uploadedAt: string; extracted: number; confirmed: number }[];
+  documents: ProfileDocumentView[];
   facts: ProfileFact[];
+}
+
+export function documentState(d: { status: "processing" | "ready" | "failed"; uploadedAt: Date; extracted: number; confirmed: number; rejected: number }, now = Date.now()): DocumentState {
+  if (d.status === "failed") return "failed";
+  if (d.status === "processing") return now - d.uploadedAt.getTime() > PROCESSING_STALE_MS ? "failed" : "processing";
+  if (d.extracted > 0) return "check";
+  if (d.confirmed > 0) return "verified";
+  if (d.rejected > 0) return "rejected";
+  return "empty";
 }
 
 export async function profileView(db: DbHttp | DbPool | Tx, userId: string): Promise<ProfileView> {
   const [docs, facts] = await Promise.all([
     db
-      .select({ id: profileDocuments.id, filename: profileDocuments.filename, uploadedAt: profileDocuments.uploadedAt })
+      .select({ id: profileDocuments.id, filename: profileDocuments.filename, uploadedAt: profileDocuments.uploadedAt, status: profileDocuments.status, error: profileDocuments.error })
       .from(profileDocuments)
       .where(eq(profileDocuments.userId, userId))
       .orderBy(sql`${profileDocuments.uploadedAt} desc`),
     db.select().from(profileFacts).where(eq(profileFacts.userId, userId)).orderBy(profileFacts.createdAt),
   ]);
   return {
-    documents: docs.map((d) => ({
-      id: d.id,
-      filename: d.filename,
-      uploadedAt: d.uploadedAt.toISOString(),
-      extracted: facts.filter((f) => f.documentId === d.id && f.status === "extracted").length,
-      confirmed: facts.filter((f) => f.documentId === d.id && f.status === "confirmed").length,
-    })),
+    documents: docs.map((d) => {
+      const counts = {
+        extracted: facts.filter((f) => f.documentId === d.id && f.status === "extracted").length,
+        confirmed: facts.filter((f) => f.documentId === d.id && f.status === "confirmed").length,
+        rejected: facts.filter((f) => f.documentId === d.id && f.status === "rejected").length,
+      };
+      return {
+        id: d.id,
+        filename: d.filename,
+        uploadedAt: d.uploadedAt.toISOString(),
+        status: d.status,
+        state: documentState({ status: d.status, uploadedAt: d.uploadedAt, ...counts }),
+        error: d.error,
+        ...counts,
+      };
+    }),
     facts,
   };
 }
@@ -118,6 +166,16 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
  */
 export const profileLockKey = (userId: string) => `profile:${userId}`;
 
+/** A replacement that changed nothing, with the reason the screen shows. */
+export class ReplaceRefused extends Error {
+  constructor(
+    public reason: "not_found" | "processing" | "failed" | "nothing_to_confirm",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 /**
  * Confirms every extracted fact of the document and retires the confirmed
  * resume facts that are not from it. After this the confirmed profile is the
@@ -132,20 +190,28 @@ export const profileLockKey = (userId: string) => `profile:${userId}`;
  * serialised on a transaction scoped advisory lock (the same pattern as
  * the employer lock in jobs/identity.ts), so two at once run one after the
  * other and the second sees the first's result, never a mix of both
- * documents. Nothing is retired unless the document has at least one
- * extracted fact to confirm: a document whose extraction failed or returned
- * nothing cannot empty the profile.
+ * documents. Nothing is retired unless the document is ready and has at
+ * least one extracted fact to confirm: a document whose extraction is still
+ * running, failed or returned nothing cannot empty the profile, and the
+ * refusal says which, so the screen never shows a click that did nothing
+ * as done.
  */
 export async function replaceWithDocument(db: DbPool | Tx, userId: string, documentId: string): Promise<{ confirmed: number; retired: number }> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
-    const [doc] = await tx.select({ id: profileDocuments.id }).from(profileDocuments).where(and(eq(profileDocuments.id, documentId), eq(profileDocuments.userId, userId)));
-    if (!doc) throw new Error("document not found");
+    const [doc] = await tx
+      .select({ id: profileDocuments.id, filename: profileDocuments.filename, status: profileDocuments.status, uploadedAt: profileDocuments.uploadedAt })
+      .from(profileDocuments)
+      .where(and(eq(profileDocuments.id, documentId), eq(profileDocuments.userId, userId)));
+    if (!doc) throw new ReplaceRefused("not_found", "document not found");
     const pending = await tx
       .select({ id: profileFacts.id })
       .from(profileFacts)
       .where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, documentId), eq(profileFacts.status, "extracted")));
-    if (pending.length === 0) return { confirmed: 0, retired: 0 };
+    const state = documentState({ status: doc.status, uploadedAt: doc.uploadedAt, extracted: pending.length, confirmed: 0, rejected: 0 });
+    if (state === "processing") throw new ReplaceRefused("processing", `${doc.filename} is still being read`);
+    if (state === "failed") throw new ReplaceRefused("failed", `${doc.filename} could not be read, so there is nothing to confirm`);
+    if (pending.length === 0) throw new ReplaceRefused("nothing_to_confirm", `nothing left to confirm from ${doc.filename}`);
     const retiredRows = await tx
       .update(profileFacts)
       .set({ status: "rejected", updatedAt: new Date() })

@@ -64,8 +64,29 @@ interface Doc {
   id: string;
   filename: string;
   uploadedAt: string;
+  status: "processing" | "ready" | "failed";
+  state: "processing" | "failed" | "check" | "verified" | "rejected" | "empty";
+  error: string | null;
   extracted: number;
   confirmed: number;
+  rejected: number;
+}
+
+/** The tag on a document row. One word per state; a failed or empty document is never "Verified". */
+const DOC_TAG: Record<Doc["state"], string> = {
+  processing: "Reading",
+  failed: "Could not read",
+  check: "Check",
+  verified: "Verified",
+  rejected: "Replaced",
+  empty: "Nothing found",
+};
+
+interface DecideResult {
+  confirmed: number;
+  rejected: number;
+  asked: { confirm: number; reject: number };
+  skipped: string[];
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -132,15 +153,27 @@ export default function ProfilePage() {
     };
   }, []);
 
+  /**
+   * One decision or one replacement. The answer says what moved against
+   * what was asked; a refusal carries its reason. Either way the list is
+   * reloaded, so a stale page catches up rather than showing a click that
+   * did nothing as done.
+   */
   const decide = async (body: Record<string, unknown>, done: string) => {
     setBusy("decide");
     const r = await fetch("/api/profile/facts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     setBusy(null);
+    const j = (await r.json().catch(() => ({}))) as Partial<DecideResult> & { error?: string };
+    await load();
     if (!r.ok) {
-      showToast({ text: "That did not save. Try again." });
+      showToast({ text: j.error ? `${j.error.charAt(0).toUpperCase()}${j.error.slice(1)}.` : "That did not save. Try again." });
       return;
     }
-    await load();
+    if (j.asked && j.skipped?.length) {
+      const asked = j.asked.confirm + j.asked.reject;
+      showToast({ text: `${(j.confirmed ?? 0) + (j.rejected ?? 0)} of ${asked} saved. The rest had already changed, the list is refreshed.` });
+      return;
+    }
     showToast({ text: done });
   };
 
@@ -163,10 +196,13 @@ export default function ProfilePage() {
   const resumeFacts = (facts ?? []).filter((f) => RESUME_KINDS.has(f.kind) && f.status !== "rejected");
   const confirmed = resumeFacts.filter((f) => f.status === "confirmed");
   const pending = resumeFacts.filter((f) => f.status === "extracted");
-  const latestDoc = docs[0];
+  // Facts waiting for a decision, grouped under the document they came from, newest document first.
+  // Confirm all sends that document's id, the one whose facts are on screen, never the latest upload.
+  const pendingByDoc = docs.map((d) => ({ doc: d, facts: pending.filter((f) => f.documentId === d.id) })).filter((g) => g.facts.length > 0);
   const experience = confirmed.filter((f) => f.kind === "employment");
   const answers = confirmed.filter((f) => f.kind === "answer");
-  const factsFrom = latestDoc ? `from ${latestDoc.filename}, ${day(latestDoc.uploadedAt)}` : "entered by you";
+  const confirmedDoc = docs.find((d) => confirmed.some((f) => f.documentId === d.id));
+  const factsFrom = confirmedDoc ? `from ${confirmedDoc.filename}, ${day(confirmedDoc.uploadedAt)}` : "entered by you";
 
   return (
     <>
@@ -209,10 +245,17 @@ export default function ProfilePage() {
                   <span className="k" style={{ width: "auto" }}>
                     <b style={{ color: "var(--fg)", fontWeight: 500 }}>{d.filename}</b>
                     <div className="sub">
-                      Uploaded {day(d.uploadedAt)}. {d.confirmed} confirmed{d.extracted ? `, ${d.extracted} to check` : ""}
+                      Uploaded {day(d.uploadedAt)}.{" "}
+                      {d.state === "processing"
+                        ? "Reading it now."
+                        : d.state === "failed"
+                          ? "It could not be read. Upload it again or try another file."
+                          : d.state === "empty"
+                            ? "No facts were found in it."
+                            : `${d.confirmed} confirmed${d.extracted ? `, ${d.extracted} to check` : ""}${d.rejected ? `, ${d.rejected} rejected` : ""}`}
                     </div>
                   </span>
-                  <span className="tag">{d.extracted ? "Check" : "Verified"}</span>
+                  <span className="tag">{DOC_TAG[d.state]}</span>
                 </div>
               ))}
               {RESUMES.map(([name, meta, verified]) => (
@@ -298,44 +341,57 @@ export default function ProfilePage() {
           </div>
 
           <div style={{ marginTop: 12 }}>
-            <Card
-              title="Confirmed facts"
-              action={
-                pending.length > 0 && latestDoc ? (
-                  <Button size="sm" variant="primary" disabled={busy === "decide"} onClick={() => void decide({ replaceWith: latestDoc.id }, "Confirmed. Your profile is this resume now.")}>
-                    Confirm all {pending.length}
-                  </Button>
-                ) : undefined
-              }
-            >
+            <Card title="Confirmed facts">
               <p className="sub" style={{ margin: "0 0 10px" }}>
                 {facts === null ? "Loading." : `${confirmed.length} confirmed ${factsFrom}. Only what you confirm can appear on a tailored resume.`}
-                {pending.length > 0 ? ` ${pending.length} waiting for you. Confirm all replaces the facts you had before.` : ""}
+                {pending.length > 0 ? ` ${pending.length} waiting for you. Confirm all replaces the facts you had before with that resume's.` : ""}
               </p>
               <div className="kvlist">
-                {[...pending, ...confirmed].map((f, i) => {
-                  const row = factRow(f, i);
-                  const check = f.status === "extracted";
-                  return (
-                    <div className="kvrow" key={f.id}>
-                      <span className="k">{row.label}</span>
-                      <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
-                        {row.value}
-                        {check && f.evidence ? <div className="sub">From the resume: {f.evidence}</div> : null}
+                {pendingByDoc.map(({ doc, facts: group }) => (
+                  <div key={doc.id}>
+                    <div className="kvrow">
+                      <span className="k" style={{ width: "auto" }}>
+                        <b style={{ color: "var(--fg)", fontWeight: 500 }}>From {doc.filename}</b>
+                        <div className="sub">
+                          Uploaded {day(doc.uploadedAt)}. {group.length} waiting for you.
+                        </div>
                       </span>
-                      <span className="row" style={{ gap: 6, flexShrink: 0 }}>
-                        {check ? (
-                          <>
+                      <Button size="sm" variant="primary" disabled={busy === "decide"} onClick={() => void decide({ replaceWith: doc.id }, "Confirmed. Your profile is this resume now.")}>
+                        Confirm all {group.length}
+                      </Button>
+                    </div>
+                    {group.map((f, i) => {
+                      const row = factRow(f, i);
+                      return (
+                        <div className="kvrow" key={f.id}>
+                          <span className="k">{row.label}</span>
+                          <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
+                            {row.value}
+                            {f.evidence ? <div className="sub">From the resume: {f.evidence}</div> : null}
+                          </span>
+                          <span className="row" style={{ gap: 6, flexShrink: 0 }}>
                             <Button size="sm" variant="ghost" disabled={busy === "decide"} onClick={() => void decide({ reject: [f.id] }, "Rejected. It stays off your resumes.")}>
                               Reject
                             </Button>
                             <Button size="sm" disabled={busy === "decide"} onClick={() => void decide({ confirm: [f.id] }, "Confirmed.")}>
                               Confirm
                             </Button>
-                          </>
-                        ) : (
-                          <span className="tag">Confirmed</span>
-                        )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+                {confirmed.map((f, i) => {
+                  const row = factRow(f, i);
+                  return (
+                    <div className="kvrow" key={f.id}>
+                      <span className="k">{row.label}</span>
+                      <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
+                        {row.value}
+                      </span>
+                      <span className="row" style={{ gap: 6, flexShrink: 0 }}>
+                        <span className="tag">Confirmed</span>
                       </span>
                     </div>
                   );

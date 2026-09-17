@@ -300,7 +300,8 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       const rows = (s: typeof after) => s.find((x) => x.kind === "tailor")!;
       expect(rows(after).unknownRows! - rows(before).unknownRows!).toBe(1);
       expect(rows(after).usdWorstCase! - rows(before).usdWorstCase!).toBeCloseTo(rows(after).usdMeanPerCall, 4);
-      expect(after.find((x) => x.kind === "extract")?.unknownRows ?? null).toBeNull();
+      // Extraction is counted too, from the document rows.
+      expect(typeof after.find((x) => x.kind === "extract")?.unknownRows).toBe("number");
     });
   });
 

@@ -1,5 +1,5 @@
 import { dbPool } from "@/db/client";
-import { decideFacts, replaceWithDocument } from "@/server/profile/confirm";
+import { decideFacts, ReplaceRefused, replaceWithDocument } from "@/server/profile/confirm";
 import { decisionBody } from "@/server/profile/decision";
 import { currentUserId } from "@/server/user";
 
@@ -12,10 +12,10 @@ export const dynamic = "force-dynamic";
  * that came before it.
  *
  * Both answers carry counts of what moved against what was asked. A
- * replacement with nothing to confirm answers 200 with confirmed 0 and
- * retired 0, and the page today shows that as done; making it explicit,
- * with the document's extraction state and the page confirming the
- * document it displays, is review finding 5.
+ * replacement that would change nothing is refused with its reason: 404
+ * when the document is not the user's, 409 when it is still being read,
+ * failed, or has nothing left to confirm. The page shows the reason rather
+ * than "done".
  */
 export async function POST(req: Request) {
   const parsed = decisionBody.safeParse(await req.json().catch(() => null));
@@ -26,7 +26,8 @@ export async function POST(req: Request) {
     try {
       return Response.json(await replaceWithDocument(db, userId, parsed.data.replaceWith));
     } catch (e) {
-      return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 404 });
+      if (e instanceof ReplaceRefused) return Response.json({ error: e.message, reason: e.reason }, { status: e.reason === "not_found" ? 404 : 409 });
+      throw e;
     }
   }
   return Response.json(await decideFacts(db, userId, parsed.data));

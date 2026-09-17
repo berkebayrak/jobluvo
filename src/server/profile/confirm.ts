@@ -69,31 +69,64 @@ export async function decideFacts(db: DbPool | Tx, userId: string, decision: { c
   return { confirmed, rejected };
 }
 
+/** The advisory lock key for one user's profile, so every replacement for that user serialises on the same lock. */
+export const profileLockKey = (userId: string) => `profile:${userId}`;
+
 /**
  * Confirms every extracted fact of the document and retires the confirmed
  * resume facts that are not from it. After this the confirmed profile is the
  * document's facts plus the user's own preference, authorization and
  * sponsorship answers.
+ *
+ * One transaction, opened here so the route and the tests run the same
+ * path: on the pool it is a real transaction, inside a test transaction it
+ * is a savepoint. The retirement and the confirmation stand or fall
+ * together; a failure after the retirement rolls it back rather than
+ * leaving the user with no confirmed resume. Replacements for one user are
+ * serialised on a transaction scoped advisory lock (the same pattern as
+ * the employer lock in jobs/identity.ts), so two at once run one after the
+ * other and the second sees the first's result, never a mix of both
+ * documents. Nothing is retired unless the document has at least one
+ * extracted fact to confirm: a document whose extraction failed or returned
+ * nothing cannot empty the profile.
  */
 export async function replaceWithDocument(db: DbPool | Tx, userId: string, documentId: string): Promise<{ confirmed: number; retired: number }> {
-  const [doc] = await db.select({ id: profileDocuments.id }).from(profileDocuments).where(and(eq(profileDocuments.id, documentId), eq(profileDocuments.userId, userId)));
-  if (!doc) throw new Error("document not found");
-  const retiredRows = await db
-    .update(profileFacts)
-    .set({ status: "rejected", updatedAt: new Date() })
-    .where(
-      and(
-        eq(profileFacts.userId, userId),
-        eq(profileFacts.status, "confirmed"),
-        inArray(profileFacts.kind, [...RESUME_KINDS]),
-        sql`${profileFacts.documentId} is distinct from ${documentId}`,
-      ),
-    )
-    .returning({ id: profileFacts.id });
-  const confirmedRows = await db
-    .update(profileFacts)
-    .set({ status: "confirmed", updatedAt: new Date() })
-    .where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, documentId), eq(profileFacts.status, "extracted")))
-    .returning({ id: profileFacts.id });
-  return { confirmed: confirmedRows.length, retired: retiredRows.length };
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
+    const [doc] = await tx.select({ id: profileDocuments.id }).from(profileDocuments).where(and(eq(profileDocuments.id, documentId), eq(profileDocuments.userId, userId)));
+    if (!doc) throw new Error("document not found");
+    const pending = await tx
+      .select({ id: profileFacts.id })
+      .from(profileFacts)
+      .where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, documentId), eq(profileFacts.status, "extracted")));
+    if (pending.length === 0) return { confirmed: 0, retired: 0 };
+    const retiredRows = await tx
+      .update(profileFacts)
+      .set({ status: "rejected", updatedAt: new Date() })
+      .where(
+        and(
+          eq(profileFacts.userId, userId),
+          eq(profileFacts.status, "confirmed"),
+          inArray(profileFacts.kind, [...RESUME_KINDS]),
+          sql`${profileFacts.documentId} is distinct from ${documentId}`,
+        ),
+      )
+      .returning({ id: profileFacts.id });
+    const confirmedRows = await tx
+      .update(profileFacts)
+      .set({ status: "confirmed", updatedAt: new Date() })
+      .where(
+        and(
+          eq(profileFacts.userId, userId),
+          inArray(
+            profileFacts.id,
+            pending.map((p) => p.id),
+          ),
+          eq(profileFacts.status, "extracted"),
+        ),
+      )
+      .returning({ id: profileFacts.id });
+    if (confirmedRows.length !== pending.length) throw new Error(`confirmed ${confirmedRows.length} of ${pending.length} extracted facts; nothing was changed`);
+    return { confirmed: confirmedRows.length, retired: retiredRows.length };
+  });
 }

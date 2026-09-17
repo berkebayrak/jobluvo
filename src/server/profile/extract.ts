@@ -20,6 +20,14 @@ import { answerFact, educationFact, employmentFact, skillFact } from "./facts";
 export const DEFAULT_MODEL = "gpt-5.6-luna";
 export const REASONING: ReasoningEffort = "none";
 export const MAX_OUTPUT_TOKENS = 4000;
+/**
+ * Per call, against the upload route's 60 s function: one call per upload,
+ * 40 s, leaving 20 s for the file and the writes. This is the largest
+ * budget the client allows. Measured over 17 calls on 17 Sep 2026 at about
+ * 1,500 output tokens: p50 10.6 s, p99 18.5 s, max 18.7 s, 8.6 ms per
+ * output token, so the 4,000 token cap fits in 34 s.
+ */
+export const TIMEOUT_MS = 40_000;
 
 export const INSTRUCTIONS = `You read one resume and return its facts as structured data. Copy what the resume says; never infer, summarise or improve it. Every number, date, employer and title must appear in the resume. Dates as YYYY-MM; a role with no end date is current, leave "end" null. Put each bullet of a role in "bullets" as written, one entry per bullet. Skills as the resume lists them, with years only when the resume states them, and the phrase the resume uses as "evidence". "answers" are stated standing answers such as a salary expectation or a notice period; leave the list empty when there are none. For every item give "evidence": the exact words of the resume it came from, at most 20 words. Flag anything ambiguous or unreadable in "issues", one short line each. No exclamation marks, no em dashes.`;
 
@@ -220,6 +228,7 @@ export async function extractCall(input: ResumeInput, opts: { model?: string } =
       schema: EXTRACT_SCHEMA,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       reasoning: REASONING,
+      timeoutMs: TIMEOUT_MS,
     });
   } catch (e) {
     if (e instanceof CallError) throw new ExtractError(e.message, model, e.usage, e.usd, e.ms);

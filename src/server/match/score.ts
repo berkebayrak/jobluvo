@@ -19,6 +19,13 @@ import { CallError, structuredCall, type CallUsage, type PromptMessage, type Rea
 
 export const JOB_TEXT_CHARS = 8000;
 export const MAX_OUTPUT_TOKENS = 400;
+/**
+ * Per call, against the cron's 60 s function: SCORE_BATCH 20 at
+ * SCORE_CONCURRENCY 5 is four waves, 4 x 12 s = 48 s, leaving 12 s for the
+ * claim and the writes. Measured over 400 calls on 17 Sep 2026: p50 2.5 s,
+ * p99 7.6 s, max 10.5 s.
+ */
+export const TIMEOUT_MS = 12_000;
 /** No reasoning budget: the output is one integer and seven short lines, and reasoning tokens bill as output. */
 export const REASONING: ReasoningEffort = "none";
 export const DEFAULT_MODEL = "gpt-5.6-luna";
@@ -173,6 +180,7 @@ export async function scoreJob(
       schema: SCORE_SCHEMA,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       reasoning: opts.reasoning ?? REASONING,
+      timeoutMs: TIMEOUT_MS,
     });
   } catch (e) {
     if (e instanceof CallError) throw new ScoreError(e.message, model, e.usage, e.usd, e.ms);

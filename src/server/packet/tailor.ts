@@ -28,7 +28,9 @@ export const MAX_OUTPUT_TOKENS: Record<TailorMode, number> = { changes: 900, doc
  * Per call, against a 60 s function: a packet is at most two attempts,
  * 2 x 20 s = 40 s, leaving 20 s for the facts, the validator and the packet
  * row. Measured over 228 calls on 17 Sep 2026, both modes: p50 4.5 s,
- * p99 10.6 s, max 17.1 s.
+ * p99 10.6 s, max 17.1 s. So 20 s is 17 percent above the observed max:
+ * thin, and the tail is provider latency. The unknown cost line in
+ * `npm run cost-report` says whether the margin was wrong (D-015).
  */
 export const TIMEOUT_MS = 20_000;
 export const REASONING: ReasoningEffort = "none";

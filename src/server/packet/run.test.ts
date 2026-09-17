@@ -3,7 +3,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { dbPool, type Tx } from "@/db/client";
 import { costEvents, jobs, packets, profileFacts, sources, users } from "@/db/schema";
 import type { ScoringJob } from "@/server/match/score";
+import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { resumeFacts } from "@/server/match/profile";
+import { unknownCostStats } from "@/server/match/report";
 import { tailorJob } from "./run";
 import * as tailor from "./tailor";
 
@@ -278,6 +280,27 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       expect(p.changes).toHaveLength(1);
       expect(JSON.stringify(p)).not.toContain("99 percent");
       expect(p.error).toBeNull();
+    });
+  });
+
+  it("invalid, then a timeout: failed with no cost row for the timed out call, and the cost report counts the row as unknown cost", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      const before = await unknownCostStats(tx);
+      call()
+        .mockResolvedValueOnce(invented)
+        .mockRejectedValueOnce(new tailor.TailorError(`call timed out after 20000ms, ${UNKNOWN_COST_MARK}: the provider may have completed and billed it`, "gpt-5.6-luna", null, 0, 20000));
+      const out = await tailorJob(tx, facts, job);
+      const p = await expectNothingShipped(tx, job.id, out);
+      expect(out.status).toBe("failed");
+      expect(p.error).toContain("attempt 2 failed: call timed out after 20000ms, cost unknown");
+      const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toHaveLength(1);
+      const after = await unknownCostStats(tx);
+      const rows = (s: typeof after) => s.find((x) => x.kind === "tailor")!;
+      expect(rows(after).unknownRows! - rows(before).unknownRows!).toBe(1);
+      expect(rows(after).usdWorstCase! - rows(before).usdWorstCase!).toBeCloseTo(rows(after).usdMeanPerCall, 4);
+      expect(after.find((x) => x.kind === "extract")?.unknownRows ?? null).toBeNull();
     });
   });
 

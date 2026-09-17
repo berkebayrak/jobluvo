@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
+import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 
 /*
  * The cost per model call, as a distribution, from cost_events. One block
@@ -150,4 +151,51 @@ export async function cellStats(db: DbPool | Tx, by: "family" | "length" | "seni
     usdP50: Number(num(x.p50).toFixed(6)),
     usdMean: Number(num(x.mean).toFixed(6)),
   }));
+}
+
+/*
+ * Calls of unknown cost: a timeout or a lost connection returns no usage,
+ * so nothing reaches cost_events and the only trace is the message on the
+ * match or packet row (UNKNOWN_COST_MARK). A row counts once, whatever its
+ * attempts, so this is a floor on the calls and the worst case prices each
+ * row at the kind's mean cost per call, beside the recorded spend. It is
+ * the counter for the timeout budgets in D-015: a rising count says the
+ * margin over the observed max was wrong. Extraction stores no error text
+ * on a row yet, so its unknown calls are not countable until the document
+ * gets a status column (review finding 5, item 9).
+ */
+export interface UnknownCostStats {
+  kind: string;
+  unknownRows: number | null;
+  usdMeanPerCall: number;
+  usdWorstCase: number | null;
+  usdRecorded: number;
+  note: string;
+}
+
+export async function unknownCostStats(db: DbPool | Tx): Promise<UnknownCostStats[]> {
+  const like = `%${UNKNOWN_COST_MARK}%`;
+  const r = await db.execute<Record<string, unknown>>(sql`
+    with k as (
+      select kind::text as kind, avg(usd) as mean, sum(usd) as total
+      from cost_events where kind in ('score', 'tailor', 'extract') group by 1
+    ), u as (
+      select 'score' as kind, count(*)::int as n from matches where error like ${like}
+      union all
+      select 'tailor' as kind, count(*)::int as n from packets where error like ${like}
+    )
+    select k.kind, u.n, k.mean, k.total from k left join u on u.kind = k.kind order by 1
+  `);
+  return r.rows.map((x) => {
+    const n = x.n === null || x.n === undefined ? null : num(x.n);
+    const mean = num(x.mean);
+    return {
+      kind: String(x.kind),
+      unknownRows: n,
+      usdMeanPerCall: Number(mean.toFixed(6)),
+      usdWorstCase: n === null ? null : Number((n * mean).toFixed(4)),
+      usdRecorded: Number(num(x.total).toFixed(4)),
+      note: n === null ? "not countable: no error text stored per document" : "rows whose latest attempt timed out or lost the connection",
+    };
+  });
 }

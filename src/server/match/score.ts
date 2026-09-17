@@ -23,7 +23,9 @@ export const MAX_OUTPUT_TOKENS = 400;
  * Per call, against the cron's 60 s function: SCORE_BATCH 20 at
  * SCORE_CONCURRENCY 5 is four waves, 4 x 12 s = 48 s, leaving 12 s for the
  * claim and the writes. Measured over 400 calls on 17 Sep 2026: p50 2.5 s,
- * p99 7.6 s, max 10.5 s.
+ * p99 7.6 s, max 10.5 s. So 12 s is 14 percent above the observed max: thin,
+ * and the tail is provider latency. The unknown cost line in
+ * `npm run cost-report` says whether the margin was wrong (D-015).
  */
 export const TIMEOUT_MS = 12_000;
 /** No reasoning budget: the output is one integer and seven short lines, and reasoning tokens bill as output. */

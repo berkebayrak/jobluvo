@@ -31,6 +31,13 @@ export const FUNCTION_BUDGET_MS = 60_000;
 export const MAX_CALL_TIMEOUT_MS = 40_000;
 /** The caller owns attempts; a hidden retry is unmetered spend. */
 export const MAX_RETRIES = 0;
+/**
+ * Every unknown cost message carries this phrase. A call of unknown cost
+ * has no cost row, only the error text on its match or packet row, so the
+ * cost report counts rows containing it (`unknownCostStats`) and prints a
+ * worst case beside the recorded spend. Change it nowhere else.
+ */
+export const UNKNOWN_COST_MARK = "cost unknown";
 
 let client: OpenAI | null = null;
 
@@ -108,8 +115,8 @@ export async function structuredCall(c: StructuredCall): Promise<CallResult> {
       { timeout: c.timeoutMs, maxRetries: MAX_RETRIES },
     );
   } catch (e) {
-    if (e instanceof APIConnectionTimeoutError) throw new CallUnknownError(`call timed out after ${c.timeoutMs}ms, cost unknown: the provider may have completed and billed it`, Date.now() - started);
-    if (e instanceof APIConnectionError) throw new CallUnknownError(`connection failed, cost unknown: ${e.message}`, Date.now() - started);
+    if (e instanceof APIConnectionTimeoutError) throw new CallUnknownError(`call timed out after ${c.timeoutMs}ms, ${UNKNOWN_COST_MARK}: the provider may have completed and billed it`, Date.now() - started);
+    if (e instanceof APIConnectionError) throw new CallUnknownError(`connection failed, ${UNKNOWN_COST_MARK}: ${e.message}`, Date.now() - started);
     throw e;
   }
   const ms = Date.now() - started;

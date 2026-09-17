@@ -25,7 +25,11 @@ export const MAX_OUTPUT_TOKENS = 4000;
  * 40 s, leaving 20 s for the file and the writes. This is the largest
  * budget the client allows. Measured over 17 calls on 17 Sep 2026 at about
  * 1,500 output tokens: p50 10.6 s, p99 18.5 s, max 18.7 s, 8.6 ms per
- * output token, so the 4,000 token cap fits in 34 s.
+ * output token, so the 4,000 token cap fits in 34 s. 40 s is 114 percent
+ * above the observed max, but only 18 percent above the token cap's time;
+ * a real two page resume spends that margin. Extraction stores no error
+ * text per document yet, so its unknown cost calls are not counted by
+ * `npm run cost-report` until the document gets a status (D-015).
  */
 export const TIMEOUT_MS = 40_000;
 

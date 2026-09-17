@@ -1,5 +1,5 @@
 import { dbPool } from "@/db/client";
-import { cellStats, citationStats, runStats } from "@/server/match/report";
+import { cellStats, citationStats, runStats, unknownCostStats } from "@/server/match/report";
 
 /**
  * Cost per scoring call from cost_events, one block per run tag, the cron
@@ -16,6 +16,8 @@ async function main() {
   console.table(await cellStats(db, by));
   console.log("wrong citations by run, from the packets on hand");
   console.table(await citationStats(db));
+  console.log("calls of unknown cost: rows whose latest attempt timed out or lost the connection, worst case at the kind's mean per call, beside the recorded USD");
+  console.table(await unknownCostStats(db));
 }
 
 main()

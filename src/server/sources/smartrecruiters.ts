@@ -42,8 +42,10 @@ function locationOf(l: SrListItem["location"]): RawLocation[] {
  * SmartRecruiters is list plus detail. The published limit is about ten
  * requests a second, eight concurrent, so the adapter hashes each list entry,
  * fetches a body only for entries whose list hash is new or changed, and
- * stops after the detail budget. Entries still waiting are stored with
- * detailPending and picked up next run.
+ * stops after the detail budget. Every posting says what happened to its
+ * body: fetched now, unchanged and already stored, or still pending, so the
+ * ingest never overwrites a stored body with the empty one a list entry
+ * carries. Entries still pending are picked up next run.
  */
 export const smartrecruiters: Adapter = {
   family: "smartrecruiters",
@@ -76,7 +78,9 @@ export const smartrecruiters: Adapter = {
     for (const item of items) {
       const listHash = sha256(JSON.stringify([item.name, item.refNumber, item.releasedDate, item.location, item.typeOfEmployment]));
       const known = opts.known.get(item.id);
-      const needsDetail = !known || known.detailPending || known.listHash !== listHash;
+      // A body is needed when the row is new, still pending, changed, or has
+      // no body stored despite all of that: checked, not inferred.
+      const needsDetail = !known || known.detailPending || known.listHash !== listHash || !known.hasBody;
       const base: RawPosting = {
         nativeId: item.id,
         requisitionId: item.refNumber,
@@ -89,7 +93,7 @@ export const smartrecruiters: Adapter = {
         applyUrl: `https://jobs.smartrecruiters.com/${source.tenant}/${item.id}`,
         postedAt: toDate(item.releasedDate),
         listHash,
-        detailPending: needsDetail,
+        detail: needsDetail ? "pending" : "stored",
         native: item,
       };
       if (needsDetail && budget > 0) {
@@ -103,7 +107,7 @@ export const smartrecruiters: Adapter = {
             .join("\n");
           base.descriptionHtml = html;
           base.applyUrl = d.json.applyUrl?.replace(/\?oga=true$/, "") ?? d.json.postingUrl ?? base.applyUrl;
-          base.detailPending = false;
+          base.detail = "fetched";
           base.native = d.json;
         }
       }

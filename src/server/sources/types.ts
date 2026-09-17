@@ -38,8 +38,16 @@ export interface RawPosting {
   applyUrl: string;
   postedAt?: Date;
   compensation?: { min?: number; max?: number; currency?: string; period?: "year" | "hour" };
-  /** SmartRecruiters: the body has not been fetched yet for this list entry. */
-  detailPending?: boolean;
+  /**
+   * List plus detail families only. What this run knows about the body:
+   *   fetched   the body is in descriptionHtml, fetched now
+   *   stored    the list entry is unchanged and the body is already stored;
+   *             descriptionHtml is empty and must not overwrite anything
+   *   pending   the body is needed and was not fetched this run, budget or
+   *             failure; a stored body stays until it arrives
+   * Absent means fetched: the family carries the body in its list.
+   */
+  detail?: "fetched" | "stored" | "pending";
   /** SmartRecruiters: hash of the list entry, so a detail is refetched only on change. */
   listHash?: string;
   native: unknown;
@@ -63,7 +71,14 @@ export interface FetchOptions {
   /** Upper bound on detail requests in this run, for list plus detail families. */
   detailBudget: number;
   /** Jobs already stored for this source, keyed by native id, with their list hash. */
-  known: Map<string, { listHash: string | null; detailPending: boolean }>;
+  /**
+   * Jobs already stored for this source, keyed by native id: the list hash,
+   * whether a detail is still pending, and whether a body is actually stored.
+   * The adapter checks the last one rather than inferring it from the other
+   * two, so a detail that arrived with no sections is fetched again instead
+   * of being stranded as "stored".
+   */
+  known: Map<string, { listHash: string | null; detailPending: boolean; hasBody: boolean }>;
 }
 
 export const USER_AGENT = "Jobluvo/0.1 (+https://jobluvo.vercel.app)";

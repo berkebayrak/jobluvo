@@ -178,3 +178,127 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
     });
   });
 });
+
+/*
+ * A rejected candidate must never become the packet because the retry did
+ * not produce a better one. Each case starts with an answer the validator
+ * rejects (99 percent, the fact says 11) and follows it with a retry that
+ * fails in a different way; the invented value must not reach the stored
+ * packet under any of them.
+ */
+describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retry", () => {
+  const invented = answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 99 percent.", facts: ["R1.1"] }]);
+  const malformed = { ...invented, text: "{not json" };
+  const offSchema = { ...invented, text: JSON.stringify({ summary: null, changes: "none" }) };
+
+  async function expectNothingShipped(tx: Tx, jobId: string, out: Awaited<ReturnType<typeof tailorJob>>) {
+    expect(out.status).not.toBe("ready");
+    expect(out.resume).toBeNull();
+    const [p] = await tx.select().from(packets).where(eq(packets.jobId, jobId));
+    expect(p.status).not.toBe("ready");
+    expect(p.resume).toBeNull();
+    expect(p.resumeHash).toBeNull();
+    expect(JSON.stringify(p)).not.toContain("99 percent");
+    return p;
+  }
+
+  it("invalid, then malformed JSON: failed, with no resume and no changes from the rejected attempt", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call().mockResolvedValueOnce(invented).mockResolvedValueOnce(malformed);
+      const out = await tailorJob(tx, facts, job);
+      const p = await expectNothingShipped(tx, job.id, out);
+      expect(out.status).toBe("failed");
+      expect(out.attempts).toBe(2);
+      expect(out.attemptLog.map((a) => a.outcome)).toEqual(["invalid", "failed"]);
+      expect(out.attemptLog[0].findings).toEqual([expect.objectContaining({ level: "hard", bullet: "R1.1", value: "pct:99" })]);
+      expect(out.findings).toEqual([]);
+      expect(out.changes).toBe(0);
+      expect(p.changes).toEqual([]);
+      expect(p.attempts).toBe(2);
+      expect(p.error).toContain("attempt 1 invalid: 1 hard finding(s)");
+      expect(p.error).toContain("attempt 2 failed");
+      // The retry was asked to fix the rejection, and both calls were paid for.
+      expect(call().mock.calls[1][2].retryOf).toHaveLength(1);
+      const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toHaveLength(2);
+    });
+  });
+
+  it("invalid, then a transport error: failed, one cost row, nothing from the rejected attempt", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call().mockResolvedValueOnce(invented).mockRejectedValueOnce(new Error("fetch failed: ECONNRESET"));
+      const out = await tailorJob(tx, facts, job);
+      const p = await expectNothingShipped(tx, job.id, out);
+      expect(out.status).toBe("failed");
+      expect(out.attempts).toBe(2);
+      expect(out.attemptLog.map((a) => a.outcome)).toEqual(["invalid", "failed"]);
+      expect(out.error).toContain("ECONNRESET");
+      expect(p.changes).toEqual([]);
+      expect(p.findings).toEqual([]);
+      const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toHaveLength(1);
+    });
+  });
+
+  it("invalid, then an incomplete response: failed, the cut off call still pays, nothing from the rejected attempt", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call()
+        .mockResolvedValueOnce(invented)
+        .mockRejectedValueOnce(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));
+      const out = await tailorJob(tx, facts, job);
+      const p = await expectNothingShipped(tx, job.id, out);
+      expect(out.status).toBe("failed");
+      expect(out.attempts).toBe(2);
+      expect(out.error).toContain("incomplete");
+      expect(p.error).toContain("attempt 1 invalid");
+      expect(p.changes).toEqual([]);
+      const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toHaveLength(2);
+      expect(out.usd).toBeCloseTo(0.001, 8);
+    });
+  });
+
+  it("invalid, then a corrected answer: ready, and the resume is the corrected attempt's own", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call()
+        .mockResolvedValueOnce(invented)
+        .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent, leading it end to end.", facts: ["R1.1"] }]));
+      const out = await tailorJob(tx, facts, job);
+      expect(out.status).toBe("ready");
+      expect(out.attempts).toBe(2);
+      expect(out.attemptLog.map((a) => a.outcome)).toEqual(["invalid", "ready"]);
+      expect(out.error).toBeUndefined();
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("ready");
+      expect(p.resume?.experience[0].bullets[0].text).toBe("Ran a 3 year cost program that cut cost 11 percent, leading it end to end.");
+      expect(p.changes).toHaveLength(1);
+      expect(JSON.stringify(p)).not.toContain("99 percent");
+      expect(p.error).toBeNull();
+    });
+  });
+
+  it("both attempts malformed: failed after two paid calls, with no candidate at all", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(offSchema);
+      const out = await tailorJob(tx, facts, job);
+      const p = await expectNothingShipped(tx, job.id, out);
+      expect(out.status).toBe("failed");
+      expect(out.attempts).toBe(2);
+      expect(out.attemptLog.map((a) => a.outcome)).toEqual(["failed", "failed"]);
+      expect(out.changes).toBe(0);
+      expect(p.changes).toEqual([]);
+      expect(p.findings).toEqual([]);
+      expect(p.error).toContain("attempt 1 failed");
+      expect(p.error).toContain("does not match the change set schema");
+      // A parse failure is retried with nothing to fix.
+      expect(call().mock.calls[1][2].retryOf).toBeUndefined();
+      const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
+      expect(cost).toHaveLength(2);
+    });
+  });
+});

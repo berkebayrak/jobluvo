@@ -17,6 +17,13 @@ import { factSet, isHard, validateChangeSet } from "./validate";
  * writes its cost row, tagged by run so the sample stays apart from the
  * product path (D-003).
  *
+ * Each attempt owns its candidate, its findings and its outcome. The packet
+ * is the last attempt, and a resume is stored only when that attempt parsed
+ * and passed the validator. Nothing from an earlier attempt is reused: a
+ * rejected candidate cannot become ready because the retry failed to parse,
+ * timed out or came back incomplete. The earlier attempts stay in the error
+ * text for diagnostics.
+ *
  * Nothing here decides which jobs get a packet. In phase 0 that is the
  * sample and `npm run tailor`; in the product it is the user's apply
  * decision, never a job the user has not chosen.
@@ -30,11 +37,24 @@ export interface TailorOptions {
   store?: boolean;
 }
 
+export type AttemptOutcome = "ready" | "invalid" | "failed";
+
+/** One call to the model and what became of it. */
+export interface TailorAttempt {
+  n: number;
+  outcome: AttemptOutcome;
+  findings: PacketFinding[];
+  changes: number;
+  error?: string;
+}
+
 export interface TailorOutcome {
   jobId: string;
-  status: "ready" | "invalid" | "failed";
+  status: AttemptOutcome;
   mode: TailorMode;
   attempts: number;
+  /** Every attempt in order; `status`, `findings`, `changes` and `resume` are the last one's. */
+  attemptLog: TailorAttempt[];
   findings: PacketFinding[];
   changes: number;
   resume: ResumeDocument | null;
@@ -94,50 +114,59 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     });
   };
 
-  let attempts = 0;
-  let findings: PacketFinding[] = [];
-  let last: { cs: ChangeSet; applied: Applied } | null = null;
-  let status: TailorOutcome["status"] = "failed";
-  let error: string | undefined;
-  for (attempts = 1; attempts <= 2; attempts += 1) {
+  interface Attempt {
+    n: number;
+    outcome: AttemptOutcome;
+    candidate: { cs: ChangeSet; applied: Applied } | null;
+    findings: PacketFinding[];
+    error?: string;
+  }
+  const log: Attempt[] = [];
+  for (let n = 1; n <= 2; n += 1) {
+    const previous = log[log.length - 1];
+    // Only a rejection carries anything into the retry: the hard findings to fix. A parse failure gets a second chance with nothing to fix.
+    const retryOf = previous?.outcome === "invalid" ? previous.findings.filter((f) => f.level === "hard") : undefined;
     let call: TailorResult;
     try {
-      call = await tailorCall(entries, job, { mode, model, retryOf: attempts === 2 ? findings.filter((f) => f.level === "hard") : undefined });
+      call = await tailorCall(entries, job, { mode, model, retryOf });
     } catch (e) {
       const err = e instanceof TailorError ? e : new TailorError(e instanceof Error ? e.message : String(e), model, null, 0, 0);
       if (err.usage) await cost({ usage: err.usage, usd: err.usd, ms: err.ms });
-      error = err.message;
-      status = "failed";
+      log.push({ n, outcome: "failed", candidate: null, findings: [], error: err.message });
       break;
     }
     await cost(call);
+    let candidate: Attempt["candidate"];
     try {
-      last = readAnswer(mode, call.text, base);
+      candidate = readAnswer(mode, call.text, base);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-      status = "failed";
-      // A parse failure is retried once like a rejection: the second answer gets no findings to fix, only a second chance.
-      findings = [];
+      log.push({ n, outcome: "failed", candidate: null, findings: [], error: e instanceof Error ? e.message : String(e) });
       continue;
     }
-    findings = validateChangeSet(last.cs, base, set);
-    if (!isHard(findings)) {
-      status = "ready";
-      break;
-    }
-    status = "invalid";
+    const findings = validateChangeSet(candidate.cs, base, set);
+    log.push({ n, outcome: isHard(findings) ? "invalid" : "ready", candidate, findings });
+    if (!isHard(findings)) break;
   }
-  if (status === "failed" && last && !isHard(findings)) status = "ready";
 
-  // Only a packet the validator passed carries a document; an invalid one keeps its changes and findings for review.
-  const resume = last && status === "ready" ? last.applied.resume : null;
+  // The packet is the last attempt. A resume exists only when that attempt itself parsed and passed the validator;
+  // an invalid one keeps its changes and findings for review, a failed one keeps neither.
+  const final = log[log.length - 1];
+  const status = final.outcome;
+  const resume = final.outcome === "ready" && final.candidate ? final.candidate.applied.resume : null;
+  const trail = log
+    .slice(0, -1)
+    .map((a) => `attempt ${a.n} ${a.outcome}${a.error ? `: ${a.error}` : `: ${a.findings.filter((f) => f.level === "hard").length} hard finding(s)`}`)
+    .join(". ");
+  const error = final.error ? (trail ? `${trail}. attempt ${final.n} failed: ${final.error}` : final.error) : undefined;
+  const changes = final.candidate?.cs.changes ?? [];
   const outcome: TailorOutcome = {
     jobId: job.id,
     status,
     mode,
-    attempts: Math.min(attempts, 2),
-    findings,
-    changes: last?.applied.diff.length ?? 0,
+    attempts: log.length,
+    attemptLog: log.map((a) => ({ n: a.n, outcome: a.outcome, findings: a.findings, changes: a.candidate?.applied.diff.length ?? 0, error: a.error })),
+    findings: final.findings,
+    changes: final.candidate?.applied.diff.length ?? 0,
     resume,
     error,
     ...totals,
@@ -155,8 +184,8 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
         run: opts.run ?? null,
         attempts: outcome.attempts,
         resume,
-        changes: last?.cs.changes ?? [],
-        findings,
+        changes,
+        findings: final.findings,
         factsHash: facts.factsHash,
         contentHash,
         resumeHash: resume ? resumeHash(resume) : null,
@@ -176,8 +205,8 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           run: opts.run ?? null,
           attempts: outcome.attempts,
           resume,
-          changes: last?.cs.changes ?? [],
-          findings,
+          changes,
+          findings: final.findings,
           factsHash: facts.factsHash,
           contentHash,
           resumeHash: resume ? resumeHash(resume) : null,

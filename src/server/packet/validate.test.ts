@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ResumeFacts } from "@/server/match/profile";
 import { baseResume, factEntries } from "./resume";
+import { readNumbers } from "./normalise";
+import type { FactEntry } from "./resume";
 import { checkLine, factSet, namesOf, normaliseNumbers, validateChangeSet, valuesOf } from "./validate";
 
 /*
@@ -65,6 +67,29 @@ describe("normaliser", () => {
     expect(normaliseNumbers("150,000 to 175,000")).toBe("150000 to 175000");
     expect(normaliseNumbers("two million subscribers")).toBe("2000000 subscribers");
   });
+  it("is not fooled by words that are keys on Object.prototype", () => {
+    expect(normaliseNumbers("Used constructor injection to simplify service testing")).toBe("used constructor injection to simplify service testing");
+    expect(normaliseNumbers("wrote the toString method and valueOf")).toBe("wrote the tostring method and valueof");
+    expect(normaliseNumbers("hasOwnProperty checks on three objects")).toBe("hasownproperty checks on 3 objects");
+  });
+  it("composes word numbers along the grammar only, never by adding neighbours", () => {
+    expect(normaliseNumbers("three and five teams")).toBe("3 and 5 teams");
+    expect(normaliseNumbers("five three teams")).toBe("5 3 teams");
+    expect(normaliseNumbers("twenty twenty")).toBe("20 20");
+    expect(normaliseNumbers("two hundred and five")).toBe("205");
+    expect(normaliseNumbers("two hundred and twenty five people")).toBe("225 people");
+    expect(normaliseNumbers("two hundred and more")).toBe("200 and more");
+    expect(normaliseNumbers("a hundred and fifty")).toBe("a 150");
+    expect(normaliseNumbers("two million five hundred thousand dollars")).toBe("2500000 dollars");
+    expect(normaliseNumbers("one thousand two hundred")).toBe("1200");
+    expect(normaliseNumbers("team of six.")).toBe("team of 6 .");
+  });
+  it("leaves a phrase the grammar cannot read as its words and reports it", () => {
+    expect(readNumbers("five thousand two million")).toEqual({ text: "five thousand two million", unreadable: ["five thousand two million"] });
+    expect(readNumbers("two million thousand dollars")).toEqual({ text: "two million thousand dollars", unreadable: ["two million thousand"] });
+    expect(readNumbers("one million hundred")).toEqual({ text: "one million hundred", unreadable: ["one million hundred"] });
+    expect(readNumbers("eight teams").unreadable).toEqual([]);
+  });
   it("reads dates, percentages and money into one form each", () => {
     expect(valuesOf("Jan 2023")).toEqual(new Set(["date:2023-01"]));
     expect(valuesOf("January 2023")).toEqual(new Set(["date:2023-01"]));
@@ -120,6 +145,24 @@ describe("a value must be in a cited fact", () => {
     // A line with no value needs no citation.
     expect(hard("Led the planning cycle with finance", [])).toEqual([]);
   });
+  it("holds a line with a number phrase it could not read, and a value checked against a fact with one", () => {
+    const entry = (id: string, text: string): FactEntry => ({ id, text, kind: "employment", role: "R1", source: FROM_RESUME });
+    const odd = factSet([entry("R1", "Head of Strategy, Arvento"), entry("R1.1", "Raised five thousand two million dollars for the fund."), entry("R1.2", "Managed three and five teams.")]);
+    // The fact's own phrase is unreadable: a value on the line is held, not rejected, because the fact may hold it.
+    expect(checkLine("Raised 2 billion dollars for the fund.", "R1.1", ["R1.1"], odd).map((f) => [f.level, f.message])).toEqual([
+      ["review", "value could not be checked; a cited fact has a number phrase that could not be read"],
+    ]);
+    // Against a readable fact the same value is hard as before.
+    expect(checkLine("Raised 2 billion dollars for the fund.", "R1.1", ["R1.2"], odd).map((f) => f.level)).toEqual(["hard"]);
+    // "three and five" is 3 and 5: 8 is an invention and is rejected, not a sum.
+    expect(checkLine("Managed 8 teams.", "R1.2", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["hard", "num:8"]]);
+    expect(checkLine("Managed 3 and 5 teams.", "R1.2", ["R1.2"], odd)).toEqual([]);
+    // The line's own phrase is unreadable: held.
+    expect(checkLine("Raised five thousand two million dollars.", "R1.1", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["review", "five thousand two million"]]);
+    // A word the tables do not know but Object.prototype does is a word.
+    expect(checkLine("Used constructor injection across 3 and 5 teams.", "R1.2", ["R1.2"], odd).filter((f) => f.level !== "soft")).toEqual([]);
+  });
+
   it("a citation that does not exist is soft, on its own", () => {
     expect(soft("Led the planning cycle", ["R9.9"])).toEqual([expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" })]);
   });

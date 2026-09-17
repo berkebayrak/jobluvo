@@ -8,12 +8,18 @@ import { resumeFacts } from "@/server/match/profile";
 import { unknownCostStats } from "@/server/match/report";
 import { consumableResume, ERROR_STORE, tailorJob } from "./run";
 import * as tailor from "./tailor";
+import * as validate from "./validate";
 
 vi.mock("./tailor", async (importOriginal) => {
   const real = await importOriginal<typeof import("./tailor")>();
   return { ...real, tailorCall: vi.fn() };
 });
+vi.mock("./validate", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./validate")>();
+  return { ...real, factSet: vi.fn(real.factSet), validateChangeSet: vi.fn(real.validateChangeSet) };
+});
 const call = () => vi.mocked(tailor.tailorCall);
+const realValidate = await vi.importActual<typeof import("./validate")>("./validate");
 
 /*
  * The packet run over its cycle against the real database, with the model
@@ -100,7 +106,11 @@ afterAll(async () => {
   await g.__jobluvoPool?.end();
 });
 
-afterEach(() => call().mockReset());
+afterEach(() => {
+  call().mockReset();
+  vi.mocked(validate.factSet).mockReset().mockImplementation(realValidate.factSet);
+  vi.mocked(validate.validateChangeSet).mockReset().mockImplementation(realValidate.validateChangeSet);
+});
 
 describe.skipIf(!hasDb)("packet run over its attempts", () => {
   beforeAll(async () => {
@@ -212,6 +222,46 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
  * fails in a different way; the invented value must not reach the stored
  * packet under any of them.
  */
+describe.skipIf(!hasDb)("a validator that throws is a failed packet, not an aborted run", () => {
+  it("throwing on the answer: failed, the error stored, the call's cost row kept, no paid retry", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Used constructor injection.", facts: ["R1.1"] }]));
+      vi.mocked(validate.validateChangeSet).mockImplementationOnce(() => {
+        throw new TypeError("n.toFixed is not a function");
+      });
+      const out = await tailorJob(tx, facts, job, { run: "test" });
+      expect(out.status).toBe("failed");
+      expect(out.attempts).toBe(1);
+      expect(call()).toHaveBeenCalledTimes(1);
+      expect(out.resume).toBeNull();
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("failed");
+      expect(p.error).toBe("validator failed: n.toFixed is not a function");
+      expect(p.attempts).toBe(1);
+      expect(await tx.select({ kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId))).toEqual([{ kind: "tailor" }]);
+    });
+  });
+
+  it("throwing on the facts: failed before any call, zero attempts, no cost row", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      vi.mocked(validate.factSet).mockImplementationOnce(() => {
+        throw new TypeError("n.toFixed is not a function");
+      });
+      const out = await tailorJob(tx, facts, job, { run: "test" });
+      expect(out.status).toBe("failed");
+      expect(out.attempts).toBe(0);
+      expect(call()).not.toHaveBeenCalled();
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("failed");
+      expect(p.attempts).toBe(0);
+      expect(p.error).toBe("validator failed reading the facts: n.toFixed is not a function");
+      expect(await tx.select({ kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId))).toEqual([]);
+    });
+  });
+});
+
 describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retry", () => {
   const invented = answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 99 percent.", facts: ["R1.1"] }]);
   const malformed = { ...invented, text: "{not json" };

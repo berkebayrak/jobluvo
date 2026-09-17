@@ -168,7 +168,18 @@ async function main() {
   console.table(count(hard.filter((f) => f.message.startsWith("value does not mean")).map((f) => f.message.replace(/^.*?: /, ""))));
 
   console.log("\nreview findings by reason, edits");
-  const reviewKind = (f: PacketFinding) => (f.message.startsWith("name") ? (f.detail === "sentence initial" ? "name, sentence initial" : "name") : f.message.startsWith("the fact and the line") ? "metric words differ" : "metric unreadable");
+  const reviewKind = (f: PacketFinding) =>
+    f.message.startsWith("name")
+      ? f.detail === "sentence initial"
+        ? "name, sentence initial"
+        : "name"
+      : f.message.startsWith("the fact and the line")
+        ? "metric words differ"
+        : f.message.startsWith("a number phrase")
+          ? "number phrase unreadable, line"
+          : f.message.startsWith("value could not be checked")
+            ? "number phrase unreadable, cited fact"
+            : "metric unreadable";
   console.table(count(review.map(reviewKind)));
   console.log("packets held for review by the reasons that hold them");
   console.table(count(replayed.filter((p) => p.outcome === "needs_review").map((p) => [...new Set(by(p, "review").map(reviewKind))].sort().join(" + "))));

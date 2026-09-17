@@ -139,10 +139,18 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
   const model = opts.model ?? env().MODEL_TAILOR ?? "gpt-5.6-luna";
   const store = opts.store ?? true;
   const entries = factEntries(facts);
-  const set = factSet(entries);
   const base = baseResume(facts);
   const [jobRow] = await db.select({ contentHash: jobs.contentHash }).from(jobs).where(eq(jobs.id, job.id));
   const contentHash = jobRow?.contentHash ?? "";
+  // A validator that throws on the facts is a code defect, and the packet records it as failed with no call made; a run that
+  // aborts here would leave no row at all, a hole the cost and citation reports cannot see.
+  let set: ReturnType<typeof factSet> | null = null;
+  let factsError: string | null = null;
+  try {
+    set = factSet(entries);
+  } catch (e) {
+    factsError = `validator failed reading the facts: ${e instanceof Error ? e.message : String(e)}`;
+  }
 
   const totals = { tokensIn: 0, tokensCached: 0, tokensOut: 0, usd: 0, ms: 0 };
   const cost = async (r: { usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number }; usd: number; ms: number }) => {
@@ -166,7 +174,8 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
   };
 
   const log: Attempt[] = [];
-  for (let n = 1; n <= 2; n += 1) {
+  if (factsError) log.push({ n: 0, outcome: "failed", candidate: null, findings: [], error: factsError });
+  for (let n = 1; n <= 2 && set; n += 1) {
     const previous = log[log.length - 1];
     // Only a rejection carries anything into the retry: the hard findings to fix. A parse failure gets a second chance with nothing to fix.
     const retryOf = previous?.outcome === "invalid" ? previous.findings.filter((f) => f.level === "hard") : undefined;
@@ -187,7 +196,14 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
       log.push({ n, outcome: "failed", candidate: null, findings: [], error: e instanceof Error ? e.message : String(e) });
       continue;
     }
-    const findings = validateChangeSet(candidate.cs, base, set);
+    let findings: PacketFinding[];
+    try {
+      findings = validateChangeSet(candidate.cs, base, set);
+    } catch (e) {
+      // The same defect on a second answer would throw again; no paid retry for a code defect. The call already made keeps its cost row.
+      log.push({ n, outcome: "failed", candidate: null, findings: [], error: `validator failed: ${e instanceof Error ? e.message : String(e)}` });
+      break;
+    }
     // Only a hard finding earns the retry: it is a contradiction the model can fix from the finding. A review
     // finding is the validator saying it could not read one side, and a retry cannot resolve that; it can only make
     // the model drop the line to be safe, an omission with nobody deciding it. So a held packet is stored as it is.
@@ -207,7 +223,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     jobId: job.id,
     status,
     mode,
-    attempts: log.length,
+    attempts: log.filter((a) => a.n > 0).length,
     attemptLog: log.map((a) => ({ n: a.n, outcome: a.outcome, findings: a.findings, changes: a.candidate?.applied.diff.length ?? 0, error: a.error })),
     findings: final.findings,
     changes: final.candidate?.applied.diff.length ?? 0,

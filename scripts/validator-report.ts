@@ -2,7 +2,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { dbPool } from "@/db/client";
 import { packets, profileFacts, type PacketFinding } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
-import { baseResume, factEntries, resumeHash } from "@/server/packet/resume";
+import { applyReplay, replayDecision, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
+import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
 
 /**
@@ -11,7 +12,8 @@ import { factSet, validateChangeSet } from "@/server/packet/validate";
  * built on: the profile whose hash the packet carries, rebuilt from the
  * rows confirmed then, or the packet is excluded and counted. Summaries
  * are not replayed; the stored packet keeps its bullet changes, not the
- * summary's citations (D-016), so a summary's old findings are kept.
+ * summary's citations (D-016), so a summary's old findings are kept and
+ * counted into the status beside the replayed ones.
  *
  *   npm run validator-report            the measurement, nothing written
  *   npm run validator-report -- --apply the same, then every replayed packet
@@ -22,7 +24,10 @@ import { factSet, validateChangeSet } from "@/server/packet/validate";
  * The status column means "passes the rules as they stand" (D-017). When a
  * rule changes, this runs first as the measurement and then with --apply,
  * so no row keeps a word today's validator would not give it behind the
- * one function that trusts that word.
+ * one function that trusts that word. What a row may be stamped with is
+ * decided in src/server/packet/replay.ts: the status comes from every
+ * finding the row will carry, a failed packet is not replayed, and nothing
+ * without its validated resume is stamped ready.
  */
 
 type Level = PacketFinding["level"];
@@ -54,97 +59,135 @@ async function candidateProfiles(db: ReturnType<typeof dbPool>, userId: string):
   return out;
 }
 
+/** The column a packet lands in: the status it would be stamped with, or why it is not stamped. */
+function outcomeOf(d: ReplayDecision | "excluded"): string {
+  if (d === "excluded") return "excluded, no profile reproduces the hash";
+  if (d.kind === "restamp") return d.status;
+  if (d.kind === "no_candidate") return "not replayed, failed, no candidate";
+  return `not promoted, passes as ${d.would} but no resume stored`;
+}
+
 async function main() {
   const db = dbPool();
-  const rows = await db.select().from(packets);
+  const rows = await db
+    .select({
+      id: packets.id,
+      userId: packets.userId,
+      status: packets.status,
+      run: packets.run,
+      mode: packets.mode,
+      resume: packets.resume,
+      resumeHash: packets.resumeHash,
+      changes: packets.changes,
+      findings: packets.findings,
+      factsHash: packets.factsHash,
+      error: packets.error,
+      updatedAt: sql<string>`${packets.updatedAt}::text`,
+    })
+    .from(packets);
   const byUser = new Map<string, typeof rows>();
   for (const p of rows) byUser.set(p.userId, [...(byUser.get(p.userId) ?? []), p]);
 
   const apply = process.argv.includes("--apply");
-  const perPacket: { id: string; run: string; status: string; hard: PacketFinding[]; review: PacketFinding[]; soft: PacketFinding[]; edits: number; would: string; findings: PacketFinding[]; old: PacketFinding[] }[] = [];
-  let excluded = 0;
+  const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision | "excluded"; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null }[] = [];
   const profilesUsed: Record<string, number> = {};
   for (const [userId, ps] of byUser) {
     const candidates = await candidateProfiles(db, userId);
     for (const p of ps) {
+      const row: ReplayRow = { id: p.id, status: p.status, resume: p.resume, resumeHash: p.resumeHash, findings: p.findings, updatedAt: p.updatedAt };
       const match = candidates.find((c) => c.facts.factsHash === p.factsHash);
       if (!match) {
-        excluded += 1;
+        perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision: "excluded", findings: p.findings, outcome: outcomeOf("excluded"), hashHolds: null });
         continue;
       }
       profilesUsed[match.name] = (profilesUsed[match.name] ?? 0) + 1;
       const entries = factEntries(match.facts);
       const set = factSet(entries);
       const base = baseResume(match.facts);
-      const findings = validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set);
-      const by = (l: Level) => findings.filter((f) => f.level === l);
-      const hard = by("hard");
-      const review = by("review");
-      const would = hard.length ? "invalid" : review.length ? "needs_review" : "ready";
-      perPacket.push({ id: p.id, run: p.run ?? "product", status: p.status, hard, review, soft: by("soft"), edits: p.changes.length, would, findings, old: p.findings });
+      const replayed = validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set);
+      // The candidate the stored changes describe: the base plus the changes, with the summary the stored resume carries. The decision stamps ready only a resume that is this document.
+      const candidate = p.resume ? applyChanges(base, { summary: p.resume.summary, summaryFacts: [], changes: p.changes, skills: [] }).resume : null;
+      const decision = replayDecision(row, replayed, candidate);
+      const findings = decision.kind === "no_candidate" ? p.findings : decision.findings;
+      const hashHolds = p.resume ? resumeHash(p.resume) === p.resumeHash : null;
+      perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision, findings, outcome: outcomeOf(decision), hashHolds });
     }
   }
+  const replayed = perPacket.filter((p) => p.decision !== "excluded");
 
   if (apply) {
-    let restamped = 0;
-    for (const p of perPacket) {
-      // The summary cannot be replayed: its old findings are kept beside the replayed bullet findings.
-      const findings = [...p.findings, ...p.old.filter((f) => f.bullet === "summary")];
-      const [row] = await db.select({ resume: packets.resume, status: packets.status }).from(packets).where(eq(packets.id, p.id));
-      const resume = p.would === "invalid" ? null : row.resume;
-      await db
-        .update(packets)
-        .set({ status: p.would as "ready" | "needs_review" | "invalid", findings, resume, resumeHash: resume ? resumeHash(resume) : null, updatedAt: sql`now()` })
-        .where(eq(packets.id, p.id));
-      if (row.status !== p.would) restamped += 1;
-    }
-    console.log(`\napplied: ${perPacket.length} packets restamped under the rules as they stand, ${restamped} changed status`);
+    const result = await applyReplay(
+      db,
+      replayed.map((p) => ({ row: p.row, decision: p.decision as ReplayDecision })),
+    );
+    console.log(
+      `\napplied: ${result.restamped} packets restamped under the rules as they stand, ${result.changedStatus} changed status, ${result.untouched} left as they are (no candidate or no resume), ${result.stale} refused because the row moved since it was read`,
+    );
   }
 
-  const edits = perPacket.reduce((a, p) => a + p.edits, 0);
-  console.log(`packets on hand ${rows.length}, replayed ${perPacket.length} (${edits} bullet edits), excluded ${excluded} whose facts hash no profile on hand reproduces`);
+  const edits = replayed.reduce((a, p) => a + p.edits, 0);
+  const excluded = perPacket.length - replayed.length;
+  console.log(`packets on hand ${rows.length}, replayed ${replayed.length} (${edits} bullet edits), excluded ${excluded} whose facts hash no profile on hand reproduces`);
   console.log("profiles the packets were built on:", JSON.stringify(profilesUsed));
+  const withResume = perPacket.filter((p) => p.hashHolds !== null);
+  const candidates = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "restamp" && p.decision.resume).length;
+  const noResume = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "no_resume").length;
+  console.log(
+    `stored resumes: ${withResume.length}; ${candidates} are the base plus their stored changes and summary (skill order not stored, not compared), ${noResume} pass today but are not, or have no resume, and are not promoted; resume_hash names the stored resume on ${withResume.filter((p) => p.hashHolds).length} of ${withResume.length} (the rest are rewritten by --apply)`,
+  );
+  const retained = replayed.flatMap((p) => p.row.findings.filter((f) => f.bullet === "summary"));
+  console.log(`summary findings kept from the original run, not replayable: ${retained.length} on ${replayed.filter((p) => p.row.findings.some((f) => f.bullet === "summary")).length} packets, by level ${JSON.stringify(count(retained.map((f) => f.level)))}`);
 
-  console.log("\noutcome today against outcome under the claim validator, packets");
+  console.log("\nstatus stored today against what the replay stamps, packets");
   const grid: Record<string, Record<string, number>> = {};
   for (const p of perPacket) {
     grid[p.status] ??= {};
-    grid[p.status][p.would] = (grid[p.status][p.would] ?? 0) + 1;
+    grid[p.status][p.outcome] = (grid[p.status][p.outcome] ?? 0) + 1;
   }
   console.table(grid);
-  const readyToday = perPacket.filter((p) => p.status === "ready");
-  const heldOfReady = readyToday.filter((p) => p.would === "needs_review").length;
-  const invalidOfReady = readyToday.filter((p) => p.would === "invalid").length;
+  const stamped = (s: string) => replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "restamp" && p.decision.status === s).length;
+  const withCandidate = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "restamp");
+  console.log(
+    `stamped: ${stamped("ready")} ready, ${stamped("needs_review")} held for review, ${stamped("invalid")} invalid, of ${withCandidate.length} with a candidate; held is ${withCandidate.length ? ((100 * stamped("needs_review")) / withCandidate.length).toFixed(1) : "0"} percent of them`,
+  );
+  const readyToday = replayed.filter((p) => p.status === "ready");
+  const heldOfReady = readyToday.filter((p) => p.outcome === "needs_review").length;
+  const invalidOfReady = readyToday.filter((p) => p.outcome === "invalid").length;
   console.log(
     `of ${readyToday.length} packets ready today: ${heldOfReady} would be held for review (${readyToday.length ? ((100 * heldOfReady) / readyToday.length).toFixed(1) : "0"} percent), ${invalidOfReady} would be invalid (${readyToday.length ? ((100 * invalidOfReady) / readyToday.length).toFixed(1) : "0"} percent)`,
   );
 
+  const by = (p: (typeof perPacket)[number], l: Level) => p.findings.filter((f) => f.level === l);
+  const hard = replayed.flatMap((p) => by(p, "hard"));
+  const review = replayed.flatMap((p) => by(p, "review"));
+  const soft = replayed.flatMap((p) => by(p, "soft"));
+
   console.log("\nhard findings by reason, edits");
-  console.table(count(perPacket.flatMap((p) => p.hard.map((f) => f.message.replace(/: .*$/, "")))));
+  console.table(count(hard.map((f) => f.message.replace(/: .*$/, ""))));
   console.log("hard findings, the contradictions named");
-  console.table(count(perPacket.flatMap((p) => p.hard.filter((f) => f.message.startsWith("value does not mean")).map((f) => f.message.replace(/^.*?: /, "")))));
+  console.table(count(hard.filter((f) => f.message.startsWith("value does not mean")).map((f) => f.message.replace(/^.*?: /, ""))));
 
   console.log("\nreview findings by reason, edits");
   const reviewKind = (f: PacketFinding) => (f.message.startsWith("name") ? (f.detail === "sentence initial" ? "name, sentence initial" : "name") : f.message.startsWith("the fact and the line") ? "metric words differ" : "metric unreadable");
-  console.table(count(perPacket.flatMap((p) => p.review.map(reviewKind))));
+  console.table(count(review.map(reviewKind)));
   console.log("packets held for review by the reasons that hold them");
-  console.table(count(perPacket.filter((p) => p.would === "needs_review").map((p) => [...new Set(p.review.map(reviewKind))].sort().join(" + "))));
+  console.table(count(replayed.filter((p) => p.outcome === "needs_review").map((p) => [...new Set(by(p, "review").map(reviewKind))].sort().join(" + "))));
 
   console.log("\nsoft findings by reason, edits");
-  console.table(count(perPacket.flatMap((p) => p.soft.map((f) => f.message))));
+  console.table(count(soft.map((f) => f.message)));
 
   const sample = (label: string, pick: (f: PacketFinding) => boolean, n = 12) => {
-    const xs = perPacket.flatMap((p) => p.review.filter(pick).map((f) => `${f.value ?? ""}  |  ${f.detail ?? ""}`));
+    const xs = review.filter(pick).map((f) => `${f.value ?? ""}  |  ${f.detail ?? ""}`);
     console.log(`\n${label}: ${xs.length} in all, first ${Math.min(n, xs.length)}`);
     for (const x of [...new Set(xs)].slice(0, n)) console.log("  " + x);
   };
   sample("metric words differ, fact against line", (f) => f.message.startsWith("the fact and the line"));
   sample("metric unreadable, fact against line", (f) => f.message.includes("could not be read"));
   console.log("\nsentence initial names in no fact, by word, edits");
-  console.table(count(perPacket.flatMap((p) => p.review.filter((f) => f.detail === "sentence initial").map((f) => String(f.value)))));
+  console.table(count(review.filter((f) => f.detail === "sentence initial").map((f) => String(f.value))));
   console.log("other names in no fact, by name, edits");
-  console.table(count(perPacket.flatMap((p) => p.review.filter((f) => f.message.startsWith("name") && f.detail !== "sentence initial").map((f) => String(f.value)))));
-  const hardSample = perPacket.flatMap((p) => p.hard.map((f) => `${f.bullet}  ${f.message}${f.value ? ` (${f.value})` : ""}  ${f.detail ?? ""}`));
+  console.table(count(review.filter((f) => f.message.startsWith("name") && f.detail !== "sentence initial").map((f) => String(f.value))));
+  const hardSample = hard.map((f) => `${f.bullet}  ${f.message}${f.value ? ` (${f.value})` : ""}  ${f.detail ?? ""}`);
   console.log(`\nhard, first ${Math.min(12, hardSample.length)} of ${hardSample.length}`);
   for (const x of [...new Set(hardSample)].slice(0, 12)) console.log("  " + x);
 }

@@ -1,0 +1,114 @@
+import { and, eq, sql } from "drizzle-orm";
+import type { DbPool, Tx } from "@/db/client";
+import { packets, type PacketFinding, type ResumeDocument } from "@/db/schema";
+import { resumeHash, shapedResume } from "./resume";
+import { isHard, needsReview } from "./validate";
+
+/*
+ * Restamping a stored packet under the rules as they stand (D-017). The
+ * report replays a packet's bullet changes; this decides what the row may
+ * be stamped with, from every finding the row will carry, and refuses to
+ * stamp ready anything that has no validated candidate behind it.
+ *
+ * Three rules, each one a way the first replay went wrong:
+ *
+ * 1. The status is derived from the findings the row will hold, the
+ *    replayed bullet findings and the summary findings kept from the
+ *    original run together. The summary cannot be replayed (D-016), so
+ *    its findings keep their level; a packet held or rejected by its
+ *    summary alone stays held or rejected.
+ * 2. A failed packet is not replayed. It has no candidate: the model never
+ *    answered or the answer did not parse, and its empty change set is the
+ *    absence of an answer, not a clean one.
+ * 3. Ready and needs_review need the candidate: the stored resume must be
+ *    the base plus the stored changes, with the summary it carries. A
+ *    packet that passes today but has no such resume, an invalid one whose
+ *    resume was never stored, cannot be promoted by a rule change; it needs
+ *    a new run. The row is left as it is and counted.
+ *
+ * The candidate test ignores the order of the skills list: a change set
+ * stores the bullet edits and not the skill order the model asked for, so
+ * a rebuilt candidate cannot reproduce it. Everything else must match.
+ */
+
+export type ReplayStatus = "ready" | "needs_review" | "invalid";
+
+export interface ReplayRow {
+  id: string;
+  status: string;
+  resume: ResumeDocument | null;
+  resumeHash: string | null;
+  findings: PacketFinding[];
+  /** `updated_at` as the database prints it; the write is refused if the row moved since it was read. */
+  updatedAt: string;
+}
+
+export type ReplayDecision =
+  | { kind: "restamp"; status: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument | null }
+  | { kind: "no_candidate" }
+  | { kind: "no_resume"; would: ReplayStatus; findings: PacketFinding[] };
+
+/** The findings that survive a replay: the summary's, which nothing can replay. */
+export const retainedFindings = (stored: PacketFinding[]): PacketFinding[] => stored.filter((f) => f.bullet === "summary");
+
+/** The status a set of findings earns, the same reading the run gives a fresh attempt. */
+export const statusOf = (findings: PacketFinding[]): ReplayStatus => (isHard(findings) ? "invalid" : needsReview(findings) ? "needs_review" : "ready");
+
+const skillsSorted = (d: ResumeDocument): ResumeDocument => ({ ...shapedResume(d), skills: [...d.skills].map((s) => ({ id: s.id, text: s.text })).sort((a, b) => a.id.localeCompare(b.id)) });
+
+/** True when the two documents are the same up to the order of the skills list. */
+export const sameDocument = (a: ResumeDocument, b: ResumeDocument): boolean => resumeHash(skillsSorted(a)) === resumeHash(skillsSorted(b));
+
+/**
+ * @param row the packet as stored
+ * @param replayed the validator's findings over the stored bullet changes today
+ * @param candidate the base plus the stored changes and the stored summary, or null when the row has no resume to rebuild
+ */
+export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candidate: ResumeDocument | null): ReplayDecision {
+  if (row.status === "failed") return { kind: "no_candidate" };
+  const findings = [...replayed, ...retainedFindings(row.findings)];
+  const status = statusOf(findings);
+  if (status === "invalid") return { kind: "restamp", status, findings, resume: null };
+  if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) return { kind: "no_resume", would: status, findings };
+  return { kind: "restamp", status, findings, resume: row.resume };
+}
+
+export interface ApplyResult {
+  /** Rows written. */
+  restamped: number;
+  /** Of those, rows whose status changed. */
+  changedStatus: number;
+  /** Rows refused because they moved between the read and the write. */
+  stale: number;
+  /** Rows the decision left alone: no candidate, or no resume to promote. */
+  untouched: number;
+}
+
+/** Writes each restamp, guarded by the `updated_at` the row was read with, so a packet replaced under the report is never stamped with findings from its predecessor. */
+export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; decision: ReplayDecision }[]): Promise<ApplyResult> {
+  const out: ApplyResult = { restamped: 0, changedStatus: 0, stale: 0, untouched: 0 };
+  for (const { row, decision } of decisions) {
+    if (decision.kind !== "restamp") {
+      out.untouched += 1;
+      continue;
+    }
+    const written = await db
+      .update(packets)
+      .set({
+        status: decision.status,
+        findings: decision.findings,
+        resume: decision.resume,
+        resumeHash: decision.resume ? resumeHash(decision.resume) : null,
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(packets.id, row.id), sql`${packets.updatedAt}::text = ${row.updatedAt}`))
+      .returning({ id: packets.id });
+    if (!written.length) {
+      out.stale += 1;
+      continue;
+    }
+    out.restamped += 1;
+    if (row.status !== decision.status) out.changedStatus += 1;
+  }
+  return out;
+}

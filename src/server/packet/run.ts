@@ -80,6 +80,10 @@ export interface TailorOutcome {
   attempts: number;
   /** Every attempt in order; `status`, `findings`, `changes` and `resume` are the last one's. */
   attemptLog: TailorAttempt[];
+  /** Each attempt's parsed change set, null where it did not parse, aligned with `attemptLog`. In memory only, for a measurement that re-validates the same answers under another rule. */
+  changeSets: (ChangeSet | null)[];
+  /** The job's posting lemmas the validator saw. */
+  posting: Set<string>;
   findings: PacketFinding[];
   changes: number;
   resume: ResumeDocument | null;
@@ -238,6 +242,8 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     mode,
     attempts: log.filter((a) => a.n > 0).length,
     attemptLog: log.map((a) => ({ n: a.n, outcome: a.outcome, findings: a.findings, changes: a.candidate?.applied.diff.length ?? 0, error: a.error })),
+    changeSets: log.map((a) => a.candidate?.cs ?? null),
+    posting,
     findings: final.findings,
     changes: final.candidate?.applied.diff.length ?? 0,
     resume,

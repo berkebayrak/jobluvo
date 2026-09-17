@@ -1,6 +1,6 @@
 import type { PacketFinding, ResumeDocument } from "@/db/schema";
 import { claimsOf, contradiction, metricsAgree, sameValue, type Claim, type FactClaim } from "./claims";
-import { entityFindings, lemmasOf } from "./entities";
+import { entityFindings, lemmasOf, type PostingScope } from "./entities";
 import { fmt, readNumbers } from "./normalise";
 import type { ChangeSet, FactEntry } from "./resume";
 
@@ -94,7 +94,7 @@ export function roleOfLine(bullet: string | null): string | null {
 }
 
 /** Checks one proposed line against the facts it cites. `posting` is the job's lemmas, for the word the model took from the posting. */
-export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet, posting: Set<string> = new Set()): PacketFinding[] {
+export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet, posting: Set<string> = new Set(), scope: PostingScope = "claim"): PacketFinding[] {
   const out: PacketFinding[] = [];
   // A citation that names nothing supports nothing: the line's values are checked against the facts that do exist, and a person reads the rest.
   for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "review", bullet, message: "cited fact does not exist", value: id });
@@ -160,7 +160,7 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
 
   // The non numeric check (entities.ts): a new entity, qualification or responsibility is held; a rewording is not.
   const citedFacts = cited.flatMap((id) => (facts.entryById.has(id) ? [{ id, text: facts.entryById.get(id)!.text }] : []));
-  out.push(...entityFindings(line, bullet, citedFacts, facts.lemmas, posting));
+  out.push(...entityFindings(line, bullet, citedFacts, facts.lemmas, posting, scope));
   return out;
 }
 
@@ -181,7 +181,7 @@ export const ACTIONABLE = new Set([
 ]);
 export const actionable = (f: PacketFinding) => f.level === "review" && ACTIONABLE.has(f.message);
 
-export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: FactSet, posting: Set<string> = new Set()): PacketFinding[] {
+export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: FactSet, posting: Set<string> = new Set(), scope: PostingScope = "claim"): PacketFinding[] {
   const out: PacketFinding[] = [];
   const bullets = new Set(base.experience.flatMap((r) => r.bullets.map((b) => b.id)));
   const seen = new Set<string>();
@@ -193,9 +193,9 @@ export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: Fa
     if (seen.has(c.bullet)) out.push({ level: "soft", bullet: c.bullet, message: "line edited twice; the last edit stands" });
     seen.add(c.bullet);
     if (!c.text.trim()) out.push({ level: "hard", bullet: c.bullet, message: "empty line" });
-    out.push(...checkLine(c.text, c.bullet, c.facts, facts, posting));
+    out.push(...checkLine(c.text, c.bullet, c.facts, facts, posting, scope));
   }
-  if (cs.summary) out.push(...checkLine(cs.summary, "summary", cs.summaryFacts, facts, posting));
+  if (cs.summary) out.push(...checkLine(cs.summary, "summary", cs.summaryFacts, facts, posting, scope));
   const skillIds = new Set(base.skills.map((s) => s.id));
   for (const id of cs.skills) if (!skillIds.has(id)) out.push({ level: "soft", bullet: null, message: "no such skill; ignored", value: id });
   return out;

@@ -5,6 +5,9 @@ import { loadScoringJobs } from "@/server/match/run";
 import { stratifiedSample } from "@/server/match/sample";
 import { factEntries } from "@/server/packet/resume";
 import { tailorJob, type TailorOutcome } from "@/server/packet/run";
+import { baseResume } from "@/server/packet/resume";
+import { factSet, isHard, needsReview, validateChangeSet } from "@/server/packet/validate";
+import type { ResumeFacts } from "@/server/match/profile";
 import { factsBlock } from "@/server/packet/tailor";
 import { filterFacts } from "@/server/profile/viewer";
 import { currentUserId } from "@/server/user";
@@ -48,6 +51,63 @@ async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Prom
   };
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
   return out;
+}
+
+/**
+ * The posting signal's two scopes on the same fresh answers (D-023): every
+ * attempt's change set validated again with the posting noun counted
+ * anywhere in the line, and only in a claim position. The rule that ran
+ * the retry loop is the claim scope; the anywhere figures are the same
+ * answers re-read under the earlier rule, not a second generation.
+ */
+function scopes(facts: ResumeFacts, outcomes: TailorOutcome[]) {
+  const set = factSet(factEntries(facts));
+  const base = baseResume(facts);
+  const status = (findings: ReturnType<typeof validateChangeSet>) => (isHard(findings) ? "invalid" : needsReview(findings) ? "needs_review" : "ready");
+  const count = (which: "first" | "final", scope: "anywhere" | "claim") => {
+    const out = { ready: 0, needs_review: 0, invalid: 0, failed: 0 };
+    for (const o of outcomes) {
+      const i = which === "first" ? 0 : o.changeSets.length - 1;
+      const cs = o.changeSets[i];
+      if (!cs) {
+        out.failed += 1;
+        continue;
+      }
+      out[status(validateChangeSet(cs, base, set, o.posting, scope))] += 1;
+    }
+    return out;
+  };
+  console.log("  posting scope on the same answers, packets:");
+  console.table({
+    "first answers, anywhere": count("first", "anywhere"),
+    "first answers, claim position": count("first", "claim"),
+    "final answers, anywhere": count("final", "anywhere"),
+    "final answers, claim position": count("final", "claim"),
+  });
+  // What the narrowing releases: posting words that fire anywhere and not in a claim position, on the final answers, by word.
+  const released = new Map<string, number>();
+  for (const o of outcomes) {
+    const cs = o.changeSets[o.changeSets.length - 1];
+    if (!cs) continue;
+    const wide = validateChangeSet(cs, base, set, o.posting, "anywhere").filter((f) => f.message.startsWith("word from the posting"));
+    const narrow = new Set(validateChangeSet(cs, base, set, o.posting, "claim").filter((f) => f.message.startsWith("word from the posting")).map((f) => `${f.bullet}:${f.value}`));
+    for (const f of wide) if (!narrow.has(`${f.bullet}:${f.value}`)) released.set(String(f.value), (released.get(String(f.value)) ?? 0) + 1);
+  }
+  console.log("  posting words released by the claim position, final answers, by word:", JSON.stringify(Object.fromEntries([...released.entries()].sort((a, b) => b[1] - a[1]))));
+  const lines: string[] = [];
+  for (const o of outcomes) {
+    const cs = o.changeSets[o.changeSets.length - 1];
+    if (!cs) continue;
+    const wide = validateChangeSet(cs, base, set, o.posting, "anywhere").filter((f) => f.message.startsWith("word from the posting"));
+    const narrow = new Set(validateChangeSet(cs, base, set, o.posting, "claim").filter((f) => f.message.startsWith("word from the posting")).map((f) => `${f.bullet}:${f.value}`));
+    for (const f of wide) {
+      if (narrow.has(`${f.bullet}:${f.value}`)) continue;
+      const line = cs.changes.find((c) => c.bullet === f.bullet)?.text ?? cs.summary ?? "";
+      lines.push(`    ${f.value}: ${line}`);
+    }
+  }
+  console.log("  released, the lines, first 25 of " + lines.length);
+  for (const l of [...new Set(lines)].slice(0, 25)) console.log(l);
 }
 
 function summarise(run: string, outcomes: TailorOutcome[]) {
@@ -125,6 +185,7 @@ async function main() {
     const run = `${tag}-changes`;
     const outcomes = await pool(jobs, 5, (job) => tailorJob(db, facts, job, { mode: "changes", model, run, store }));
     summarise(run, outcomes);
+    scopes(facts, outcomes);
   }
   if (only !== "changes") {
     const run = `${tag}-document`;

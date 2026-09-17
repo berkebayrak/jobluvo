@@ -10,6 +10,12 @@ export const dynamic = "force-dynamic";
  * single decisions, or { replaceWith: documentId } to confirm every
  * extracted fact of that document and retire the confirmed resume facts
  * that came before it.
+ *
+ * Both answers carry counts of what moved against what was asked. A
+ * replacement with nothing to confirm answers 200 with confirmed 0 and
+ * retired 0, and the page today shows that as done; making it explicit,
+ * with the document's extraction state and the page confirming the
+ * document it displays, is review finding 5.
  */
 export async function POST(req: Request) {
   const parsed = decisionBody.safeParse(await req.json().catch(() => null));

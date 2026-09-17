@@ -74,13 +74,52 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
 
       const emp = rows.find((r) => r.kind === "employment")!.id;
       const skill = rows.find((r) => r.kind === "skill")!.id;
-      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 1, rejected: 1 });
+      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 1, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [] });
       const after = (await resumeFacts(tx, userId))!;
       expect(after.employment.map((e) => e.company).sort()).toEqual(["New Co", "Old Co"]);
       expect(after.skills.map((s) => s.name)).toEqual(["Old skill"]);
       expect(after.factsHash).not.toBe(before.factsHash);
-      // Another user's ids are ignored.
-      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [emp] })).toEqual({ confirmed: 0, rejected: 0 });
+      // Another user's ids are skipped and named.
+      expect(await decideFacts(tx, "00000000-0000-0000-0000-000000000000", { confirm: [emp] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 0 }, skipped: [emp] });
+      // A second click on the same ids moves nothing and says so.
+      expect(await decideFacts(tx, userId, { confirm: [emp], reject: [skill] })).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 1 }, skipped: [emp, skill] });
+      // A rejected fact is not revived by confirming its id; a confirmed one can still be rejected.
+      expect(await decideFacts(tx, userId, { confirm: [skill], reject: [emp] })).toEqual({ confirmed: 0, rejected: 1, asked: { confirm: 1, reject: 1 }, skipped: [skill] });
+      expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["Old Co"]);
+    });
+  });
+
+  it("after a replacement, a stale confirm of the old document's fact id does not put a second document into the confirmed profile", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [a] = await tx.insert(profileDocuments).values({ userId, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      const aRows = await tx
+        .insert(profileFacts)
+        .values([
+          { userId, documentId: a.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "A Co", title: "Head", start: "2022-03", bullets: ["A line."] } },
+          { userId, documentId: a.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "A skill" } },
+        ])
+        .returning({ id: profileFacts.id });
+      expect(await replaceWithDocument(tx, userId, a.id)).toEqual({ confirmed: 2, retired: 2 });
+      // The page that showed document a is still open when the user replaces with document b.
+      const [b] = await tx.insert(profileDocuments).values({ userId, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "" }).returning({ id: profileDocuments.id });
+      await tx.insert(profileFacts).values([
+        { userId, documentId: b.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "B Co", title: "Head", start: "2023-03", bullets: ["B line."] } },
+        { userId, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
+      ]);
+      expect(await replaceWithDocument(tx, userId, b.id)).toEqual({ confirmed: 2, retired: 2 });
+      // The stale page posts a's ids.
+      const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => r.id) });
+      expect(stale).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 2, reject: 0 }, skipped: aRows.map((r) => r.id) });
+      // The invariant: every confirmed resume fact carries one document id, and it is b's.
+      const confirmed = await tx
+        .select({ documentId: profileFacts.documentId, kind: profileFacts.kind })
+        .from(profileFacts)
+        .where(and(eq(profileFacts.userId, userId), eq(profileFacts.status, "confirmed")));
+      const resume = confirmed.filter((f) => f.kind !== "preference" && f.kind !== "authorization" && f.kind !== "sponsorship");
+      expect(new Set(resume.map((f) => f.documentId))).toEqual(new Set([b.id]));
+      expect(resume).toHaveLength(2);
+      expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["B Co"]);
     });
   });
 

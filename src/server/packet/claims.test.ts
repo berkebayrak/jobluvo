@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ResumeFacts } from "@/server/match/profile";
-import { claimsOf, contradiction, metricsAgree } from "./claims";
+import { claimsOf, contradiction, lemma, metricsAgree, segmentsOf } from "./claims";
 import { factEntries } from "./resume";
 import { checkLine, factSet, initialNamesOf, SENTENCE_INITIAL_NAMES } from "./validate";
 
@@ -29,6 +29,9 @@ const FACTS: ResumeFacts = {
         "Reduced cost by 11 percent against a 12 percent target.",
         "Grew revenue from USD 9M to USD 14M in 2023.",
         "Managed a team of 6 analysts.",
+        "Reduced customer churn by 11 percent.",
+        "Reduced costs by 20 percent; increased revenue by 10 percent.",
+        "Own the annual planning cycle, presented to the board twice a year.",
       ],
     },
     { company: "Deloitte", title: "Consultant", start: "2019-06", end: "2022-02", bullets: ["Delivered 9 growth projects for banks.", "Cut reporting time by 40 percent."] },
@@ -129,6 +132,69 @@ describe("the validator on the review's rewrites", () => {
       expect.objectContaining({ message: "value is from a line you typed, not the resume's words", value: "pct:40", origin: "edit" }),
     ]);
     expect(soft("R1.1", "Reduced churn 11 percent", ["R1.1"])).toEqual([]);
+  });
+  it("reads each value from its own predicate, and a period as a claim", () => {
+    expect(segmentsOf("designed and ran a program that cut cost 11 percent")).toEqual(["designed and ran a program that cut cost 11 percent"]);
+    expect(segmentsOf("increased revenue by 20 percent and reduced cost by 10 percent")).toEqual(["increased revenue by 20 percent", "reduced cost by 10 percent"]);
+    expect(segmentsOf("cut cost 11 percent and moved on")).toEqual(["cut cost 11 percent and moved on"]);
+    const two = claimsOf("Increased revenue by 20 percent and reduced costs by 10 percent");
+    expect(two.map((c) => [c.key, c.direction, c.metric])).toEqual([
+      ["pct:20", "up", ["revenue"]],
+      ["pct:10", "down", ["cost"]],
+    ]);
+    // An apposition with no words of its own measures what the predicate before it measured.
+    expect(claimsOf("Reduced operating cost by 11 percent, or USD 9.2M a year").map((c) => [c.key, c.metric])).toEqual([
+      ["pct:11", ["operating", "cost"]],
+      ["money:usd:9200000", ["operating", "cost"]],
+      ["period:year", ["operating", "cost"]],
+    ]);
+    expect(claimsOf("presented to the board twice a year").map((c) => c.key)).toEqual(["period:year"]);
+    expect(claimsOf("reviewed quarterly").map((c) => c.key)).toEqual(["period:quarter"]);
+    expect(claimsOf("a 3 year program").map((c) => c.key)).toEqual(["num:3"]);
+  });
+  it("the review's three reproductions: a changed metric, swapped results, and a period the fact never gave", () => {
+    // One shared word is not the same metric.
+    expect(hard("R1.5", "Reduced customer acquisition costs by 11 percent", ["R1.5"])).toEqual([]);
+    expect(review("R1.5", "Reduced customer acquisition costs by 11 percent", ["R1.5"])).toEqual([
+      expect.objectContaining({ message: "the fact and the line measure different things", value: "pct:11" }),
+    ]);
+    expect(at("R1.5", "Reduced customer churn 11 percent", ["R1.5"])).toEqual([]);
+    expect(at("R1.5", "Cut churn by 11 percent", ["R1.5"])).toEqual([]);
+    // Each value carries its own predicate's direction; the swap is a fall that became a rise.
+    expect(hard("R1.6", "Increased revenue by 20 percent and reduced costs by 10 percent", ["R1.6"]).map((f) => [f.value, f.message])).toEqual([
+      ["pct:20", "value does not mean what the fact means: down became up"],
+      ["pct:10", "value does not mean what the fact means: up became down"],
+    ]);
+    expect(at("R1.6", "Reduced costs by 20 percent and increased revenue by 10 percent", ["R1.6"])).toEqual([]);
+    // "over 12 months" is a duration; "annually" is a period the fact never gave.
+    expect(hard("R1.1", "Reduced churn by 11 percent annually", ["R1.1"])).toEqual([expect.objectContaining({ message: "value is on the profile but not in the cited facts", value: "period:year" })]);
+    // The predicate's verb is not its metric: "Led" for "Ran" is rewording, and rule 1's business, not a changed measure.
+    const led = at("R1.1", "Led the retention work that reduced churn by 11 percent over 12 months", ["R1.1"]);
+    expect(led.filter((f) => f.level === "hard")).toEqual([]);
+    // "retention work" is a measure the fact never named: every value in that predicate is held on it.
+    expect(led.filter((f) => f.level === "review").map((f) => [f.value, f.message])).toEqual([
+      ["pct:11", "the fact and the line measure different things"],
+      ["num:12", "the fact and the line measure different things"],
+    ]);
+    expect(review("R1.1", "Drove churn down 11 percent over 12 months", ["R1.1"])).toEqual([]);
+    // A period takes no role: "targets" before "twice a year" says what is presented, not that the period is a target.
+    expect(at("R1.7", "Present targets and priorities to the board twice a year", ["R1.7"])).toEqual([]);
+    // The line's side is its own predicate; the fact's side is its whole sentence, so folding the fact's clauses into one predicate passes.
+    expect(at("R1.3", "Grew revenue with the new pricing from USD 9M to USD 14M in 2023", ["R1.3"]).filter((f) => f.level !== "soft")).toEqual([
+      expect.objectContaining({ level: "review", value: "money:usd:9000000" }),
+      expect.objectContaining({ level: "review", value: "money:usd:14000000" }),
+    ]);
+    expect(at("R1.5", "Cut customer churn by 11 percent", ["R1.5"])).toEqual([]);
+    // An inflection is the same word: "removing" for "removed", "workstreams" for "workstream", "led" for "lead".
+    expect(["removing", "removed", "removes", "remove"].map(lemma)).toEqual(["remov", "remov", "remov", "remov"]);
+    expect(["workstreams", "workstream", "led", "lead", "priorities", "priority", "planned", "planning"].map(lemma)).toEqual(["workstream", "workstream", "lead", "lead", "priority", "priority", "plan", "plan"]);
+    expect(review("R2.1", "Delivering growth projects, 9 for banks", ["R2.1"])).toEqual([]);
+    expect(claimsOf("Revenue grew 20 percent").map((c) => c.metric)).toEqual([["revenue"]]);
+    expect(at("R1.1", "Reduced churn by 11 percent over 12 months", ["R1.1"])).toEqual([]);
+    expect(at("R1.1", "Reduced churn by 11 percent", ["R1.1"])).toEqual([]);
+    // A period the fact gave, in another wording, is the same period.
+    expect(at("R1.7", "Own annual planning; present to the board yearly", ["R1.7"])).toEqual([]);
+    expect(hard("R1.7", "Own annual planning; present to the board monthly", ["R1.7"])).toEqual([expect.objectContaining({ value: "period:month" })]);
   });
   it("a value in no cited fact is still hard the way it was", () => {
     expect(hard("R1.1", "Reduced churn by 99 percent", ["R1.1"])).toEqual([expect.objectContaining({ message: "value appears in no confirmed fact", value: "pct:99" })]);

@@ -6,6 +6,12 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-012. Nothing is scored that a user will not see
+
+The scored per applied ratio is the largest unknown in the cost per application (D-011) and it is not measurable until there are users. It is controllable. The hard filter costs nothing and already removes about sixty percent of the inventory before any claim. From here the rule for whatever drives scoring, the daily cron today and the feed later, is that a job is scored only if this user would be shown it: it passes the user's hard filter, it is the group's representative for the user, it is not swiped, and it is fresh or on the rework list. A score for a job the user never sees is a paid call with no application behind it.
+
+What it forbids: scoring the backlog (D-004 already), scoring every member of a group, scoring ahead of the filter, and any prefetch of scores for jobs outside the user's feed.
+
 ### D-011. Measured cost per scoring call: USD 0.00031 mean with the profile cached, USD 0.00057 without
 
 The number phase 0 exists to produce (D-002), measured on this date with `npm run score-sample` over 100 of the demo user's passing jobs, drawn round robin over 67 cells of family, seniority and description length, scored twice on gpt-5.6-luna with reasoning off and a strict JSON output of one integer and at most seven short lines. The profile message was 4,750 characters, about 1,190 tokens: four roles with their own bullet lines, two degrees, sixteen skills and two standing answers, the size extraction produces from a ten year resume. The cached message, instructions plus profile, was 1,444 tokens.
@@ -17,7 +23,20 @@ The number phase 0 exists to produce (D-002), measured on this date with `npm ru
 
 The cached order costs 54 percent of the uncached one. By description length the shipped order runs USD 0.000239 for short, 0.000300 for medium and 0.000376 for long postings; by family Gem 0.000265, Lever 0.000299, Greenhouse 0.000312, Ashby 0.000317. Seniority makes no difference beyond length. Output tokens are 108 of 2,200, so output is no longer the bill; the job text is.
 
-What it is not: cost per application. A scoring call is paid per job shown, and an application is one of several jobs scored, so the scoring share of an application is USD 0.00031 times the jobs scored per application, and tailoring is not measured yet. Against the USD 0.0035 to 0.0064 budget band the scoring call is 5 to 9 percent of the low end on its own. An earlier run under the same tag date, `sample-2026-09-17-prefix`, measured the single message layout and got 0 cached tokens; its rows stay in cost_events as the record behind D-010.
+What it is: a term in the number, not the number. A scoring call is paid per job scored, and a user applies to one of several jobs scored, so
+
+    cost per application = scored per applied x USD 0.000311 + tailoring per application + extraction per user amortised over the user's lifetime
+
+Tailoring and extraction are unmeasured on this date. The scoring term alone against the USD 0.0035 to 0.0064 budget band, USD 0.0045 target:
+
+| Scored per applied | Scoring term, USD | Of the band's low end | Of the band's high end |
+|---|---|---|---|
+| 5 | 0.0016 | 44 percent | 24 percent |
+| 8 | 0.0025 | 71 percent | 39 percent |
+| 10 | 0.0031 | 89 percent | 49 percent |
+| 20 | 0.0062 | 178 percent | 97 percent |
+
+At eight scored per applied the scoring term takes most of the low end before a single tailored resume; at twenty it is over budget on its own. The ratio cannot be measured without real users. It can be controlled: the hard filter is free and already removes about sixty percent of the inventory, and nothing is ever scored that a user will not see (D-012). An earlier run under the same tag date, `sample-2026-09-17-prefix`, measured the single message layout and got 0 cached tokens; its rows stay in cost_events as the record behind D-010.
 
 ### D-010. The scoring prompt is two messages, the profile first as its own message, because the cache hits whole messages
 

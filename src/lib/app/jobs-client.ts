@@ -74,10 +74,37 @@ export function locationLabel(j: FeedJob): string {
   return [l.city, l.region ?? l.country].filter(Boolean).join(", ") || l.raw;
 }
 
-export function cardFields(j: FeedJob): CardFields {
+export interface Viewer {
+  needsSponsorship: boolean;
+  /** False until a confirmed preference fact exists; the feed is unfiltered until then. */
+  hasProfile?: boolean;
+}
+
+/** The first 120 characters of a sentence, cut at a word, without a leading list dash from the source HTML. */
+function short(s: string): string {
+  const t = s.trim().replace(/^[-*•·]\s*/, "");
+  if (t.length <= 120) return t;
+  return t.slice(0, 120).replace(/\s+\S*$/, "") + "…";
+}
+
+/**
+ * The sponsorship line. A posting is quoted, never read into. Three states
+ * for someone who needs sponsorship: the posting says it sponsors, the
+ * posting states a restriction and here is the sentence, or the posting says
+ * nothing. Quiet is shown as quiet, with a question glyph, not as a yes.
+ */
+export function sponsorshipLine(j: FeedJob, viewer?: Viewer): string | undefined {
+  if (j.eligibility && j.eligibilityEvidence) return `- Posting states a restriction: ${short(j.eligibilityEvidence)}`;
+  if (j.sponsorship === "not_offered") return `- Posting states a restriction: ${short(j.sponsorshipEvidence ?? "no sponsorship")}`;
+  if (j.sponsorship === "offered") return "+ Posting says it sponsors";
+  if (viewer?.needsSponsorship) return "? Posting says nothing about sponsorship";
+  return undefined;
+}
+
+export function cardFields(j: FeedJob, viewer?: Viewer): CardFields {
   const reasons: string[] = [];
-  if (j.sponsorship === "offered") reasons.push("Sponsorship offered on this posting");
-  if (j.sponsorship === "not_offered") reasons.push("- Posting says no sponsorship");
+  const sp = sponsorshipLine(j, viewer);
+  if (sp) reasons.push(sp);
   if (j.alsoOn.length) reasons.push(`Also listed on ${j.alsoOn.map((f) => FAMILY_LABEL[f] ?? f).join(", ")}`);
   return {
     company: j.companyName,

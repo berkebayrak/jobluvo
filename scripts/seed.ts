@@ -1,16 +1,42 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { dbPool } from "@/db/client";
-import { sources, users } from "@/db/schema";
+import { profileFacts, sources, users } from "@/db/schema";
+import { authorizationFact, preferenceFact, sponsorshipFact } from "@/server/profile/facts";
 import { DEMO_USER_EMAIL } from "@/server/user";
 import { SEED_SOURCES } from "@/server/sources/registry";
 import { ADAPTERS } from "@/server/sources/registry";
 
+/*
+ * Jack Miller's preference, authorization and sponsorship facts, entered as
+ * the user would enter them (origin user, status confirmed). They mirror the
+ * profile screen mock: targets the United States, will relocate US wide,
+ * takes remote or on site, full time, is not authorized to work in the US
+ * and needs sponsorship now and in future. Nothing here comes from where
+ * Jack lives.
+ */
+const JACK_FACTS = [
+  {
+    kind: "preference" as const,
+    data: preferenceFact.parse({
+      targetCountries: ["US"],
+      relocation: "yes",
+      remote: "remote_ok",
+      employmentTypes: ["Full time"],
+      earliestStart: "2026-11-01",
+    }),
+  },
+  { kind: "authorization" as const, data: authorizationFact.parse({ country: "US", basis: "none", statedOn: "2026-09-17" }) },
+  { kind: "sponsorship" as const, data: sponsorshipFact.parse({ now: true, future: true, statedOn: "2026-09-17" }) },
+];
+
 /**
- * Seeds the demo user and the source registry. Every seed source is fetched
- * first; one that does not answer with at least one posting is skipped and
- * listed, so the registry never carries a dead board.
+ * Seeds the demo user, Jack's user entered facts and the source registry.
+ * Every seed source is fetched first; one that does not answer with at least
+ * one posting is skipped and listed, so the registry never carries a dead
+ * board.
  *
- * Run with `npm run seed`. Safe to run again: it upserts.
+ * Run with `npm run seed`. Safe to run again: it upserts, and a fact kind
+ * Jack already has is left alone so edits made on the profile screen survive.
  */
 async function main() {
   const db = dbPool();
@@ -21,6 +47,19 @@ async function main() {
     .onConflictDoNothing({ target: users.email })
     .returning();
   console.log(user ? `user created ${user.id}` : "user already present");
+
+  const [jack] = await db.select({ id: users.id }).from(users).where(eq(users.email, DEMO_USER_EMAIL));
+  const kinds = JACK_FACTS.map((f) => f.kind);
+  const present = await db
+    .select({ kind: profileFacts.kind })
+    .from(profileFacts)
+    .where(and(eq(profileFacts.userId, jack.id), inArray(profileFacts.kind, kinds)));
+  const have = new Set(present.map((r) => r.kind));
+  const missing = JACK_FACTS.filter((f) => !have.has(f.kind));
+  if (missing.length) {
+    await db.insert(profileFacts).values(missing.map((f) => ({ userId: jack.id, kind: f.kind, data: f.data, origin: "user" as const, status: "confirmed" as const })));
+  }
+  console.log(`facts: ${missing.length} added (${missing.map((f) => f.kind).join(", ") || "none"}), ${have.size} already present`);
 
   let added = 0;
   const skipped: string[] = [];

@@ -9,7 +9,7 @@ import { JobCard } from "@/components/jobs/JobCard";
 import { SwipeCard } from "@/components/jobs/SwipeCard";
 import { Toggle } from "@/components/core/Toggle";
 import { showToast } from "@/components/feedback/Toaster";
-import { ageHoursOf, cardFields, locationLabel, type FeedJob } from "@/lib/app/jobs-client";
+import { cardFields, type FeedJob, type Viewer } from "@/lib/app/jobs-client";
 import { logoUrl } from "@/lib/logo";
 
 const DATE_OPTIONS: { label: string; hours: number }[] = [
@@ -24,6 +24,11 @@ const WORKPLACE_LABEL: Record<string, string> = {
   onsite: "On site",
   unknown: "Not stated",
 };
+
+const PAGE = 200;
+
+/** Digits with a thousands separator, per the copy rules. */
+const num = (n: number) => n.toLocaleString("en-US");
 
 function toggle(list: string[], v: string): string[] {
   return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
@@ -142,33 +147,23 @@ async function undoDecision(jobId: string): Promise<boolean> {
   return r.ok;
 }
 
+interface FeedPage {
+  jobs: FeedJob[];
+  total: number;
+  inventory: { jobs: number; companies: number };
+  hidden: { total: number; reasons: Record<string, number> };
+  facets: { loc: string[]; workplace: string[]; co: string[]; level: string[] };
+  viewer?: Viewer;
+}
+
+const EMPTY_FACETS: FeedPage["facets"] = { loc: [], workplace: [], co: [], level: [] };
+
 function JobsScreen() {
   const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = React.useState(params.get("mode") === "swipe" ? "swipe" : "list");
   const [autoApply, setAutoApply] = React.useState(false);
   const [query, setQuery] = React.useState("");
-
-  const [all, setAll] = React.useState<FeedJob[] | null>(null);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
-  /** Jobs swiped this session, removed from view without a refetch. */
-  const [gone, setGone] = React.useState<Set<string>>(new Set());
-  const [savedCount, setSavedCount] = React.useState(0);
-
-  React.useEffect(() => {
-    let alive = true;
-    fetch("/api/jobs")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { jobs: FeedJob[] }) => {
-        if (!alive) return;
-        setAll(d.jobs);
-        setLoadError(null);
-      })
-      .catch((e: unknown) => alive && setLoadError(e instanceof Error ? e.message : String(e)));
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const [date, setDate] = React.useState<number | null>(null);
   const [loc, setLoc] = React.useState<string[]>([]);
@@ -179,18 +174,69 @@ function JobsScreen() {
   const [exclude, setExclude] = React.useState("");
   const [open, setOpen] = React.useState<string | null>(null);
 
-  const jobs = React.useMemo(() => (all ?? []).filter((j) => !gone.has(j.id)), [all, gone]);
+  /*
+   * The feed is filtered and paged on the server. `rows` is the loaded page or
+   * pages; `total` is how many jobs match the filters across the whole
+   * inventory; `inventory` is the whole inventory before any filter. Numbers
+   * on screen come from the database, never from the length of a window.
+   */
+  const [rows, setRows] = React.useState<FeedJob[] | null>(null);
+  const [total, setTotal] = React.useState(0);
+  const [inventory, setInventory] = React.useState({ jobs: 0, companies: 0 });
+  const [hidden, setHidden] = React.useState(0);
+  const [facets, setFacets] = React.useState(EMPTY_FACETS);
+  const [viewer, setViewer] = React.useState<Viewer | undefined>(undefined);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = React.useState(false);
 
-  /** Distinct values straight off the live data, so every option matches something. */
-  const values = React.useMemo(
-    () => ({
-      loc: [...new Set(jobs.map(locationLabel))].sort(),
-      workplace: [...new Set(jobs.map((j) => j.workplace))].sort(),
-      co: [...new Set(jobs.map((j) => j.companyName))].sort(),
-      level: [...new Set(jobs.map((j) => j.seniority).filter((s): s is string => !!s))].sort(),
-    }),
-    [jobs],
-  );
+  const search = React.useMemo(() => {
+    const p = new URLSearchParams();
+    if (query.trim()) p.set("q", query.trim());
+    if (date !== null) p.set("hours", String(date));
+    for (const v of loc) p.append("loc", v);
+    for (const v of workplace) p.append("workplace", v);
+    for (const v of co) p.append("co", v);
+    for (const v of level) p.append("level", v);
+    if (sponsor) p.set("sponsor", "1");
+    if (exclude.trim()) p.set("exclude", exclude.trim());
+    return p.toString();
+  }, [query, date, loc, workplace, co, level, sponsor, exclude]);
+
+  React.useEffect(() => {
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      fetch(`/api/jobs?${search}`)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((d: FeedPage) => {
+          if (!alive) return;
+          setRows(d.jobs);
+          setTotal(d.total);
+          setInventory(d.inventory);
+          setHidden(d.hidden?.total ?? 0);
+          setFacets(d.facets);
+          setViewer(d.viewer);
+          setLoadError(null);
+        })
+        .catch((e: unknown) => alive && setLoadError(e instanceof Error ? e.message : String(e)));
+    }, 250);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [search]);
+
+  function showMore() {
+    if (!rows || loadingMore) return;
+    setLoadingMore(true);
+    fetch(`/api/jobs?${search}&offset=${rows.length}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: FeedPage) => {
+        setRows((cur) => [...(cur ?? []), ...d.jobs]);
+        setTotal(d.total);
+      })
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoadingMore(false));
+  }
 
   const activeCount =
     (date !== null ? 1 : 0) + loc.length + workplace.length + co.length + level.length + (sponsor ? 1 : 0) + (exclude.trim() ? 1 : 0);
@@ -206,29 +252,11 @@ function JobsScreen() {
     setOpen(null);
   }
 
-  const words = exclude
-    .toLowerCase()
-    .split(",")
-    .map((w) => w.trim())
-    .filter(Boolean);
-
-  const list = jobs.filter((j) => {
-    const hay = `${j.title} ${j.companyName} ${j.locations.map((l) => l.raw).join(" ")}`.toLowerCase();
-    if (query && !hay.includes(query.toLowerCase())) return false;
-    if (date !== null && ageHoursOf(j.postedAt ?? j.firstSeenAt) > date) return false;
-    if (loc.length && !loc.includes(locationLabel(j))) return false;
-    if (workplace.length && !workplace.includes(j.workplace)) return false;
-    if (co.length && !co.includes(j.companyName)) return false;
-    if (level.length && !level.includes(j.seniority ?? "")) return false;
-    if (sponsor && j.sponsorship !== "offered") return false;
-    if (words.some((w) => hay.includes(w))) return false;
-    return true;
-  });
-
+  const list = rows ?? [];
   const [stamp, setStamp] = React.useState<"apply" | "skip" | null>(null);
   const [counts, setCounts] = React.useState({ apply: 0, save: 0, skip: 0 });
-  const deck = list;
-  const job = deck[0];
+  const [savedCount, setSavedCount] = React.useState(0);
+  const job = list[0];
 
   async function decide(j: FeedJob, decision: Decision) {
     const ok = await postDecision(j.id, decision);
@@ -236,7 +264,10 @@ function JobsScreen() {
       showToast({ text: "Could not save that. Try again." });
       return;
     }
-    setGone((g) => new Set(g).add(j.id));
+    const index = list.findIndex((x) => x.id === j.id);
+    setRows((cur) => (cur ?? []).filter((x) => x.id !== j.id));
+    setTotal((n) => Math.max(0, n - 1));
+    setInventory((inv) => ({ ...inv, jobs: Math.max(0, inv.jobs - 1) }));
     setCounts((c) => ({ ...c, [decision]: c[decision] + 1 }));
     if (decision === "save") setSavedCount((n) => n + 1);
     showToast({
@@ -249,11 +280,13 @@ function JobsScreen() {
       actionLabel: "Undo",
       onAction: async () => {
         if (await undoDecision(j.id)) {
-          setGone((g) => {
-            const n = new Set(g);
-            n.delete(j.id);
-            return n;
+          setRows((cur) => {
+            const next = [...(cur ?? [])];
+            next.splice(Math.max(0, index), 0, j);
+            return next;
           });
+          setTotal((n) => n + 1);
+          setInventory((inv) => ({ ...inv, jobs: inv.jobs + 1 }));
           setCounts((c) => ({ ...c, [decision]: Math.max(0, c[decision] - 1) }));
           if (decision === "save") setSavedCount((n) => Math.max(0, n - 1));
         }
@@ -274,15 +307,14 @@ function JobsScreen() {
     }, 220);
   }
 
-  const total = all?.length ?? 0;
-  const subline =
-    loadError
-      ? `Could not load jobs. ${loadError}`
-      : all === null
-        ? "Loading jobs."
-        : activeCount > 0 || query
-          ? `${list.length} of ${jobs.length} jobs shown.`
-          : `${jobs.length} open jobs from ${new Set(jobs.map((j) => j.companyName)).size} companies. Scores arrive once your profile is confirmed.`;
+  const decided = counts.apply + counts.save + counts.skip;
+  const subline = loadError
+    ? `Could not load jobs. ${loadError}`
+    : rows === null
+      ? "Loading jobs."
+      : activeCount > 0 || query
+        ? `${num(total)} of ${num(inventory.jobs)} jobs shown.`
+        : `${num(inventory.jobs)} open jobs from ${num(inventory.companies)} companies.${hidden ? ` ${num(hidden)} more do not fit your profile.` : ""} Scores arrive once your profile is confirmed.`;
 
   return (
     <>
@@ -323,25 +355,25 @@ function JobsScreen() {
         </FilterChip>
 
         <FilterChip label="Location" count={loc.length} open={open === "loc"} onOpen={() => setOpen(open === "loc" ? null : "loc")}>
-          {values.loc.map((v) => (
+          {facets.loc.map((v) => (
             <Opt key={v} label={v} on={loc.includes(v)} onToggle={() => setLoc(toggle(loc, v))} />
           ))}
         </FilterChip>
 
         <FilterChip label="Workplace" count={workplace.length} open={open === "mode"} onOpen={() => setOpen(open === "mode" ? null : "mode")}>
-          {values.workplace.map((v) => (
+          {facets.workplace.map((v) => (
             <Opt key={v} label={WORKPLACE_LABEL[v] ?? v} on={workplace.includes(v)} onToggle={() => setWorkplace(toggle(workplace, v))} />
           ))}
         </FilterChip>
 
         <FilterChip label="Companies" count={co.length} open={open === "co"} onOpen={() => setOpen(open === "co" ? null : "co")}>
-          {values.co.map((v) => (
+          {facets.co.map((v) => (
             <Opt key={v} label={v} on={co.includes(v)} onToggle={() => setCo(toggle(co, v))} />
           ))}
         </FilterChip>
 
         <FilterChip label="Seniority" count={level.length} open={open === "level"} onOpen={() => setOpen(open === "level" ? null : "level")}>
-          {values.level.map((v) => (
+          {facets.level.map((v) => (
             <Opt key={v} label={v} on={level.includes(v)} onToggle={() => setLevel(toggle(level, v))} />
           ))}
         </FilterChip>
@@ -397,30 +429,42 @@ function JobsScreen() {
       )}
 
       {mode === "list" ? (
-        <div className="jobs-grid">
-          {list.map((j) => {
-            const f = cardFields(j);
-            return (
-              <JobCard
-                key={j.id}
-                company={f.company}
-                logo={f.logoDomain ? logoUrl(f.logoDomain) : undefined}
-                title={f.title}
-                location={f.location}
-                salary={f.salary}
-                ats={f.ats}
-                posted={f.posted}
-                reasons={f.reasons}
-                onApply={() => decide(j, "apply")}
-                onSave={() => decide(j, "save")}
-                onSkip={() => decide(j, "skip")}
-              />
-            );
-          })}
-          {all && list.length === 0 && (
-            <p className="sub">{total === 0 ? "No open jobs yet. The first ingest fills this in." : "Nothing matches these filters."}</p>
+        <>
+          <div className="jobs-grid">
+            {list.map((j) => {
+              const f = cardFields(j, viewer);
+              return (
+                <JobCard
+                  key={j.id}
+                  company={f.company}
+                  logo={f.logoDomain ? logoUrl(f.logoDomain) : undefined}
+                  title={f.title}
+                  location={f.location}
+                  salary={f.salary}
+                  ats={f.ats}
+                  posted={f.posted}
+                  reasons={f.reasons}
+                  onApply={() => decide(j, "apply")}
+                  onSave={() => decide(j, "save")}
+                  onSkip={() => decide(j, "skip")}
+                />
+              );
+            })}
+            {rows && list.length === 0 && (
+              <p className="sub">{inventory.jobs === 0 ? "No open jobs yet. The first ingest fills this in." : "Nothing matches these filters."}</p>
+            )}
+          </div>
+          {rows && list.length < total && (
+            <div className="row" style={{ justifyContent: "center", marginTop: 16, gap: 12 }}>
+              <span className="sub">
+                {num(list.length)} of {num(total)} shown.
+              </span>
+              <Button size="sm" onClick={showMore} disabled={loadingMore}>
+                {loadingMore ? "Loading." : `Show ${num(Math.min(PAGE, total - list.length))} more`}
+              </Button>
+            </div>
           )}
-        </div>
+        </>
       ) : (
         <div className="swipe-wrap">
           <div>
@@ -429,7 +473,7 @@ function JobsScreen() {
               <div className="stack" style={{ transform: "scale(.96)" }} />
               {job ? (
                 (() => {
-                  const f = cardFields(job);
+                  const f = cardFields(job, viewer);
                   return (
                     <SwipeCard
                       company={f.company}
@@ -448,7 +492,7 @@ function JobsScreen() {
                 })()
               ) : (
                 <p className="sub" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", margin: 0 }}>
-                  {all === null ? "Loading." : "Deck is empty."}
+                  {rows === null ? "Loading." : "Deck is empty."}
                 </p>
               )}
             </div>
@@ -471,9 +515,9 @@ function JobsScreen() {
           <div>
             <Card title="Today's deck">
               <div className="side-stats">
-                <span className="sub">{deck.length} left</span>
+                <span className="sub">{num(total)} left</span>
                 <div className="progress">
-                  <i style={{ width: `${jobs.length ? ((jobs.length - deck.length) / jobs.length) * 100 : 0}%` }} />
+                  <i style={{ width: `${decided + total ? (decided / (decided + total)) * 100 : 0}%` }} />
                 </div>
                 <div style={{ marginTop: 12 }}>
                   <div className="item">

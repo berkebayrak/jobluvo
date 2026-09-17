@@ -36,7 +36,7 @@ export const ashby: Adapter = {
         return {
           nativeId: j.id,
           title: j.title,
-          locations,
+          locations: locations.map((raw) => ({ raw })),
           remote: j.isRemote,
           workplace: wp === "remote" || wp === "hybrid" || wp === "onsite" ? wp : undefined,
           employmentType: j.employmentType,

@@ -8,6 +8,27 @@
       "when": 1789591950236,
       "tag": "0000_phase0_discovery",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789634457672,
+      "tag": "0001_phase0_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789635191118,
+      "tag": "0002_phase0_eligibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789636241431,
+      "tag": "0003_phase0_swipe_upsert",
+      "breakpoints": true
     }
   ]
 }

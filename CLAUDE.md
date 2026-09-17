@@ -66,6 +66,10 @@ Cloud, BambooHR, BreezyHR, JazzHR, Jobvite, Paylocity, UltiPro, ADP, Dover, Ripp
 and Zoho Recruit, are next phases. Workday is developed early and enabled only for
 validated configurations. Submission is not built yet on any family.
 
+Roles that require a security clearance are out of scope by product decision. The hard
+filter fails them with the reason "needs a security clearance, Jobluvo does not handle
+these", and that rule stays even if a clearance field is added to the profile.
+
 Discovery and execution are separate capabilities with different constraints. A platform
 can be easy for one and hard for the other. Coverage is tiered A to D; state both tiers
 when describing a platform.
@@ -157,6 +161,9 @@ npm run seed         # demo user and the source registry, verifies each feed fir
 npm run ingest       # one ingest batch against the live feeds, prints a line per source
 npm run db:generate  # migration from src/db/schema.ts
 npm run db:migrate   # apply migrations over the direct Neon host
+npm run db:backfill-locations  # re-parse stored locations with the current parser, safe to repeat
+npm run db:backfill-signals    # recompute sponsorship and eligibility from stored text, safe to repeat
+npm run pass-rate    # hard filter pass rate across ingested jobs, by family and reason
 ```
 
 ## Layout

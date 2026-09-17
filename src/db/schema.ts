@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -32,16 +33,34 @@ export const familyEnum = pgEnum("family", [
 export const workplaceEnum = pgEnum("workplace", ["remote", "hybrid", "onsite", "unknown"]);
 export const compPeriodEnum = pgEnum("comp_period", ["year", "hour", "unknown"]);
 export const sponsorshipEnum = pgEnum("sponsorship", ["offered", "not_offered", "unknown"]);
+export const restrictionEnum = pgEnum("restriction", ["citizenship", "permanent_residency", "right_to_work", "clearance"]);
 export const linkReasonEnum = pgEnum("link_reason", ["native", "url", "requisition", "similar"]);
 export const decisionEnum = pgEnum("decision", ["apply", "save", "skip"]);
 export const costKindEnum = pgEnum("cost_kind", ["ingest", "extract", "score", "tailor"]);
+export const factKindEnum = pgEnum("fact_kind", [
+  "contact",
+  "link",
+  "employment",
+  "education",
+  "project",
+  "skill",
+  "authorization",
+  "sponsorship",
+  "preference",
+  "answer",
+]);
+export const factOriginEnum = pgEnum("fact_origin", ["upload", "user", "edit"]);
+export const factStatusEnum = pgEnum("fact_status", ["extracted", "confirmed", "rejected"]);
 
 export type Family = (typeof familyEnum.enumValues)[number];
 
 export interface JobLocation {
   city?: string;
   region?: string;
+  /** ISO 3166 alpha 2. */
   country?: string;
+  /** The feed's country name when it is not in the code table; `country` stays empty. */
+  countryName?: string;
   remote?: boolean;
   raw: string;
 }
@@ -104,6 +123,10 @@ export const jobs = pgTable(
     seniority: text("seniority"),
     sponsorship: sponsorshipEnum("sponsorship").notNull().default("unknown"),
     sponsorshipEvidence: text("sponsorship_evidence"),
+    /** A stated eligibility restriction, separate from sponsorship, with the sentence as evidence. Null when the posting says nothing. */
+    eligibility: restrictionEnum("eligibility"),
+    eligibilityCountry: text("eligibility_country"),
+    eligibilityEvidence: text("eligibility_evidence"),
     descriptionText: text("description_text").notNull().default(""),
     descriptionHtml: text("description_html").notNull().default(""),
     /** description_text with the source's boilerplate removed; what hashing and similarity read. */
@@ -187,7 +210,8 @@ export const swipeDecisions = pgTable(
     reason: text("reason"),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
-  (t) => [index("swipe_decisions_user_job").on(t.userId, t.jobId)],
+  // One current decision per user and job; the route upserts on it, so a double tap is one row.
+  (t) => [uniqueIndex("swipe_decisions_user_job").on(t.userId, t.jobId)],
 );
 
 /** The observed cost worksheet. Model calls add tokens and usd; ingest adds time. */
@@ -208,6 +232,55 @@ export const costEvents = pgTable(
   (t) => [index("cost_events_kind_created").on(t.kind, t.createdAt)],
 );
 
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
+/**
+ * An uploaded resume. Storing the PDF in Postgres is a deliberate Phase 0
+ * shortcut for one user; the column is named bytes_phase0 so the shortcut is
+ * visible in every query that touches it. It moves to object storage before
+ * any real user signs up.
+ */
+export const profileDocuments = pgTable("profile_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  bytesPhase0: bytea("bytes_phase0").notNull(),
+  text: text("text").notNull(),
+  pageCount: integer("page_count").notNull().default(0),
+  uploadedAt: ts("uploaded_at").notNull().defaultNow(),
+});
+
+/**
+ * One fact about the user. `data` has one zod shape per kind, in
+ * src/server/profile/facts.ts. A confirmed profile is the set of confirmed
+ * facts; nothing downstream reads a fact that is not confirmed. Preference,
+ * authorization and sponsorship facts are entered by the user, never taken
+ * from a resume and never inferred from where the user lives.
+ */
+export const profileFacts = pgTable(
+  "profile_facts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id").references(() => profileDocuments.id, { onDelete: "set null" }),
+    kind: factKindEnum("kind").notNull(),
+    data: jsonb("data").notNull(),
+    /** The span of the resume the fact came from, for upload origin facts. */
+    evidence: text("evidence"),
+    origin: factOriginEnum("origin").notNull(),
+    status: factStatusEnum("status").notNull().default("extracted"),
+    version: integer("version").notNull().default(1),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("profile_facts_user_kind").on(t.userId, t.kind, t.status)],
+);
+
 export type Source = typeof sources.$inferSelect;
+export type ProfileFact = typeof profileFacts.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;

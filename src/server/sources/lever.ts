@@ -33,11 +33,16 @@ export const lever: Adapter = {
     const postings: RawPosting[] = res.json.map((p) => {
       const lists = (p.lists ?? []).map((l) => `<h3>${l.text}</h3><ul>${l.content}</ul>`).join("");
       const html = [p.opening, p.descriptionBody ?? p.description, lists, p.additional].filter(Boolean).join("\n");
-      const locations = p.categories?.allLocations?.length
-        ? p.categories.allLocations
-        : p.categories?.location
-          ? [p.categories.location]
-          : [];
+      // `country` is the posting's country, an ISO code, and belongs to its
+      // primary location. Secondary locations in allLocations can be in
+      // another country ("London", "Stockholm" under GB), so they carry no
+      // structured country and are read from text only.
+      const primary = p.categories?.location;
+      const names = p.categories?.allLocations?.length ? p.categories.allLocations : primary ? [primary] : [];
+      const locations = names.map((raw, i) => ({
+        raw,
+        countryCode: p.country && (raw === primary || (!primary && i === 0)) ? p.country.toUpperCase() : undefined,
+      }));
       const wp = p.workplaceType?.toLowerCase();
       const workplace = wp === "remote" || wp === "hybrid" ? wp : wp === "onsite" || wp === "on-site" ? "onsite" : undefined;
       const sr = p.salaryRange;

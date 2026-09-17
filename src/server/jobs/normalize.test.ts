@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   contentHash,
+  eligibilityOf,
   descriptionCore,
   detectRepeated,
   htmlToText,
   parseCompensation,
   parseLocation,
+  parseLocations,
   seniorityOf,
   sponsorshipOf,
   titleNorm,
@@ -30,11 +32,132 @@ describe("parseLocation", () => {
     expect(parseLocation("Remote - US")).toMatchObject({ remote: true, country: "US" });
     expect(parseLocation("Remote (United States)")).toMatchObject({ remote: true, country: "US" });
   });
-  it("reads other countries and leaves the unknown alone", () => {
-    expect(parseLocation("London, United Kingdom")).toMatchObject({ city: "London", country: "GB" });
+  it("reads full state names, after a city or alone", () => {
+    expect(parseLocation("San Francisco, California")).toMatchObject({ city: "San Francisco", region: "CA", country: "US" });
+    expect(parseLocation("New York, New York")).toMatchObject({ city: "New York", region: "NY", country: "US" });
+    expect(parseLocation("St. Louis, Missouri")).toMatchObject({ city: "St. Louis", region: "MO", country: "US" });
+    expect(parseLocation("Remote - Texas")).toMatchObject({ remote: true, region: "TX", country: "US" });
+    expect(parseLocation("California")).toMatchObject({ region: "CA", country: "US" });
+    expect(parseLocation("California").city).toBeUndefined();
+  });
+  it("reads punctuated cities and Washington DC in its forms", () => {
+    expect(parseLocation("St. Louis, MO")).toMatchObject({ city: "St. Louis", region: "MO", country: "US" });
+    expect(parseLocation("Washington, DC")).toMatchObject({ city: "Washington", region: "DC", country: "US" });
+    expect(parseLocation("Washington, D.C.")).toMatchObject({ city: "Washington", region: "DC", country: "US" });
+    expect(parseLocation("Washington DC")).toMatchObject({ city: "Washington", region: "DC", country: "US" });
+    expect(parseLocation("Ft. Lauderdale, FL")).toMatchObject({ city: "Ft. Lauderdale", region: "FL", country: "US" });
+  });
+  it("reads metro strings down to the city", () => {
+    expect(parseLocation("Greater Boston Area")).toMatchObject({ city: "Boston", country: "US" });
+    expect(parseLocation("San Francisco Bay Area")).toMatchObject({ city: "San Francisco", country: "US" });
+    expect(parseLocation("New York City Metropolitan Area")).toMatchObject({ city: "New York", country: "US" });
+    expect(parseLocation("Greater Seattle Area")).toMatchObject({ city: "Seattle", country: "US" });
+  });
+  it("reads every Remote US variant as remote in the US, with no city", () => {
+    const variants = [
+      "Remote, US",
+      "Remote - USA",
+      "US Remote",
+      "Remote (US)",
+      "United States - Remote",
+      "Remote, United States",
+      "Remote in the USA",
+      "Remote - Anywhere in the US",
+      "US - Remote",
+    ];
+    for (const s of variants) {
+      const l = parseLocation(s);
+      expect(l, s).toMatchObject({ remote: true, country: "US" });
+      expect(l.city, s).toBeUndefined();
+    }
     expect(parseLocation("Remote")).toMatchObject({ remote: true });
     expect(parseLocation("Remote").country).toBeUndefined();
+  });
+  it("reads a well known US city on its own, and no other city", () => {
+    expect(parseLocation("Chicago")).toMatchObject({ city: "Chicago", country: "US" });
+    expect(parseLocation("NYC")).toMatchObject({ city: "New York", country: "US" });
+    expect(parseLocation("Cambridge").country).toBeUndefined();
+    expect(parseLocation("London").country).toBeUndefined();
+    expect(parseLocation("Dublin")).toMatchObject({ city: "Dublin" });
+    expect(parseLocation("Dublin").country).toBeUndefined();
+  });
+  it("reads other countries and leaves the unknown alone", () => {
+    expect(parseLocation("London, United Kingdom")).toMatchObject({ city: "London", country: "GB" });
+    expect(parseLocation("Paris, France")).toMatchObject({ city: "Paris", country: "FR" });
+    expect(parseLocation("Remote (Canada)")).toMatchObject({ remote: true, country: "CA" });
+    expect(parseLocation("Toronto, ON")).toMatchObject({ city: "Toronto" });
+    expect(parseLocation("Toronto, ON").country).toBeUndefined();
     expect(parseLocation("Campinas, SP", { country: "br" })).toMatchObject({ city: "Campinas", country: "BR" });
+  });
+  it("invents nothing for a string it cannot read", () => {
+    for (const s of ["N/A", "TBD", "Multiple locations", "Various"]) {
+      const l = parseLocation(s);
+      expect(l.raw, s).toBe(s);
+      expect(l.city, s).toBeUndefined();
+      expect(l.country, s).toBeUndefined();
+    }
+  });
+});
+
+describe("parseLocations with structured fields from the feed", () => {
+  it("lets a country code from the feed win over the text, and never guesses", () => {
+    expect(parseLocations([{ raw: "Paris, Texas", countryCode: "FR" }])[0]).toMatchObject({ city: "Paris", country: "FR" });
+    expect(parseLocations([{ raw: "London", countryCode: "gb" }])[0]).toMatchObject({ city: "London", country: "GB" });
+    expect(parseLocations([{ raw: "London" }])[0].country).toBeUndefined();
+  });
+  it("maps a country name through the table and keeps an unknown name as countryName", () => {
+    expect(parseLocations([{ raw: "Halifax, England, United Kingdom", city: "Halifax", region: "England", country: "United Kingdom" }])[0]).toMatchObject({
+      city: "Halifax",
+      region: "England",
+      country: "GB",
+    });
+    const odd = parseLocations([{ raw: "Somewhere", country: "Atlantis" }])[0];
+    expect(odd.country).toBeUndefined();
+    expect(odd.countryName).toBe("Atlantis");
+  });
+  it("takes structured city and region over the parsed ones and keeps the remote flag", () => {
+    const l = parseLocations([{ raw: "Paris, IDF, France", city: "Paris", region: "IDF", countryCode: "FR", remote: true }])[0];
+    expect(l).toMatchObject({ raw: "Paris, IDF, France", city: "Paris", region: "IDF", country: "FR", remote: true });
+  });
+  it("still parses free text entries that carry no structure", () => {
+    expect(parseLocations([{ raw: "San Francisco, CA" }, { raw: "Remote - US" }])).toEqual([
+      { raw: "San Francisco, CA", city: "San Francisco", region: "CA", country: "US" },
+      { raw: "Remote - US", remote: true, country: "US" },
+    ]);
+  });
+});
+
+describe("eligibilityOf", () => {
+  it("reads a stated restriction with the sentence as evidence and the country it names", () => {
+    expect(eligibilityOf("Great team. Right to work in the UK is required. Apply now.")).toEqual({
+      restriction: "right_to_work",
+      country: "GB",
+      evidence: "Right to work in the UK is required.",
+    });
+    expect(eligibilityOf("Candidates must have the right to work in Ireland by the start date.")).toMatchObject({ restriction: "right_to_work", country: "IE" });
+    expect(eligibilityOf("Applicants are personally responsible for obtaining and maintaining the right to work in Mexico.")).toMatchObject({
+      restriction: "right_to_work",
+      country: "MX",
+    });
+    expect(eligibilityOf("Must be a U.S. citizen due to contract requirements.")).toMatchObject({ restriction: "citizenship", country: "US" });
+    expect(eligibilityOf("US citizenship is required for this role.")).toMatchObject({ restriction: "citizenship", country: "US" });
+    expect(eligibilityOf("Green card or permanent residency required.")).toMatchObject({ restriction: "permanent_residency" });
+    expect(eligibilityOf("An active Top Secret security clearance is required.")).toMatchObject({ restriction: "clearance" });
+    expect(eligibilityOf("Clearance: An active U.S. Secret clearance.")).toMatchObject({ restriction: "clearance", country: "US" });
+    expect(eligibilityOf("Must be legally authorized to work in the United States without sponsorship.")).toMatchObject({ restriction: "right_to_work", country: "US" });
+  });
+  it("finds nothing in the sentences that only mention the words", () => {
+    const none = [
+      "Datadog is proud to offer equal employment opportunity to everyone regardless of race, color, ancestry, religion, sex, national origin, sexual orientation, age, citizenship, marital status, disability.",
+      "If your position is employed by another Airbnb entity, your recruiter will inform you what states you are eligible to work from.",
+      "Clearance: An active U.S. government security clearance is preferred but not required. Candidates without an active clearance are encouraged to apply.",
+      "Support Section 16 officer transactions, including Rule 10b5-1 trading plan administration and pre-clearance coordination.",
+      "We are making Stripe's data lake a first-class citizen of the modern data ecosystem.",
+      "Manage UK and Canadian visa cases from offer stage through renewals and permanent residency.",
+      "We welcome applicants from every background.",
+      "",
+    ];
+    for (const s of none) expect(eligibilityOf(s), s).toBeUndefined();
   });
 });
 

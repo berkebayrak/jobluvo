@@ -6,12 +6,30 @@ import type { Family, Source } from "@/db/schema";
  * some form. Anything the family does not expose is left undefined and
  * becomes "unknown" downstream, never guessed.
  */
+/**
+ * One location as the platform gives it. `raw` is always the string the
+ * board shows. The structured fields are set only when the feed supplies
+ * them as fields: Lever, Workable and SmartRecruiters do, Greenhouse, Ashby
+ * and Gem only give text. A structured country always wins over anything
+ * parsed from `raw`, and nothing is inferred where the feed said nothing.
+ */
+export interface RawLocation {
+  raw: string;
+  city?: string;
+  region?: string;
+  /** Country name as the feed wrote it, when it gives a name. */
+  country?: string;
+  /** ISO 3166 alpha 2, when the feed gives a code. Wins over `country`. */
+  countryCode?: string;
+  remote?: boolean;
+}
+
 export interface RawPosting {
   nativeId: string;
   requisitionId?: string;
   title: string;
-  /** Location strings as the platform gives them, one per location. */
-  locations: string[];
+  /** One entry per location, structured where the platform structures it. */
+  locations: RawLocation[];
   /** Set only when the platform states it. */
   remote?: boolean;
   workplace?: "remote" | "hybrid" | "onsite";

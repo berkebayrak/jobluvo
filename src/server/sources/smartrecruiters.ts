@@ -1,5 +1,5 @@
 import { sha256 } from "@/server/jobs/normalize";
-import type { Adapter, RawPosting } from "./types";
+import type { Adapter, RawLocation, RawPosting } from "./types";
 import { fetchJson, toDate } from "./types";
 
 interface SrListItem {
@@ -21,11 +21,21 @@ interface SrDetail extends SrListItem {
 
 const SECTION_ORDER = ["companyDescription", "jobDescription", "qualifications", "additionalInformation"];
 
-function locationOf(l: SrListItem["location"]): string[] {
+/** The list entry is structured: city, region, a lower case ISO country code and a remote flag. */
+function locationOf(l: SrListItem["location"]): RawLocation[] {
   if (!l) return [];
   const parts = [l.city, l.region, l.country?.toUpperCase()].filter(Boolean);
-  const s = l.fullLocation ?? parts.join(", ");
-  return s ? [s] : [];
+  const raw = l.fullLocation ?? parts.join(", ");
+  if (!raw) return [];
+  return [
+    {
+      raw,
+      city: l.city || undefined,
+      region: l.region || undefined,
+      countryCode: l.country ? l.country.toUpperCase() : undefined,
+      remote: l.remote || undefined,
+    },
+  ];
 }
 
 /**
@@ -54,8 +64,11 @@ export const smartrecruiters: Adapter = {
       if (!res) return { notModified: true };
       if (offset === 0) etag = res.etag;
       items.push(...res.json.content);
-      offset += limit;
-      if (offset >= res.json.totalFound || res.json.content.length === 0) break;
+      // Advance by what the page returned, not by what was asked for: a short
+      // middle page would otherwise skip the records it withheld and end the
+      // loop early, and those jobs would count as absent and close.
+      offset += res.json.content.length;
+      if (res.json.content.length === 0 || items.length >= res.json.totalFound) break;
     }
 
     let budget = opts.detailBudget;

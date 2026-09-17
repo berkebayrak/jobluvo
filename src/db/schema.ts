@@ -38,7 +38,7 @@ export const linkReasonEnum = pgEnum("link_reason", ["native", "url", "requisiti
 export const decisionEnum = pgEnum("decision", ["apply", "save", "skip"]);
 export const costKindEnum = pgEnum("cost_kind", ["ingest", "extract", "score", "tailor"]);
 export const matchStatusEnum = pgEnum("match_status", ["pending", "scored", "failed"]);
-export const packetStatusEnum = pgEnum("packet_status", ["ready", "invalid", "failed"]);
+export const packetStatusEnum = pgEnum("packet_status", ["ready", "needs_review", "invalid", "failed"]);
 export const factKindEnum = pgEnum("fact_kind", [
   "contact",
   "link",
@@ -84,12 +84,22 @@ export interface ResumeChange {
   facts: string[];
 }
 
-/** What the validator found. "hard" rejects the packet; "soft" is shown with it. */
+/**
+ * What the validator found. "hard" rejects the packet, one retry then
+ * invalid. "review" holds the packet for a person: the validator could not
+ * read one side, or a name is in no fact; no retry, because a retry cannot
+ * resolve an unknown, it can only make the model drop the line, an
+ * omission with nobody deciding it. "soft" is shown with the packet.
+ */
 export interface PacketFinding {
-  level: "hard" | "soft";
+  level: "hard" | "review" | "soft";
   bullet: string | null;
   message: string;
   value?: string;
+  /** What the check saw on each side, for the review screen: the fact's reading against the line's. */
+  detail?: string;
+  /** For a value the line took from a fact the user typed rather than the resume's words. */
+  origin?: "upload" | "user" | "edit";
 }
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });

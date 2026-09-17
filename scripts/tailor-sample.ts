@@ -56,7 +56,7 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
   const hard = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "hard"));
   const soft = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "soft"));
   console.log(
-    `\n${run}: ready ${by("ready")}, invalid ${by("invalid")}, failed ${by("failed")}, retried ${retried}, usd ${usd.toFixed(4)}, ` +
+    `\n${run}: ready ${by("ready")}, held for review ${by("needs_review")}, invalid ${by("invalid")}, failed ${by("failed")}, retried ${retried}, usd ${usd.toFixed(4)}, ` +
       `changes per packet ${(outcomes.reduce((a, o) => a + o.changes, 0) / Math.max(1, outcomes.length)).toFixed(1)}, ` +
       `max cached tokens ${Math.max(0, ...outcomes.map((o) => o.tokensCached))}`,
   );

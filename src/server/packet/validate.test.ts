@@ -10,6 +10,8 @@ import { checkLine, factSet, namesOf, normaliseNumbers, validateChangeSet, value
  * worse than none, so the rejections matter more than the passes.
  */
 
+const FROM_RESUME = { rowId: "row", origin: "upload" as const, hasEvidence: true };
+
 const FACTS: ResumeFacts = {
   userId: "u",
   prefs: { targetCountries: ["US"], relocation: "yes", remote: "remote_ok", employmentTypes: ["Full time"], earliestStart: "2026-11-01" },
@@ -40,15 +42,17 @@ const FACTS: ResumeFacts = {
     { name: "Power BI and Excel", years: 10 },
   ],
   answers: [{ question: "Salary expectation", answer: "USD 150,000 to 175,000 base" }],
+  sources: { employment: [FROM_RESUME, FROM_RESUME], education: [FROM_RESUME], skills: [FROM_RESUME, FROM_RESUME] },
   prefsHash: "p",
   factsHash: "f",
 };
 
 const set = factSet(factEntries(FACTS));
-const ALL = ["R1", "R1.1", "R1.2", "R1.3", "R1.4", "R2", "R2.1", "E1", "S1", "S2"];
-/** Hard findings for a line that cites every fact, so only values that are nowhere on the profile fail. */
+const ALL = ["R1", "R1.1", "R1.2", "R1.3", "R1.4", "E1", "S1", "S2"];
+/** Hard findings for an R1 line that cites every fact it may (R2's facts belong to another role), so only values that are nowhere on the profile fail. */
 const hard = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "hard");
 const soft = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "soft");
+const review = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "review");
 
 describe("normaliser", () => {
   it("writes word numbers, suffixes, separators and hyphens the same way", () => {
@@ -80,7 +84,8 @@ describe("hard rejections: a value in no confirmed fact", () => {
     expect(hard("Four managers and two analysts, at a USD 140 million telematics company")).toEqual([]);
     expect(hard("Built an OKR system used by 38 teams since 2023")).toEqual([]);
     expect(hard("Closed a USD 18M acquisition in 2024 after screening 14 targets")).toEqual([]);
-    expect(hard("Sized a $1.1B market for SME lending")).toEqual([]);
+    // The market size is Deloitte's fact: cited under its own role it passes; under R1 it would cite another role.
+    expect(checkLine("Sized a $1.1B market for SME lending", "R2.1", ["R2.1"], set).filter((f) => f.level === "hard")).toEqual([]);
     expect(hard("Head of Strategy since March 2022")).toEqual([]);
   });
   it("rejects a number, amount, percentage or date that is not on the profile", () => {
@@ -118,16 +123,19 @@ describe("a value must be in a cited fact", () => {
   it("a citation that does not exist is soft, on its own", () => {
     expect(soft("Led the planning cycle", ["R9.9"])).toEqual([expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" })]);
   });
-  it("flags a name that appears in no fact, and passes the names that do", () => {
-    expect(soft("Reported to the CEO at Arvento using Power BI")).toEqual([]);
-    expect(soft("Led migration to Salesforce for the Deloitte team")).toEqual([expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce" })]);
+  it("holds a name that appears in no fact for review, and passes the names that do", () => {
+    // Every name in the line is on the profile; the verb that opens it is not, and a sentence initial miss is soft: measured at 12 of 12 false positives (D-017).
+    expect(review("Reported to the CEO at Arvento using Power BI")).toEqual([]);
+    expect(soft("Reported to the CEO at Arvento using Power BI")).toEqual([expect.objectContaining({ value: "Reported", detail: "sentence initial" })]);
+    expect(review("Led migration to Salesforce for the Deloitte team")).toEqual([expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce" })]);
     expect(namesOf("Built dashboards in Power BI. Reported to the CFO monthly.")).toEqual(["Power BI", "CFO"]);
     // A comma ends a name, so a list of known names is several known names; a plural of a known name is known.
     expect(namesOf("Skills in Excel, Power BI, and financial modelling.")).toEqual(["Excel", "Power BI"]);
-    expect(soft("Built reporting in Excel, Power BI for the PMOs")).toEqual([]);
+    expect(review("Built reporting in Excel, Power BI for the PMOs")).toEqual([]);
     // Two known words run together are not a known name, and a new acronym is not either.
-    expect(soft("Built reporting in Power Excel")).toEqual([expect.objectContaining({ value: "Power Excel" })]);
-    expect(soft("Owned the KPI framework")).toEqual([expect.objectContaining({ value: "KPI" })]);
+    expect(review("Built reporting in Power Excel")).toEqual([expect.objectContaining({ value: "Power Excel" })]);
+    expect(review("Owned the KPI framework")).toEqual([expect.objectContaining({ value: "KPI" })]);
+    expect(soft("Owned the KPI framework")).toEqual([expect.objectContaining({ value: "Owned", detail: "sentence initial" })]);
   });
 });
 
@@ -153,7 +161,11 @@ describe("change set validation", () => {
     expect(bad.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:18", "pct:15"]);
     // A summary with a value and no citation is rejected like any line.
     const unc = validateChangeSet({ summary: "Leader with 10 years of experience.", summaryFacts: [], changes: [], skills: [] }, base, set);
-    expect(unc.map((f) => [f.level, f.bullet, f.message])).toEqual([["hard", "summary", "value with no fact cited for it"]]);
+    // "Leader" opens the sentence and is on no fact: soft, it travels with the packet (D-017).
+    expect(unc.map((f) => [f.level, f.bullet, f.message])).toEqual([
+      ["hard", "summary", "value with no fact cited for it"],
+      ["soft", "summary", "name appears in no confirmed fact"],
+    ]);
   });
   it("reports an edit to a line that does not exist and a skill that does not exist as soft, never as a pass", () => {
     const f = validateChangeSet({ summary: null, summaryFacts: [], changes: [{ bullet: "R7.1", text: "Anything", facts: [] }], skills: ["S9"] }, base, set);

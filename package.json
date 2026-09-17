@@ -25,6 +25,7 @@
     "score": "node --env-file=.env.local --import tsx scripts/score.ts",
     "score-sample": "node --env-file=.env.local --import tsx scripts/score-sample.ts",
     "cost-report": "node --env-file=.env.local --import tsx scripts/cost-report.ts",
+    "validator-report": "node --env-file=.env.local --import tsx scripts/validator-report.ts",
     "tailor": "node --env-file=.env.local --import tsx scripts/tailor.ts",
     "tailor-sample": "node --env-file=.env.local --import tsx scripts/tailor-sample.ts",
     "resume-pdf": "node --import tsx scripts/resume-pdf.ts",

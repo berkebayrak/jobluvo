@@ -83,9 +83,17 @@ export const GENERIC_OBJECTS = new Set([
 const CURRENCIES = new Set(["usd", "eur", "gbp", "cad", "try", "us"]);
 const isValue = (low: string) => /^\d/.test(low);
 
-/** Noun shaped, as far as an ending can tell: not a verb the resume style uses, not a verb, adjective or adverb by its suffix, and not a generic object. */
+/** Light verbs and plain adjectives with no telling ending. Closed class, like the function words: a posting cannot add to it. */
+const LIGHT_WORDS = new Set([
+  "use", "uses", "need", "needs", "make", "makes", "get", "gets", "keep", "keeps", "take", "takes", "give", "gives", "help", "helps", "ensure", "ensures", "meet", "meets",
+  "see", "sees", "want", "wants", "bring", "brings", "put", "puts", "let", "lets",
+  "clear", "complex", "key", "new", "old", "high", "low", "strong", "weak", "deep", "broad", "wide", "senior", "junior", "cross", "multi", "end", "top", "best", "better", "good",
+  "great", "own", "full", "fast", "quick", "simple", "hard", "soft", "long", "short", "small", "large", "big", "main", "core", "prior", "next", "same", "other", "many", "few",
+]);
+
+/** Noun shaped, as far as an ending can tell: not a verb the resume style uses, not a verb, adjective or adverb by its suffix, not a light word, and not a generic object. */
 export const nounShaped = (low: string): boolean =>
-  low.length >= 3 && !RESPONSIBILITY_VERBS.has(low) && !/(ing|ed|ly|able|ible|ive|ous|ful|less|ic|al|ise|ize|ify)$/.test(low) && !GENERIC_OBJECTS.has(low);
+  low.length >= 3 && !RESPONSIBILITY_VERBS.has(low) && !LIGHT_WORDS.has(low) && !/(ing|ed|ly|able|ible|ive|ous|ful|less|ic|al|ise|ize|ify)$/.test(low) && !GENERIC_OBJECTS.has(low);
 
 /** The content lemmas of a text: what "on the profile", "in the cited facts" and "in the posting" mean. */
 export function lemmasOf(text: string): Set<string> {
@@ -155,6 +163,7 @@ export function entityTokens(line: string, posting: Set<string>, profile: Set<st
     const { raw, low } = t;
     if (FUNCTION_WORDS.has(low) || CURRENCIES.has(low) || isValue(low) || !/[a-z]/i.test(raw)) return;
     const key = lemma(low.replace(/[^a-z0-9+#.-]/g, ""));
+    // A posting noun fires wherever it stands: "feedback loops" claims loops and feedback, "salesforce workflows" claims salesforce. The light words keep "complex analysis" out.
     if (nounShaped(low) && posting.has(key) && !profile.has(key)) add("posting", raw);
     if (isForm(raw)) add("form", raw);
     else if (/^[A-Z]/.test(raw) && !t.sentenceStart && raw !== "I") add("proper", raw);

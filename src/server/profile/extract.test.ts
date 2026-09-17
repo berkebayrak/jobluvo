@@ -174,7 +174,8 @@ describe.skipIf(!hasDb)("the upload path and the document's state", () => {
       const before = await unknownCostStats(tx);
       await tx.insert(profileDocuments).values([
         { userId, filename: "fresh.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing" },
-        { userId, filename: "died.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing", uploadedAt: new Date(Date.now() - PROCESSING_STALE_MS - 1000) },
+        // Dated on the database clock, well past the window: the count compares against the database's now(), and this machine's clock is not it.
+        { userId, filename: "died.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "processing", uploadedAt: sql`now() - make_interval(secs => ${PROCESSING_STALE_MS / 1000 + 600})` },
       ]);
       const after = await unknownCostStats(tx);
       const rows = (s: typeof after) => s.find((x) => x.kind === "extract")!;

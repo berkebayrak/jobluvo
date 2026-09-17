@@ -58,3 +58,30 @@ describe("smartrecruiters detail drain", () => {
     expect(r.etag).toBe('"list-v1"');
   });
 });
+
+describe("smartrecruiters list paging", () => {
+  it("collects every record when a middle page comes back short", async () => {
+    // Five postings the board serves as pages of 2, 2 and 1, whatever limit was asked for.
+    const pages: Record<string, string[]> = { "0": ["a", "b"], "2": ["c", "d"], "4": ["e"] };
+    const offsets: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/postings?")) {
+          const offset = new URL(url).searchParams.get("offset") ?? "0";
+          offsets.push(offset);
+          const ids = pages[offset] ?? [];
+          return Response.json({ totalFound: 5, content: ids.map((id) => ({ id, name: `Job ${id}` })) });
+        }
+        const id = url.split("/").pop();
+        return Response.json({ id, name: `Job ${id}`, jobAd: { sections: { jobDescription: { text: "<p>Body</p>" } } } });
+      }),
+    );
+    const r = await smartrecruiters.fetch({ tenant: "acme", etag: null } as unknown as Source, { detailBudget: 40, known: new Map() });
+    expect(r.notModified).toBe(false);
+    if (r.notModified) return;
+    expect(offsets).toEqual(["0", "2", "4"]);
+    expect(r.postings.map((p) => p.nativeId)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(r.postings.every((p) => !p.detailPending)).toBe(true);
+  });
+});

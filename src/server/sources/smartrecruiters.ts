@@ -64,8 +64,11 @@ export const smartrecruiters: Adapter = {
       if (!res) return { notModified: true };
       if (offset === 0) etag = res.etag;
       items.push(...res.json.content);
-      offset += limit;
-      if (offset >= res.json.totalFound || res.json.content.length === 0) break;
+      // Advance by what the page returned, not by what was asked for: a short
+      // middle page would otherwise skip the records it withheld and end the
+      // loop early, and those jobs would count as absent and close.
+      offset += res.json.content.length;
+      if (res.json.content.length === 0 || items.length >= res.json.totalFound) break;
     }
 
     let budget = opts.detailBudget;

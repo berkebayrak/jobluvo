@@ -37,8 +37,8 @@ describe("tokens and shapes", () => {
   it("reads noun shape from the ending, crudely and on purpose", () => {
     expect(["roadmap", "headcount", "recruitment"].map(nounShaped)).toEqual([true, true, true]);
     expect(["translating", "improved", "clearly", "scalable", "led", "progress"].map(nounShaped)).toEqual([false, false, false, false, false, false]);
-    // A known miss: an adjective with no telling ending reads as a noun. The posting signal pays for it in holds, not in passes.
-    expect(nounShaped("complex")).toBe(true);
+    // Light verbs and plain adjectives with no telling ending are a closed class, like the function words.
+    expect(["complex", "clear", "use", "needs", "key", "senior"].map(nounShaped)).toEqual([false, false, false, false, false, false]);
   });
   it("finds the object of a responsibility verb and its head", () => {
     expect(objectsOf("Led recruitment of analysts")).toEqual([{ verb: "lead", head: "recruitment" }]);
@@ -68,8 +68,13 @@ describe("signals", () => {
     expect(t("Established repeatable practices")).toEqual([]);
     expect(t("Redesigned the division")).toEqual([["division", ["object"]]]);
     // The posting signal wants a noun: the posting's verbs and adjectives are rewording.
-    // "complex" is the known miss above; "translating" is a verb by its ending and does not fire.
-    expect(entityTokens("Translating complex requirements", lemmasOf("translating complex requirements"), profile).map((x) => x.token)).toEqual(["complex", "requirements"]);
+    // "translating" is a verb by its ending and "complex" a light adjective: neither fires. A posting noun fires wherever it stands.
+    expect(entityTokens("Translating complex requirements", lemmasOf("translating complex requirements"), profile).map((x) => x.token)).toEqual(["requirements"]);
+    expect(entityTokens("Set up feedback loops for the roadmap", lemmasOf("feedback loops roadmap"), profile).map((x) => [x.token, x.signals])).toEqual([
+      ["feedback", ["posting"]],
+      ["loops", ["posting"]],
+      ["roadmap", ["posting"]],
+    ]);
   });
 });
 

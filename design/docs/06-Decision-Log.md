@@ -6,6 +6,33 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-019. Review two closed: what is done, what is declined, and where the rest goes before, with, or after the phase 1 pre rank
+
+The phase 0 code review of 17 September 2026 listed eighteen findings. Seven were fixed in the review's own order, one was declined with its argument recorded, one was found live inside the last fix, and the rest are placed here by one rule: the phase 1 pre rank ranks jobs on stored text and produces the number the business case rests on, so anything that corrupts the stored text or the spend is fixed before it, or the pre rank is measured on bad inputs and believed.
+
+| Finding | State |
+|---|---|
+| 1 A rejected result promoted after a failed retry | Done, #29 |
+| 2 Numeric validation checked presence, not meaning | Done, #34, D-017: claims with kind, unit, role, direction, and the employer rule |
+| 3 Unsupported qualifications shipped as ready | Done, #34, D-017: mid sentence names and metric mismatches hold the packet; sentence initial names soft, the hole named |
+| 4 Fact replacement not atomic | Done, #31, the decide path on the same lock |
+| 5 Confirm all could select a failed upload | Done, #32: document states, refusal reasons, Confirm all on the document displayed |
+| 6 Employment facts confirmed unseen | Done, #33: every value shown and editable, decisions bound to the version seen |
+| 7 No durable source claim | Declined, D-018, with the reviewer's argument and the triggers that would build it |
+| 8 SDK retries and timeout | Done, #30, D-015: zero retries, budgets against the 60 s function, unknown cost and stale rows counted |
+| 16 Wrong citation rate could read zero | Done, #34: the sample summary matches on the message across every level, counted by packet and edit; it had printed 0 for two samples because the message had moved from soft to hard |
+| 12 Incomplete inventory treated as complete | Before the pre rank, first: a partial poll that closes live jobs changes what the whole system can see |
+| 13 SmartRecruiters body stuck behind a 304 | Before the pre rank, second: a board whose descriptions never arrive gives the filter and the pre rank nothing to read, for one family, silently |
+| 10 Rescore bypasses eligibility | Before the pre rank, third: model spend on jobs the user can never take, on the cost number directly |
+| 15 Parser false negatives and the EUR decimal | Before the pre rank, fourth: location and compensation are filter inputs, and the decimal is a wrong number on a screen |
+| 17 Sample not reproducible from its seed | Before the pre rank, fifth: cost per application is re-measured with the pre rank in place, and the point is the comparison with phase 0 |
+| 9 Cache write term ignored by the meter | With the pre rank: it cannot move the published number by more than about USD 0.0004 on a hundred calls, but the pre rank changes the call mix, so the meter is fixed while that work is open rather than reasoned about a second time |
+| 11 Score freshness, ownership, terminal states | With the freshness work planned for phase 1, as one item: it carries the request id per call, the cron stopping when time is short, the attempt history table (D-016) and a new revision restarting attempts. Fine at nine boards, mandatory before a thousand, not to be split further |
+| 14 Boilerplate change does not rehash every row | After phase 1: bites only when a boilerplate rule changes |
+| 18 Extraction forces precise dates | After phase 1: real product quality, on a profile the user can edit |
+
+Also in this pass, not on the review's list: the packet attempt history became a measurement requirement (D-016), and submission does not ship before DOC-03 (D-017).
+
 ### D-018. Source polling keeps its claim and no lease, again, with the reviewer's argument recorded and the trigger that would change it
 
 The phase 0 review asked for a durable claim on source polling: a lease owner and expiry on the row, exclusion of sources under an active lease, the same token required to publish, recovery of expired leases. Declined once before at nine boards with one daily cron, and declined again on this date, with the reviewer's argument written down because it is better than the earlier one.

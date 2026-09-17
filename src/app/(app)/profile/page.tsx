@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/core/Button";
 import { Card } from "@/components/data/Card";
 import { showToast } from "@/components/feedback/Toaster";
@@ -22,6 +23,7 @@ const TARGETS = [
   "San Francisco",
 ];
 
+/** The delivered mock rows, shown until the profile has confirmed facts of its own. */
 const EXPERIENCE: [string, string, string][] = [
   [
     "2022 to now",
@@ -48,7 +50,124 @@ const RESUMES: [string, string, boolean][] = [
   ["Original upload", "PDF, 11 Aug", false],
 ];
 
+interface Fact {
+  id: string;
+  documentId: string | null;
+  kind: string;
+  data: Record<string, unknown>;
+  evidence: string | null;
+  origin: string;
+  status: string;
+}
+
+interface Doc {
+  id: string;
+  filename: string;
+  uploadedAt: string;
+  extracted: number;
+  confirmed: number;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const month = (ym?: unknown) => (typeof ym === "string" && /^\d{4}-\d{2}$/.test(ym) ? `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(0, 4)}` : "");
+const year = (ym?: unknown) => (typeof ym === "string" ? ym.slice(0, 4) : "");
+const day = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+};
+
+/** One row of the confirmed facts list: a label and the fact in one line. */
+function factRow(f: Fact, index: number): { label: string; value: string } {
+  const d = f.data as Record<string, string | number | string[] | undefined>;
+  switch (f.kind) {
+    case "employment":
+      return {
+        label: !d.end && index === 0 ? "Current role" : "Role",
+        value: `${d.title}, ${d.company}. ${month(d.start)} to ${d.end ? month(d.end) : "now"}. ${Array.isArray(d.bullets) ? d.bullets.length : 0} lines`,
+      };
+    case "education":
+      return { label: "Education", value: `${d.degree}${d.field ? `, ${d.field}` : ""}, ${d.institution}${d.end ? `, ${year(d.end)}` : ""}` };
+    case "skill":
+      return { label: "Skill", value: `${d.name}${d.years != null ? `, ${d.years} years` : ""}` };
+    case "answer":
+      return { label: String(d.question ?? "Answer"), value: String(d.answer ?? "") };
+    case "contact":
+      return { label: "Contact", value: [d.name, d.email, d.location].filter(Boolean).join(", ") };
+    case "link":
+      return { label: "Link", value: String(d.url ?? "") };
+    case "project":
+      return { label: "Project", value: String(d.name ?? "") };
+    default:
+      return { label: f.kind, value: JSON.stringify(d) };
+  }
+}
+
+const RESUME_KINDS = new Set(["contact", "link", "employment", "education", "project", "skill", "answer"]);
+
 export default function ProfilePage() {
+  const [facts, setFacts] = useState<Fact[] | null>(null);
+  const [docs, setDocs] = useState<Doc[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async () => {
+    const r = await fetch("/api/profile");
+    if (!r.ok) return;
+    const j = (await r.json()) as { facts: Fact[]; documents: Doc[] };
+    setFacts(j.facts);
+    setDocs(j.documents);
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j: { facts: Fact[]; documents: Doc[] }) => {
+        if (!alive) return;
+        setFacts(j.facts);
+        setDocs(j.documents);
+      })
+      .catch(() => showToast({ text: "Could not load your profile." }));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const decide = async (body: Record<string, unknown>, done: string) => {
+    setBusy("decide");
+    const r = await fetch("/api/profile/facts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    setBusy(null);
+    if (!r.ok) {
+      showToast({ text: "That did not save. Try again." });
+      return;
+    }
+    await load();
+    showToast({ text: done });
+  };
+
+  const upload = async (file: File) => {
+    setBusy("upload");
+    const form = new FormData();
+    form.append("file", file);
+    const r = await fetch("/api/profile/upload", { method: "POST", body: form });
+    setBusy(null);
+    if (!r.ok) {
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      showToast({ text: j.error ?? "Upload failed." });
+      return;
+    }
+    const j = (await r.json()) as { facts: number; issues: string[] };
+    await load();
+    showToast({ text: `${j.facts} facts read from ${file.name}. Check them below.${j.issues.length ? ` ${j.issues.length} to look at.` : ""}` });
+  };
+
+  const resumeFacts = (facts ?? []).filter((f) => RESUME_KINDS.has(f.kind) && f.status !== "rejected");
+  const confirmed = resumeFacts.filter((f) => f.status === "confirmed");
+  const pending = resumeFacts.filter((f) => f.status === "extracted");
+  const latestDoc = docs[0];
+  const experience = confirmed.filter((f) => f.kind === "employment");
+  const answers = confirmed.filter((f) => f.kind === "answer");
+  const factsFrom = latestDoc ? `from ${latestDoc.filename}, ${day(latestDoc.uploadedAt)}` : "entered by you";
+
   return (
     <>
       <div className="page-head">
@@ -85,6 +204,17 @@ export default function ProfilePage() {
 
           <div style={{ marginTop: 12 }}>
             <Card title="Resume profiles">
+              {docs.map((d) => (
+                <div className="kvrow" key={d.id}>
+                  <span className="k" style={{ width: "auto" }}>
+                    <b style={{ color: "var(--fg)", fontWeight: 500 }}>{d.filename}</b>
+                    <div className="sub">
+                      Uploaded {day(d.uploadedAt)}. {d.confirmed} confirmed{d.extracted ? `, ${d.extracted} to check` : ""}
+                    </div>
+                  </span>
+                  <span className="tag">{d.extracted ? "Check" : "Verified"}</span>
+                </div>
+              ))}
               {RESUMES.map(([name, meta, verified]) => (
                 <div className="kvrow" key={name}>
                   <span className="k" style={{ width: "auto" }}>
@@ -104,9 +234,24 @@ export default function ProfilePage() {
                   )}
                 </div>
               ))}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/pdf"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) void upload(f);
+                }}
+              />
+              <Button size="sm" style={{ marginTop: 10, width: "100%" }} disabled={busy === "upload"} onClick={() => fileRef.current?.click()}>
+                {busy === "upload" ? "Reading your resume." : "Upload resume"}
+              </Button>
               <Button
                 size="sm"
-                style={{ marginTop: 10, width: "100%" }}
+                variant="ghost"
+                style={{ marginTop: 6, width: "100%" }}
                 onClick={() => showToast({ text: "New resume profile. Mock." })}
               >
                 New resume profile
@@ -153,16 +298,81 @@ export default function ProfilePage() {
           </div>
 
           <div style={{ marginTop: 12 }}>
+            <Card
+              title="Confirmed facts"
+              action={
+                pending.length > 0 && latestDoc ? (
+                  <Button size="sm" variant="primary" disabled={busy === "decide"} onClick={() => void decide({ replaceWith: latestDoc.id }, "Confirmed. Your profile is this resume now.")}>
+                    Confirm all {pending.length}
+                  </Button>
+                ) : undefined
+              }
+            >
+              <p className="sub" style={{ margin: "0 0 10px" }}>
+                {facts === null ? "Loading." : `${confirmed.length} confirmed ${factsFrom}. Only what you confirm can appear on a tailored resume.`}
+                {pending.length > 0 ? ` ${pending.length} waiting for you. Confirm all replaces the facts you had before.` : ""}
+              </p>
+              <div className="kvlist">
+                {[...pending, ...confirmed].map((f, i) => {
+                  const row = factRow(f, i);
+                  const check = f.status === "extracted";
+                  return (
+                    <div className="kvrow" key={f.id}>
+                      <span className="k">{row.label}</span>
+                      <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
+                        {row.value}
+                        {check && f.evidence ? <div className="sub">From the resume: {f.evidence}</div> : null}
+                      </span>
+                      <span className="row" style={{ gap: 6, flexShrink: 0 }}>
+                        {check ? (
+                          <>
+                            <Button size="sm" variant="ghost" disabled={busy === "decide"} onClick={() => void decide({ reject: [f.id] }, "Rejected. It stays off your resumes.")}>
+                              Reject
+                            </Button>
+                            <Button size="sm" disabled={busy === "decide"} onClick={() => void decide({ confirm: [f.id] }, "Confirmed.")}>
+                              Confirm
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="tag">Confirmed</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+                {facts !== null && resumeFacts.length === 0 ? <p className="sub">No resume facts yet. Upload a resume to start.</p> : null}
+              </div>
+            </Card>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
             <Card title="Experience">
               <div className="kvlist">
-                {EXPERIENCE.map(([when, role, note]) => (
-                  <div className="kvrow" key={when}>
-                    <span className="k">{when}</span>
-                    <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
-                      <b style={{ fontWeight: 500 }}>{role}</b>. {note}
-                    </span>
-                  </div>
-                ))}
+                {experience.length
+                  ? experience.map((f) => {
+                      const d = f.data as { title: string; company: string; start: string; end?: string; bullets: string[] };
+                      return (
+                        <div className="kvrow" key={f.id}>
+                          <span className="k">
+                            {year(d.start)} to {d.end ? year(d.end) : "now"}
+                          </span>
+                          <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
+                            <b style={{ fontWeight: 500 }}>
+                              {d.title}, {d.company}
+                            </b>
+                            . {d.bullets[0]}
+                          </span>
+                        </div>
+                      );
+                    })
+                  : EXPERIENCE.map(([when, role, note]) => (
+                      <div className="kvrow" key={when}>
+                        <span className="k">{when}</span>
+                        <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
+                          <b style={{ fontWeight: 500 }}>{role}</b>. {note}
+                        </span>
+                      </div>
+                    ))}
               </div>
               <p className="sub" style={{ margin: "12px 0 0" }}>
                 Extracted from your resume, confirmed by you.
@@ -184,7 +394,10 @@ export default function ProfilePage() {
               }
             >
               <div className="kvlist">
-                {ANSWERS.map(([k, v, unset]) => (
+                {(answers.length
+                  ? [...answers.map((f) => [String((f.data as { question: string }).question), String((f.data as { answer: string }).answer)] as [string, string, boolean?]), ANSWERS[2]]
+                  : ANSWERS
+                ).map(([k, v, unset]) => (
                   <div className="kvrow" key={k}>
                     <span className="k">{k}</span>
                     <span

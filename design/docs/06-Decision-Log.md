@@ -6,6 +6,16 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-020. Word numbers compose along the grammar only, an unreadable number phrase holds the line, and a validator that throws is a failed packet
+
+Review three finding 4. The normaliser looked words up with `in` on a plain object, so every key of Object.prototype read as a number: "constructor injection" made the accumulator a function and `fmt` threw. It added any two number words with "and" between them, "three and five teams" as 8, and read "two million five hundred thousand" as two numbers. And the throw aborted `tailorJob` before a row was written, because the fact set was built outside the try and the validator was not wrapped: not a wrong answer, a missing row, invisible to the cost and citation reports.
+
+The rules now, `src/server/packet/normalise.ts`: the tables are Maps. A units word joins a tens word, a hundred, a scale word or the "and" after those, and after anything else it starts a new number; "hundred" scales the group before it; scale words must fall and carry a group; "and" is part of a number only after "hundred" or a scale word, and only when a number word follows. So "three and five teams" is "3 and 5 teams", and a line that says 8 is an invention, hard. A phrase the grammar cannot read, "five thousand two million", is left as its words and reported by `readNumbers`, and the validator holds the line: a review finding on the line's own phrase, and a value checked against a cited fact that has such a phrase is held rather than rejected, because the fact may hold it. A validator that throws on the facts stores a failed packet with zero attempts and no call; one that throws on an answer stores a failed packet with the call's cost row and no paid retry, since a code defect does not earn a second call.
+
+Measured before it shipped, `npm run validator-report` over the 101 packets on hand: 0 changed status, 0 unreadable phrases on either side, 0 lines the old "and" rule had summed. Applied after the merge.
+
+The hold rather than the pass: the old rule guessed a number where it could not read one, and a guess on the fact's side can only ever pass a line. A held line costs a review behind the DOC-03 gate. A passed invention costs the guarantee.
+
 ### D-019. Review two closed: what is done, what is declined, and where the rest goes before, with, or after the phase 1 pre rank
 
 The phase 0 code review of 17 September 2026 listed eighteen findings. Seven were fixed in the review's own order, one was declined with its argument recorded, one was found live inside the last fix, and the rest are placed here by one rule: the phase 1 pre rank ranks jobs on stored text and produces the number the business case rests on, so anything that corrupts the stored text or the spend is fixed before it, or the pre rank is measured on bad inputs and believed.

@@ -1,6 +1,6 @@
 import type { PacketFinding, ResumeDocument } from "@/db/schema";
 import { claimsOf, contradiction, metricsAgree, sameValue, type Claim, type FactClaim } from "./claims";
-import { fmt } from "./normalise";
+import { fmt, readNumbers } from "./normalise";
 import type { ChangeSet, FactEntry } from "./resume";
 
 export { normaliseNumbers } from "./normalise";
@@ -108,17 +108,22 @@ export interface FactSet {
   all: FactClaim[];
   /** All fact text, lower case, for the name check. */
   corpus: string;
+  /** Per fact id, the number phrases the normaliser could not read; a value checked against such a fact is held, not rejected. */
+  unreadable: Map<string, string[]>;
 }
 
 export function factSet(entries: FactEntry[]): FactSet {
   const byId = new Map<string, FactClaim[]>();
   const all: FactClaim[] = [];
+  const unreadable = new Map<string, string[]>();
   for (const e of entries) {
     const claims = claimsOf(e.text).map((c) => ({ ...c, factId: e.id, role_of_fact: e.role, source: e.source }));
     byId.set(e.id, claims);
     all.push(...claims);
+    const phrases = readNumbers(e.text).unreadable;
+    if (phrases.length) unreadable.set(e.id, phrases);
   }
-  return { entries, entryById: new Map(entries.map((e) => [e.id, e])), byId, all, corpus: entries.map((e) => e.text).join("\n").toLowerCase() };
+  return { entries, entryById: new Map(entries.map((e) => [e.id, e])), byId, all, corpus: entries.map((e) => e.text).join("\n").toLowerCase(), unreadable };
 }
 
 /** The role a line belongs to: R2 for the bullet R2.3 and for the heading R2; null for the summary and anything else. */
@@ -145,8 +150,14 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
   }
 
   const citedClaims = cited.flatMap((id) => facts.byId.get(id) ?? []);
+  // A cited fact with a number phrase the normaliser could not read may hold the value the line uses; the line is held, not rejected, until a person reads it.
+  const citedUnreadable = cited.flatMap((id) => facts.unreadable.get(id) ?? []);
   for (const p of claimsOf(line)) {
     const same = citedClaims.filter((c) => sameValue(c, p));
+    if (!same.length && citedUnreadable.length) {
+      out.push({ level: "review", bullet, message: "value could not be checked; a cited fact has a number phrase that could not be read", value: p.key, detail: citedUnreadable.join("; ") });
+      continue;
+    }
     if (!same.length) {
       // A value must appear in a fact the line cites, not merely somewhere on the
       // profile. "Six" once passed because six was on another line; that is the
@@ -180,6 +191,9 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
       ...(c.source.origin === "edit" ? { origin: "edit" as const } : {}),
     });
   }
+
+  // A number phrase the normaliser could not read is a value the validator never saw. Held, never passed.
+  for (const phrase of readNumbers(line).unreadable) out.push({ level: "review", bullet, message: "a number phrase could not be read", value: phrase });
 
   for (const n of namesOf(line)) {
     if (!nameOnProfile(n, facts.corpus)) out.push({ level: "review", bullet, message: "name appears in no confirmed fact", value: n });

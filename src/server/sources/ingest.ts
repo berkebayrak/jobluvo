@@ -250,7 +250,7 @@ export async function applyPostings(tx: Tx, source: Source, postings: RawPosting
       contentHash: n.contentHash,
       boilerplateVersion: bp.version,
       applyUrl: p.applyUrl,
-      applyUrlNorm: normaliseApplyUrl(p.applyUrl, source.family),
+      applyUrlNorm: normaliseApplyUrl(p.applyUrl),
       postedAt: p.postedAt ?? null,
       lastCheckedAt: now,
       missedPolls: 0,

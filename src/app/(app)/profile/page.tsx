@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/core/Button";
+import { Input } from "@/components/core/Input";
 import { Card } from "@/components/data/Card";
 import { showToast } from "@/components/feedback/Toaster";
 
@@ -58,6 +59,138 @@ interface Fact {
   evidence: string | null;
   origin: string;
   status: string;
+  /** Moves on every edit. A decision names the version it saw, and holds only for that version. */
+  version: number;
+}
+
+/** The fields of each kind, as the review form shows and edits them. "lines" is one entry per line. */
+type FieldSpec = { key: string; label: string; type: "text" | "lines" | "number"; hint?: string };
+const FIELDS: Record<string, FieldSpec[]> = {
+  employment: [
+    { key: "title", label: "Title", type: "text" },
+    { key: "company", label: "Company", type: "text" },
+    { key: "location", label: "Location", type: "text" },
+    { key: "start", label: "Start", type: "text", hint: "YYYY-MM" },
+    { key: "end", label: "End", type: "text", hint: "YYYY-MM, or empty for a current role" },
+    { key: "bullets", label: "Lines", type: "lines", hint: "One line per bullet, as it should read on your resume" },
+  ],
+  education: [
+    { key: "degree", label: "Degree", type: "text" },
+    { key: "field", label: "Field", type: "text" },
+    { key: "institution", label: "Institution", type: "text" },
+    { key: "start", label: "Start", type: "text", hint: "YYYY-MM" },
+    { key: "end", label: "End", type: "text", hint: "YYYY-MM" },
+    { key: "notes", label: "Notes", type: "lines", hint: "One per line" },
+  ],
+  skill: [
+    { key: "name", label: "Skill", type: "text" },
+    { key: "years", label: "Years", type: "number" },
+  ],
+  answer: [
+    { key: "question", label: "Question", type: "text" },
+    { key: "answer", label: "Answer", type: "text" },
+  ],
+  contact: [
+    { key: "name", label: "Name", type: "text" },
+    { key: "email", label: "Email", type: "text" },
+    { key: "location", label: "Location", type: "text" },
+  ],
+  link: [{ key: "url", label: "URL", type: "text" }],
+  project: [{ key: "name", label: "Project", type: "text" }],
+};
+
+/** The form's text for a field value, and back. */
+const toText = (v: unknown, type: FieldSpec["type"]) => (type === "lines" ? (Array.isArray(v) ? v.join("\n") : "") : v == null ? "" : String(v));
+function fromText(text: string, type: FieldSpec["type"]): unknown {
+  const t = text.trim();
+  if (type === "lines")
+    return t
+      .split("\n")
+      .map((l) => l.replace(/^[-•]\s*/, "").trim())
+      .filter(Boolean);
+  if (type === "number") return t === "" ? undefined : Number(t);
+  return t === "" ? undefined : t;
+}
+
+/**
+ * Every value of a waiting fact, so nothing is confirmed unseen: a role
+ * shows each of its lines, not a count of them. Confirmed facts keep the
+ * delivered one line row.
+ */
+function FactDetail({ f }: { f: Fact }) {
+  const d = f.data as Record<string, unknown>;
+  const s = (k: string) => (d[k] == null ? "" : String(d[k]));
+  const lines = (k: string) => (Array.isArray(d[k]) ? (d[k] as string[]) : []);
+  if (f.kind === "employment") {
+    return (
+      <>
+        <b style={{ fontWeight: 500 }}>
+          {s("title")}, {s("company")}
+        </b>
+        <div className="sub">
+          {month(d.start)} to {d.end ? month(d.end) : "now"}
+          {s("location") ? `. ${s("location")}` : ""}
+        </div>
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+          {lines("bullets").map((b, i) => (
+            <li key={i}>{b}</li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+  if (f.kind === "education") {
+    return (
+      <>
+        <b style={{ fontWeight: 500 }}>
+          {s("degree")}
+          {s("field") ? `, ${s("field")}` : ""}
+        </b>
+        <div className="sub">
+          {s("institution")}
+          {d.start || d.end ? `. ${month(d.start)}${d.end ? ` to ${month(d.end)}` : ""}` : ""}
+        </div>
+        {lines("notes").length ? (
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {lines("notes").map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        ) : null}
+      </>
+    );
+  }
+  return <>{factRow(f, 0).value}</>;
+}
+
+/** The inline edit of one waiting fact. Save posts the whole fact at the version the page showed. */
+function EditForm({ f, busy, onSave, onCancel }: { f: Fact; busy: boolean; onSave: (data: Record<string, unknown>) => void; onCancel: () => void }) {
+  const spec = FIELDS[f.kind] ?? [];
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(spec.map((x) => [x.key, toText(f.data[x.key], x.type)])));
+  const data = () => Object.fromEntries(spec.map((x) => [x.key, fromText(values[x.key] ?? "", x.type)]).filter(([, v]) => v !== undefined));
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {spec.map((x) =>
+        x.type === "lines" ? (
+          <label key={x.key} style={{ display: "grid", gap: 4 }}>
+            <span className="sub">{x.label}</span>
+            <textarea className="textarea" rows={Math.max(3, (values[x.key] ?? "").split("\n").length)} value={values[x.key] ?? ""} onChange={(e) => setValues({ ...values, [x.key]: e.target.value })} />
+            {x.hint ? <span className="sub">{x.hint}</span> : null}
+          </label>
+        ) : (
+          <Input key={x.key} label={x.label} hint={x.hint} value={values[x.key] ?? ""} onChange={(e) => setValues({ ...values, [x.key]: e.target.value })} />
+        ),
+      )}
+      <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button size="sm" disabled={busy} onClick={() => onSave(data())}>
+          Save
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 interface Doc {
@@ -175,6 +308,23 @@ export default function ProfilePage() {
       return;
     }
     showToast({ text: done });
+  };
+
+  /** One waiting fact rewritten by the user, at the version the page showed. The reload brings back the next version. */
+  const [editing, setEditing] = useState<string | null>(null);
+  const saveEdit = async (f: Fact, data: Record<string, unknown>) => {
+    setBusy("decide");
+    const r = await fetch("/api/profile/facts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ edit: { id: f.id, version: f.version, data } }) });
+    setBusy(null);
+    const j = (await r.json().catch(() => ({}))) as { error?: string };
+    if (!r.ok) {
+      showToast({ text: j.error ? `${j.error.charAt(0).toUpperCase()}${j.error.slice(1)}.` : "That did not save. Try again." });
+      if (r.status !== 422) await load();
+      return;
+    }
+    setEditing(null);
+    await load();
+    showToast({ text: "Saved. Confirm it when it reads right." });
   };
 
   const upload = async (file: File) => {
@@ -356,27 +506,45 @@ export default function ProfilePage() {
                           Uploaded {day(doc.uploadedAt)}. {group.length} waiting for you.
                         </div>
                       </span>
-                      <Button size="sm" variant="primary" disabled={busy === "decide"} onClick={() => void decide({ replaceWith: doc.id }, "Confirmed. Your profile is this resume now.")}>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={busy === "decide" || editing !== null}
+                        onClick={() => void decide({ replaceWith: doc.id, seen: group.map((f) => ({ id: f.id, version: f.version })) }, "Confirmed. Your profile is this resume now.")}
+                      >
                         Confirm all {group.length}
                       </Button>
                     </div>
                     {group.map((f, i) => {
                       const row = factRow(f, i);
+                      const ref = { id: f.id, version: f.version };
                       return (
-                        <div className="kvrow" key={f.id}>
+                        <div className="kvrow" key={f.id} style={{ alignItems: "flex-start" }}>
                           <span className="k">{row.label}</span>
                           <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
-                            {row.value}
-                            {f.evidence ? <div className="sub">From the resume: {f.evidence}</div> : null}
+                            {editing === f.id ? (
+                              <EditForm f={f} busy={busy === "decide"} onSave={(data) => void saveEdit(f, data)} onCancel={() => setEditing(null)} />
+                            ) : (
+                              <>
+                                <FactDetail f={f} />
+                                {f.evidence ? <div className="sub">From the resume: {f.evidence}</div> : null}
+                                {f.origin === "edit" ? <div className="sub">Edited by you.</div> : null}
+                              </>
+                            )}
                           </span>
-                          <span className="row" style={{ gap: 6, flexShrink: 0 }}>
-                            <Button size="sm" variant="ghost" disabled={busy === "decide"} onClick={() => void decide({ reject: [f.id] }, "Rejected. It stays off your resumes.")}>
-                              Reject
-                            </Button>
-                            <Button size="sm" disabled={busy === "decide"} onClick={() => void decide({ confirm: [f.id] }, "Confirmed.")}>
-                              Confirm
-                            </Button>
-                          </span>
+                          {editing === f.id ? null : (
+                            <span className="row" style={{ gap: 6, flexShrink: 0 }}>
+                              <Button size="sm" variant="ghost" disabled={busy === "decide" || editing !== null} onClick={() => setEditing(f.id)}>
+                                Edit
+                              </Button>
+                              <Button size="sm" variant="ghost" disabled={busy === "decide" || editing !== null} onClick={() => void decide({ reject: [ref] }, "Rejected. It stays off your resumes.")}>
+                                Reject
+                              </Button>
+                              <Button size="sm" disabled={busy === "decide" || editing !== null} onClick={() => void decide({ confirm: [ref] }, "Confirmed.")}>
+                                Confirm
+                              </Button>
+                            </span>
+                          )}
                         </div>
                       );
                     })}

@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Tx } from "@/db/client";
-import { jobGroupLinks, jobGroups, jobs, similarityLog, type Family, type Job, type JobLocation } from "@/db/schema";
+import { jobGroupLinks, jobGroups, jobs, similarityLog, type Job, type JobLocation } from "@/db/schema";
 import { env } from "@/lib/env";
 
 /*
@@ -14,40 +14,43 @@ import { env } from "@/lib/env";
  */
 
 /*
- * Query parameters that identify a job, per family. Everything else is
- * dropped: tracking, language, source and whatever a board adds next. An
- * allowlist, on purpose. A denylist failed twice on the first live run: it
- * stripped gh_jid, the only thing that tells two postings apart on boards
- * that embed the Greenhouse form in the employer's own site, such as
+ * Query parameters that identify a job. Everything else is dropped:
+ * tracking, language, source and whatever a board adds next. An allowlist,
+ * on purpose. A denylist failed twice on the first live run: it stripped
+ * gh_jid, the only thing that tells two postings apart on boards that embed
+ * the Greenhouse form in the employer's own site, such as
  * careers.airbnb.com/positions/123?gh_jid=123, and it kept lang=en, which
- * made the same job in two languages two jobs. Add a key here when a family
- * turns out to need it.
+ * made the same job in two languages two jobs.
+ *
+ * Keyed on the parameter name, not on the family of the source that saw the
+ * URL. gh_jid only ever appears on a Greenhouse embedded page, whichever
+ * board handed us the link, so it is kept wherever it appears. Keyed on the
+ * source family it was dropped for a copy arriving through any other family,
+ * which would have collapsed every Stripe job seen from a syndicated board
+ * into https://stripe.com/jobs/search, the same failure as the denylist.
+ * Add a key here when a family turns out to need it.
  */
-const IDENTIFYING_PARAMS: Partial<Record<Family, readonly string[]>> = {
-  greenhouse: ["gh_jid"],
-};
+const IDENTIFYING_PARAMS: ReadonlySet<string> = new Set(["gh_jid"]);
 
 /**
- * Lowercase host, only the family's identifying parameters kept, no fragment,
- * no trailing slash, remaining query keys sorted. Two syndicated copies that
- * point at the employer's own page meet here. With no family nothing in the
- * query survives.
+ * Lowercase host, only the identifying parameters kept, no fragment, no
+ * trailing slash, remaining query keys sorted. Two syndicated copies that
+ * point at the employer's own page meet here.
  */
-export function normaliseApplyUrl(raw: string, family?: Family): string {
+export function normaliseApplyUrl(raw: string): string {
   let u: URL;
   try {
     u = new URL(raw.trim());
   } catch {
     return raw.trim().toLowerCase();
   }
-  const keep = new Set(family ? (IDENTIFYING_PARAMS[family] ?? []) : []);
   u.protocol = "https:";
   u.hostname = u.hostname.toLowerCase().replace(/^www\./, "");
   u.hash = "";
   const kept: [string, string][] = [];
   for (const [k, v] of u.searchParams) {
     const key = k.toLowerCase();
-    if (!keep.has(key)) continue;
+    if (!IDENTIFYING_PARAMS.has(key)) continue;
     kept.push([key, v]);
   }
   kept.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));

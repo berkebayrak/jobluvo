@@ -6,11 +6,37 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-013. Tailoring is a change set, not a document: USD 0.00054 per packet, 55 percent of the whole document, with the validator as the guarantee
+
+The second term of the cost per application (D-011), measured on this date with `npm run tailor-sample` over the same 100 jobs as the scoring sample, on gpt-5.6-luna, reasoning off. The facts message, every confirmed fact with an id, was 4,638 characters, 42 facts, about 1,160 tokens; the cached block, instructions plus facts, was 1,521 tokens on every call after the first.
+
+| Mode | Calls | Output p50 | USD p10 | USD p50 | USD p90 | USD mean | USD max | Per packet |
+|---|---|---|---|---|---|---|---|---|
+| Change set, shipped | 101 for 100 packets | 322 | 0.000268 | 0.000570 | 0.000665 | 0.000533 | 0.000710 | 0.000538 |
+| Whole document | 100 | 648 | 0.000893 | 0.000963 | 0.001049 | 0.000969 | 0.001201 | 0.000969 |
+
+The model emits only the edits, which bullet is replaced, by what text, citing which facts, plus an optional top line and a skill order, and the code assembles the document. Five edits per packet on average. That halves the output tokens and costs 55 percent of the whole document, and the diff the review screen needs (DOC-03) is the change set itself rather than a comparison of two long strings afterwards. By length the change set runs USD 0.000436 short, 0.000513 medium, 0.000624 long.
+
+The validator is not a cost device. It is what makes "nothing is added that is not on your profile" true: both sides are normalised (eight and 8, USD 2.3M and 2.3 million, Jan 2023 and January 2023, twenty five and 25), every number, amount, percentage and date in a proposed line must appear in some confirmed fact or the packet is rejected, one retry with the findings, then stored as invalid rather than passed. A wrong citation, a name in no fact, an edit to a line that does not exist are soft and travel with the packet. Arithmetic over facts is a new claim: four managers and two analysts is not a team of six on the profile. On the sample: 100 of 100 packets ready in each mode, 1 retry whose first answer carried a hard finding and whose second passed, 0 stored invalid; soft findings on the stored attempts were 8 uses of KPI, a term on no fact, 3 runs of adjacent known names that the normaliser now reads as known, and 5 citations that did not carry the value they were cited for. When the validator fires on a legitimate rephrasing the normaliser is fixed; the rule is never loosened.
+
+With this term the function of D-011 reads: cost per application = scored per applied x 0.000311 + 0.000538 + extraction per user amortised.
+
+| Scored per applied | Scoring plus tailoring, USD | Of the band's low end | Of the band's high end |
+|---|---|---|---|
+| 5 | 0.0021 | 60 percent | 33 percent |
+| 8 | 0.0030 | 87 percent | 47 percent |
+| 10 | 0.0037 | 104 percent | 57 percent |
+| 20 | 0.0068 | 193 percent | 106 percent |
+
+Tailoring is a small, fixed term. The ratio is the number, and the cheap pre rank that D-012 records is on the critical path for the business case, not a later optimisation. What remains unmeasured is extraction per user, the upload branch. The candidate models for tailoring (D-001) are priced in the table; only luna was run.
+
 ### D-012. Nothing is scored that a user will not see
 
 The scored per applied ratio is the largest unknown in the cost per application (D-011) and it is not measurable until there are users. It is controllable. The hard filter costs nothing and already removes about sixty percent of the inventory before any claim. From here the rule for whatever drives scoring, the daily cron today and the feed later, is that a job is scored only if this user would be shown it: it passes the user's hard filter, it is the group's representative for the user, it is not swiped, and it is fresh or on the rework list. A score for a job the user never sees is a paid call with no application behind it.
 
-What it forbids: scoring the backlog (D-004 already), scoring every member of a group, scoring ahead of the filter, and any prefetch of scores for jobs outside the user's feed.
+The cache order is a lever that follows the same volume question. The cache on this model serves a whole repeated message (D-010), and which message repeats depends on the shape of the batch. Today one user is scored against many jobs, so the profile is the repeated message and goes first; that is the shipped order and it halves the call (D-011). At scale the batch may be the other way round, one fresh job scored for many users, and then the job is the repeated message and would go first. The order may need choosing per batch: put first whichever message the batch repeats. The code carries both orders for that reason, not only for the sample.
+
+What it forbids: scoring the backlog (D-004 already), scoring every member of a group, scoring ahead of the filter, any prefetch of scores for jobs outside the user's feed, and a fixed prompt order that ignores which message the batch repeats.
 
 ### D-011. Measured cost per scoring call: USD 0.00031 mean with the profile cached, USD 0.00057 without
 

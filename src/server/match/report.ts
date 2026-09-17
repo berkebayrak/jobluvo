@@ -2,13 +2,15 @@ import { sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
 
 /*
- * The cost per scoring call, as a distribution, from cost_events. One block
- * per run tag; null is the cron. The mean is printed beside the percentiles
+ * The cost per model call, as a distribution, from cost_events. One block
+ * per kind and run tag; a null run is the product path (the cron for
+ * scoring). The mean is printed beside the percentiles
  * because the budget is a mean, but the percentiles are the finding (D-003).
  * Dollars are USD per call at the prices in src/server/llm/prices.ts.
  */
 
 export interface RunStats {
+  kind: string;
   run: string;
   calls: number;
   model: string | null;
@@ -25,6 +27,7 @@ export interface RunStats {
 }
 
 export interface CellStats {
+  kind: string;
   run: string;
   cell: string;
   calls: number;
@@ -37,7 +40,7 @@ const num = (v: unknown) => Number(v ?? 0);
 
 export async function runStats(db: DbPool | Tx): Promise<RunStats[]> {
   const r = await db.execute<Record<string, unknown>>(sql`
-    select coalesce(run, 'cron') as run, count(*)::int as calls, min(model) as model,
+    select kind::text as kind, coalesce(run, 'cron') as run, count(*)::int as calls, min(model) as model,
       percentile_cont(0.5) within group (order by tokens_in) as in_p50,
       percentile_cont(0.5) within group (order by tokens_cached) as cached_p50,
       percentile_cont(0.5) within group (order by tokens_out) as out_p50,
@@ -46,10 +49,11 @@ export async function runStats(db: DbPool | Tx): Promise<RunStats[]> {
       percentile_cont(0.5) within group (order by usd) as p50,
       percentile_cont(0.9) within group (order by usd) as p90,
       avg(usd) as mean, max(usd) as max, sum(usd) as total
-    from cost_events where kind = 'score'
-    group by 1 order by 1
+    from cost_events where kind in ('score', 'tailor')
+    group by 1, 2 order by 1, 2
   `);
   return r.rows.map((x) => ({
+    kind: String(x.kind),
     run: String(x.run),
     calls: num(x.calls),
     model: (x.model as string | null) ?? null,
@@ -67,9 +71,9 @@ export async function runStats(db: DbPool | Tx): Promise<RunStats[]> {
 }
 
 /**
- * The same, split by family and by description length. ref_id is a match id
- * for the cron and the prefix sample, and a job id for the sample's other
- * order, which writes no match row.
+ * The same, split by family, seniority or description length. ref_id is a
+ * match id for the scoring cron and the prefix sample, and a job id for the
+ * sample's other order and for every tailoring row.
  */
 export async function cellStats(db: DbPool | Tx, by: "family" | "length" | "seniority"): Promise<CellStats[]> {
   const cell =
@@ -79,16 +83,17 @@ export async function cellStats(db: DbPool | Tx, by: "family" | "length" | "seni
         ? sql`coalesce(j.seniority, 'not stated')`
         : sql`case when length(j.description_core) < 2500 then 'short <2.5k' when length(j.description_core) < 5000 then 'medium 2.5k to 5k' else 'long 5k+' end`;
   const r = await db.execute<Record<string, unknown>>(sql`
-    select coalesce(c.run, 'cron') as run, ${cell} as cell, count(*)::int as calls,
+    select c.kind::text as kind, coalesce(c.run, 'cron') as run, ${cell} as cell, count(*)::int as calls,
       percentile_cont(0.5) within group (order by c.tokens_in) as in_p50,
       percentile_cont(0.5) within group (order by c.usd) as p50, avg(c.usd) as mean
     from cost_events c
     left join matches m on c.ref_id ~ '^[0-9a-f-]{36}$' and m.id = c.ref_id::uuid
     join jobs j on j.id = coalesce(m.job_id, case when c.ref_id ~ '^[0-9a-f-]{36}$' then c.ref_id::uuid end)
-    where c.kind = 'score'
-    group by 1, 2 order by 1, 2
+    where c.kind in ('score', 'tailor')
+    group by 1, 2, 3 order by 1, 2, 3
   `);
   return r.rows.map((x) => ({
+    kind: String(x.kind),
     run: String(x.run),
     cell: String(x.cell),
     calls: num(x.calls),

@@ -37,6 +37,8 @@ async function main() {
   );
   console.log("matches by status");
   console.table(await sql`select status, count(*)::int as n, round(avg(score)::numeric, 1) as avg_score, max(attempts) as max_attempts from matches group by status order by status`);
+  console.log("packets by status");
+  console.table(await sql`select status, mode, count(*)::int as n, round(avg(usd)::numeric, 5) as avg_usd from packets group by status, mode order by status, mode`);
   console.log("cost events");
   console.table(await sql`select kind, count(*)::int as n, sum(ms)::int as ms, round(sum(usd)::numeric, 4) as usd from cost_events group by kind`);
 }

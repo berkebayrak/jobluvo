@@ -4,8 +4,9 @@
  * fails loudly instead of logging USD 0 and corrupting the one number Phase 0
  * exists to produce.
  *
- * Rates from OpenAI's model docs as of September 2026. Verify the API string
- * with GET /v1/models/{id} before relying on a new entry.
+ * Rates from the OpenAI pricing page, standard tier, as of 17 September
+ * 2026. Verify the API string with GET /v1/models/{id} before relying on a
+ * new entry. cacheWrite is not on the page and the meter does not use it.
  *
  * Gotcha the meter encodes: a request whose input exceeds LONG_CONTEXT_TOKENS
  * bills at 2x input and 1.5x output. Nothing in Phase 0 should come near
@@ -31,6 +32,23 @@ export const PRICES: Record<string, ModelPrice> = {
     cachedInput: 0.02,
     cacheWrite: 0.25,
     output: 1.2,
+    contextWindow: 1_050_000,
+    maxOutput: 128_000,
+  },
+  // The MODEL_TAILOR candidates (D-001). sol is 20 times luna, terra 10 times.
+  "gpt-5.6-sol": {
+    input: 4,
+    cachedInput: 0.4,
+    cacheWrite: 4,
+    output: 20,
+    contextWindow: 1_050_000,
+    maxOutput: 128_000,
+  },
+  "gpt-5.6-terra": {
+    input: 2,
+    cachedInput: 0.2,
+    cacheWrite: 2,
+    output: 12,
     contextWindow: 1_050_000,
     maxOutput: 128_000,
   },

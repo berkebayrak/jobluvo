@@ -101,7 +101,19 @@ export function renderProfile(p: {
   return out.join("\n");
 }
 
-export async function scoringProfile(db: DbHttp | DbPool | Tx, userId: string): Promise<ScoringProfile | null> {
+/** The confirmed facts the scorer and the tailor both read, parsed, in a stable order, with the two hashes. */
+export interface ResumeFacts {
+  userId: string;
+  prefs: PreferenceFact;
+  employment: EmploymentFact[];
+  education: EducationFact[];
+  skills: SkillFact[];
+  answers: AnswerFact[];
+  prefsHash: string;
+  factsHash: string;
+}
+
+export async function resumeFacts(db: DbHttp | DbPool | Tx, userId: string): Promise<ResumeFacts | null> {
   const rows = await db
     .select({ kind: profileFacts.kind, data: profileFacts.data })
     .from(profileFacts)
@@ -126,10 +138,25 @@ export async function scoringProfile(db: DbHttp | DbPool | Tx, userId: string): 
   const answers = parse<AnswerFact>("answer", answerFact);
   return {
     userId,
-    block: renderProfile({ prefs: pref.data, employment, education, skills, answers }),
     prefs: pref.data,
+    employment,
+    education,
+    skills,
+    answers,
     prefsHash: sha256(canonical(pref.data)),
     factsHash: sha256(canonical({ employment, education, skills, answers })),
-    counts: { employment: employment.length, education: education.length, skill: skills.length, answer: answers.length },
+  };
+}
+
+export async function scoringProfile(db: DbHttp | DbPool | Tx, userId: string): Promise<ScoringProfile | null> {
+  const f = await resumeFacts(db, userId);
+  if (!f) return null;
+  return {
+    userId,
+    block: renderProfile(f),
+    prefs: f.prefs,
+    prefsHash: f.prefsHash,
+    factsHash: f.factsHash,
+    counts: { employment: f.employment.length, education: f.education.length, skill: f.skills.length, answer: f.answers.length },
   };
 }

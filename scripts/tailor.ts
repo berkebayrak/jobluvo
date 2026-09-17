@@ -1,0 +1,47 @@
+import { eq } from "drizzle-orm";
+import { dbPool } from "@/db/client";
+import { packets, users } from "@/db/schema";
+import { resumeFacts } from "@/server/match/profile";
+import { applyChanges, baseResume, renderResume } from "@/server/packet/resume";
+import { tailorForUser } from "@/server/packet/run";
+import { currentUserId } from "@/server/user";
+
+/**
+ * Tailors the demo user's resume to one job and prints the diff and the
+ * findings, the way the review screen will show them. Writes the packet.
+ * `npm run tailor -- <job id>`, or `-- <job id> --document` for the whole
+ * document mode.
+ */
+async function main() {
+  const jobId = process.argv[2];
+  if (!jobId || jobId.startsWith("--")) throw new Error("usage: npm run tailor -- <job id> [--document]");
+  const mode = process.argv.includes("--document") ? "document" : "changes";
+  const db = dbPool();
+  const userId = await currentUserId();
+  const out = await tailorForUser(db, userId, jobId, { mode });
+  if (!out) throw new Error("the demo user has no confirmed profile");
+  console.log(`${out.status} after ${out.attempts} attempt(s), ${out.changes} change(s), in ${out.tokensIn} (cached ${out.tokensCached}) out ${out.tokensOut}, usd ${out.usd.toFixed(6)}, ${out.ms}ms`);
+  if (out.error) console.log(`error: ${out.error}`);
+  for (const f of out.findings) console.log(`  ${f.level}  ${f.bullet ?? "-"}  ${f.message}${f.value ? `  (${f.value})` : ""}`);
+  const facts = (await resumeFacts(db, userId))!;
+  const [p] = await db.select({ changes: packets.changes, resume: packets.resume }).from(packets).where(eq(packets.jobId, jobId));
+  const base = baseResume(facts);
+  const { diff } = applyChanges(base, { summary: p.resume?.summary ?? null, changes: p.changes, skills: [] });
+  console.log("\ndiff");
+  for (const d of diff) {
+    console.log(`  ${d.bullet}${d.facts.length ? `  [${d.facts.join(", ")}]` : ""}`);
+    if (d.before) console.log(`  - ${d.before}`);
+    console.log(`  + ${d.after}`);
+  }
+  if (out.resume) {
+    const [u] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
+    console.log(`\n${renderResume(u.name, out.resume)}`);
+  }
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

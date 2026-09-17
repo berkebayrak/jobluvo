@@ -139,7 +139,7 @@ export function factsBlock(entries: FactEntry[]): string {
 
 export function buildMessages(facts: string, job: string, retryOf?: PacketFinding[]): PromptMessage[] {
   const posting = retryOf?.length
-    ? `${job}\n\nYour previous answer was rejected by the validator. Fix these and answer again:\n${retryOf.map((f) => `- ${f.bullet ?? "summary"}: ${f.message}${f.value ? ` (${f.value})` : ""}`).join("\n")}`
+    ? `${job}\n\nYour previous answer did not pass the validator. Fix these and answer again. Where a finding names a word, replace that word with the cited fact's own word; where it names a value, use the cited fact's value and its meaning; where it says no fact is cited, cite the fact the line draws on. Keep every line and every value: do not drop a line, a number or a claim to pass the check.\n${retryOf.map((f) => `- ${f.bullet ?? "summary"}: ${f.message}${f.value ? ` (${f.value})` : ""}${f.detail ? `; ${f.detail}` : ""}`).join("\n")}`
     : job;
   return [
     { role: "developer", content: facts },

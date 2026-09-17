@@ -53,6 +53,13 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
   const by = (s: TailorOutcome["status"]) => outcomes.filter((o) => o.status === s).length;
   const retried = outcomes.filter((o) => o.attempts > 1).length;
   const usd = outcomes.reduce((a, o) => a + o.usd, 0);
+  // The retry measured: what a held or rejected first answer became after it (D-022). Reported, never derived.
+  const after = (first: TailorOutcome["status"]) => {
+    const xs = outcomes.filter((o) => o.attempts > 1 && o.attemptLog[0]?.outcome === first);
+    const n = (s: TailorOutcome["status"]) => xs.filter((o) => o.status === s).length;
+    return `${xs.length}: now ready ${n("ready")}, held ${n("needs_review")}, invalid ${n("invalid")}, failed ${n("failed")}`;
+  };
+  console.log(`retried after a held first answer ${after("needs_review")}; retried after a rejected first answer ${after("invalid")}`);
   const hard = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "hard"));
   const soft = outcomes.flatMap((o) => o.findings.filter((f) => f.level === "soft"));
   console.log(

@@ -1,7 +1,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { dbPool } from "@/db/client";
-import { packets, profileFacts, type PacketFinding } from "@/db/schema";
+import { jobs, packets, profileFacts, type PacketFinding } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
+import { lemmasOf } from "@/server/packet/entities";
 import { applyReplay, replayDecision, sameDocument, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
@@ -83,8 +84,11 @@ async function main() {
       factsHash: packets.factsHash,
       error: packets.error,
       updatedAt: sql<string>`${packets.updatedAt}::text`,
+      title: jobs.title,
+      posting: jobs.descriptionCore,
     })
-    .from(packets);
+    .from(packets)
+    .innerJoin(jobs, eq(jobs.id, packets.jobId));
   const byUser = new Map<string, typeof rows>();
   for (const p of rows) byUser.set(p.userId, [...(byUser.get(p.userId) ?? []), p]);
 
@@ -104,7 +108,7 @@ async function main() {
       const entries = factEntries(match.facts);
       const set = factSet(entries);
       const base = baseResume(match.facts);
-      const replayed = validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set);
+      const replayed = validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set, lemmasOf(`${p.title}\n${p.posting ?? ""}`));
       // The candidate the stored changes describe: the base plus the changes, with the summary the stored resume carries. The decision stamps ready only a resume that is this document.
       const candidate = p.resume ? applyChanges(base, { summary: p.resume.summary, summaryFacts: [], changes: p.changes, skills: [] }).resume : null;
       const decision = replayDecision(row, replayed, candidate);
@@ -171,10 +175,12 @@ async function main() {
   console.log("\nreview findings by reason, edits");
   const reviewKind = (f: PacketFinding) =>
     f.message.startsWith("name")
-      ? f.detail === "sentence initial"
-        ? "name, sentence initial"
-        : "name"
-      : f.message.startsWith("the fact and the line")
+      ? `name, ${f.detail ?? ""}`
+      : f.message.startsWith("word from the posting")
+        ? "posting word"
+        : f.message.startsWith("responsibility")
+          ? "responsibility"
+          : f.message.startsWith("the fact and the line")
         ? "metric words differ"
         : f.message.startsWith("a number phrase")
           ? "number phrase unreadable, line"
@@ -199,10 +205,12 @@ async function main() {
   };
   sample("metric words differ, fact against line", (f) => f.message.startsWith("the fact and the line"));
   sample("metric unreadable, fact against line", (f) => f.message.includes("could not be read"));
-  console.log("\nsentence initial names in no fact, by word, edits");
-  console.table(count(review.filter((f) => f.detail === "sentence initial").map((f) => String(f.value))));
-  console.log("other names in no fact, by name, edits");
-  console.table(count(review.filter((f) => f.message.startsWith("name") && f.detail !== "sentence initial").map((f) => String(f.value))));
+  console.log("\nnames in no fact, by name and reason, edits");
+  console.table(count(review.filter((f) => f.message.startsWith("name")).map((f) => `${f.value} (${f.detail ?? ""})`)));
+  console.log("words from the posting in no fact, by word, edits");
+  console.table(count(review.filter((f) => f.message.startsWith("word from the posting")).map((f) => String(f.value))));
+  console.log("responsibilities not in the cited facts, by object and hint, edits");
+  console.table(count(review.filter((f) => f.message.startsWith("responsibility")).map((f) => `${f.value}, ${f.detail ?? ""}`)));
   const hardSample = hard.map((f) => `${f.bullet}  ${f.message}${f.value ? ` (${f.value})` : ""}  ${f.detail ?? ""}`);
   console.log(`\nhard, first ${Math.min(12, hardSample.length)} of ${hardSample.length}`);
   for (const x of [...new Set(hardSample)].slice(0, 12)) console.log("  " + x);

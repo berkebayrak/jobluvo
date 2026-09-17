@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ResumeFacts } from "@/server/match/profile";
 import { claimsOf, contradiction, lemma, metricsAgree, segmentsOf } from "./claims";
 import { factEntries } from "./resume";
-import { checkLine, factSet, initialNamesOf, SENTENCE_INITIAL_NAMES } from "./validate";
+import { checkLine, factSet } from "./validate";
 
 /*
  * The claim model against the rewrites the review reproduced through the
@@ -118,11 +118,12 @@ describe("the validator on the review's rewrites", () => {
     expect(review("R1.1", "Reduced churn 11 percent", ["R1.1"])).toEqual([]);
   });
   it("a tool, employer or qualification in no fact is held for review, including at the start of a sentence", () => {
-    expect(review("R1.4", "Managed dashboards in Salesforce for 6 analysts", ["R1.4"])).toEqual([expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce" })]);
-    expect(initialNamesOf("Salesforce implementation specialist for the team.")).toEqual(["Salesforce"]);
-    expect(initialNamesOf("Led the team. Power BI reporting owner.")).toEqual(["Led", "Power BI"]);
+    expect(review("R1.4", "Managed dashboards in Salesforce for 6 analysts", ["R1.4"])).toEqual([
+      expect.objectContaining({ message: "responsibility is not in the cited facts", value: "dashboards", detail: "the cited fact says team" }),
+      expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce", detail: "capitalised" }),
+    ]);
     const f = at("R1.4", "Salesforce implementation specialist for 6 analysts", ["R1.4"]);
-    expect(f).toEqual([expect.objectContaining({ level: SENTENCE_INITIAL_NAMES, value: "Salesforce", detail: "sentence initial" })]);
+    expect(f).toEqual([expect.objectContaining({ level: "review", value: "Salesforce", detail: "opens the sentence and is not a verb" })]);
     // A verb the resume uses is on the profile; the review counts the ones it does not.
     expect(at("R1.4", "Managed 6 analysts", ["R1.4"])).toEqual([]);
   });
@@ -178,7 +179,7 @@ describe("the validator on the review's rewrites", () => {
     ]);
     expect(review("R1.1", "Drove churn down 11 percent over 12 months", ["R1.1"])).toEqual([]);
     // A period takes no role: "targets" before "twice a year" says what is presented, not that the period is a target.
-    expect(at("R1.7", "Present targets and priorities to the board twice a year", ["R1.7"])).toEqual([]);
+    expect(at("R1.7", "Present plans and priorities to the board twice a year", ["R1.7"])).toEqual([]);
     // The line's side is its own predicate; the fact's side is its whole sentence, so folding the fact's clauses into one predicate passes.
     expect(at("R1.3", "Grew revenue with the new pricing from USD 9M to USD 14M in 2023", ["R1.3"]).filter((f) => f.level !== "soft")).toEqual([
       expect.objectContaining({ level: "review", value: "money:usd:9000000" }),

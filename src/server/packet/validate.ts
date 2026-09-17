@@ -1,5 +1,6 @@
 import type { PacketFinding, ResumeDocument } from "@/db/schema";
 import { claimsOf, contradiction, metricsAgree, sameValue, type Claim, type FactClaim } from "./claims";
+import { entityFindings, lemmasOf } from "./entities";
 import { fmt, readNumbers } from "./normalise";
 import type { ChangeSet, FactEntry } from "./resume";
 
@@ -39,14 +40,6 @@ export { normaliseNumbers } from "./normalise";
  */
 
 /**
- * Sentence initial names are checked like any other name. Whether a miss
- * holds the packet (review) or only travels with it (soft) is decided from
- * the measurement over the stored edits, where a capitalised verb the
- * resume never used is the false positive to count.
- */
-export const SENTENCE_INITIAL_NAMES: "review" | "soft" = "soft";
-
-/**
  * The values a text asserts, as canonical keys: "pct:11", "money:usd:9200000",
  * "date:2023-01", "year:2023", "num:4". With `broad`, the looser forms are
  * emitted as well (a percentage also as its number, a month date also as its
@@ -63,42 +56,6 @@ export function valuesOf(text: string, broad = false): Set<string> {
   return out;
 }
 
-const STOP = new Set(["i", "a", "the", "and", "or", "of", "to", "in", "for", "with", "at", "on", "by", "from", "as", "an"]);
-
-function nameRuns(text: string, initial: boolean): string[] {
-  const names: string[] = [];
-  const sentences = text.split(/(?<=[.!?])\s+/);
-  for (const s of sentences) {
-    const words = s.split(/\s+/);
-    let run: string[] = [];
-    let runStartsSentence = false;
-    const flush = () => {
-      if (run.length && runStartsSentence === initial) names.push(run.join(" "));
-      run = [];
-      runStartsSentence = false;
-    };
-    words.forEach((raw, i) => {
-      const w = raw.replace(/^[("']+|[)",.;:'!?]+$/g, "");
-      const cap = /^[A-Z][A-Za-z&.-]*$/.test(w) && !STOP.has(w.toLowerCase());
-      const acronym = /^[A-Z][A-Z&]{1,6}$/.test(w);
-      if (cap || acronym) {
-        if (!run.length) runStartsSentence = i === 0 && !acronym;
-        run.push(w);
-      } else flush();
-      // A comma, semicolon or slash after the word ends the name: "SQL, Power BI" is two names, not one.
-      if (/[,;/]$/.test(raw)) flush();
-    });
-    flush();
-  }
-  return names;
-}
-
-/** Capitalised words and all caps tokens, as the names a line drops. Sentence initial words are in `initialNamesOf`. */
-export const namesOf = (text: string): string[] => nameRuns(text, false);
-
-/** The capitalised run that opens a sentence: "Salesforce implementation specialist" gives "Salesforce", "Led the team" gives "Led". */
-export const initialNamesOf = (text: string): string[] => nameRuns(text, true);
-
 export interface FactSet {
   entries: FactEntry[];
   entryById: Map<string, FactEntry>;
@@ -106,8 +63,10 @@ export interface FactSet {
   byId: Map<string, FactClaim[]>;
   /** Every claim of every fact. */
   all: FactClaim[];
-  /** All fact text, lower case, for the name check. */
+  /** All fact text, lower case. */
   corpus: string;
+  /** Every content lemma on the profile: what "on the profile" means for the non numeric check. */
+  lemmas: Set<string>;
   /** Per fact id, the number phrases the normaliser could not read; a value checked against such a fact is held, not rejected. */
   unreadable: Map<string, string[]>;
 }
@@ -123,7 +82,8 @@ export function factSet(entries: FactEntry[]): FactSet {
     const phrases = readNumbers(e.text).unreadable;
     if (phrases.length) unreadable.set(e.id, phrases);
   }
-  return { entries, entryById: new Map(entries.map((e) => [e.id, e])), byId, all, corpus: entries.map((e) => e.text).join("\n").toLowerCase(), unreadable };
+  const corpus = entries.map((e) => e.text).join("\n");
+  return { entries, entryById: new Map(entries.map((e) => [e.id, e])), byId, all, corpus: corpus.toLowerCase(), lemmas: lemmasOf(corpus), unreadable };
 }
 
 /** The role a line belongs to: R2 for the bullet R2.3 and for the heading R2; null for the summary and anything else. */
@@ -133,8 +93,8 @@ export function roleOfLine(bullet: string | null): string | null {
   return m ? m[1] : null;
 }
 
-/** Checks one proposed line against the facts it cites. */
-export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet): PacketFinding[] {
+/** Checks one proposed line against the facts it cites. `posting` is the job's lemmas, for the word the model took from the posting. */
+export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet, posting: Set<string> = new Set()): PacketFinding[] {
   const out: PacketFinding[] = [];
   // A citation that names nothing supports nothing: the line's values are checked against the facts that do exist, and a person reads the rest.
   for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "review", bullet, message: "cited fact does not exist", value: id });
@@ -198,35 +158,30 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
   // A number phrase the normaliser could not read is a value the validator never saw. Held, never passed.
   for (const phrase of readNumbers(line).unreadable) out.push({ level: "review", bullet, message: "a number phrase could not be read", value: phrase });
 
-  for (const n of namesOf(line)) {
-    if (!nameOnProfile(n, facts.corpus)) out.push({ level: "review", bullet, message: "name appears in no confirmed fact", value: n });
-  }
-  for (const n of initialNamesOf(line)) {
-    if (nameOnProfile(n, facts.corpus)) continue;
-    // "Power BI reporting" opens with a name that is on the profile whole. "Built PMO" does not: the opening word may be a verb,
-    // so it is looked up on its own and the rest as an ordinary name, and only the parts on no fact are reported.
-    const [first, ...rest] = n.split(" ");
-    if (!nameOnProfile(first, facts.corpus)) out.push({ level: SENTENCE_INITIAL_NAMES, bullet, message: "name appears in no confirmed fact", value: first, detail: "sentence initial" });
-    if (rest.length && !nameOnProfile(rest.join(" "), facts.corpus)) out.push({ level: "review", bullet, message: "name appears in no confirmed fact", value: rest.join(" ") });
-  }
+  // The non numeric check (entities.ts): a new entity, qualification or responsibility is held; a rewording is not.
+  const citedFacts = cited.flatMap((id) => (facts.entryById.has(id) ? [{ id, text: facts.entryById.get(id)!.text }] : []));
+  out.push(...entityFindings(line, bullet, citedFacts, facts.lemmas, posting));
   return out;
 }
 
 /**
- * A name is on the profile when it appears in the facts as written, or as
- * the singular of a plural ("PMOs" for "PMO"). A run of several capitalised
- * words is one name and is looked up whole: two known words side by side
- * are not a known name, so "Power SQL" is flagged even though both words
- * are on the profile. The first sample's three runs of known names were
- * the tokeniser joining across commas, fixed in `namesOf`, not a case for
- * looking words up one at a time.
+ * Review findings the model can act on: each names the word or value that
+ * failed and what the fact has in its place, so a retry that carries it
+ * can substitute the fact's own word (D-017 note, D-022). Not on the list:
+ * findings that express uncertainty, a phrase the validator could not
+ * read, which a second call cannot resolve.
  */
-export function nameOnProfile(name: string, corpus: string): boolean {
-  const lc = name.toLowerCase();
-  return corpus.includes(lc) || (lc.endsWith("s") && corpus.includes(lc.slice(0, -1)));
-}
+export const ACTIONABLE = new Set([
+  "the fact and the line measure different things",
+  "name appears in no confirmed fact",
+  "word from the posting appears in no confirmed fact",
+  "responsibility is not in the cited facts",
+  "no fact cited for this line",
+  "cited fact does not exist",
+]);
+export const actionable = (f: PacketFinding) => f.level === "review" && ACTIONABLE.has(f.message);
 
-export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: FactSet): PacketFinding[] {
+export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: FactSet, posting: Set<string> = new Set()): PacketFinding[] {
   const out: PacketFinding[] = [];
   const bullets = new Set(base.experience.flatMap((r) => r.bullets.map((b) => b.id)));
   const seen = new Set<string>();
@@ -238,9 +193,9 @@ export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: Fa
     if (seen.has(c.bullet)) out.push({ level: "soft", bullet: c.bullet, message: "line edited twice; the last edit stands" });
     seen.add(c.bullet);
     if (!c.text.trim()) out.push({ level: "hard", bullet: c.bullet, message: "empty line" });
-    out.push(...checkLine(c.text, c.bullet, c.facts, facts));
+    out.push(...checkLine(c.text, c.bullet, c.facts, facts, posting));
   }
-  if (cs.summary) out.push(...checkLine(cs.summary, "summary", cs.summaryFacts, facts));
+  if (cs.summary) out.push(...checkLine(cs.summary, "summary", cs.summaryFacts, facts, posting));
   const skillIds = new Set(base.skills.map((s) => s.id));
   for (const id of cs.skills) if (!skillIds.has(id)) out.push({ level: "soft", bullet: null, message: "no such skill; ignored", value: id });
   return out;

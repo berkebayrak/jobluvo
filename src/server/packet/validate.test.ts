@@ -3,7 +3,7 @@ import type { ResumeFacts } from "@/server/match/profile";
 import { baseResume, factEntries } from "./resume";
 import { readNumbers } from "./normalise";
 import type { FactEntry } from "./resume";
-import { checkLine, factSet, namesOf, normaliseNumbers, validateChangeSet, valuesOf } from "./validate";
+import { checkLine, factSet, normaliseNumbers, validateChangeSet, valuesOf } from "./validate";
 
 /*
  * The validator against deliberate near misses. Every rejection here is a
@@ -164,24 +164,33 @@ describe("a value must be in a cited fact", () => {
   });
 
   it("a citation that does not exist holds the line, and so does a line that cites nothing", () => {
-    expect(review("Led the planning cycle", ["R9.9"])).toEqual([expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" })]);
-    expect(hard("Led the planning cycle", ["R9.9"])).toEqual([]);
-    expect(review("Led the planning cycle", [])).toEqual([expect.objectContaining({ message: "no fact cited for this line" })]);
-    expect(review("Led the planning cycle", ["R1.3"])).toEqual([]);
+    // With nothing real cited, the object "system" has no fact to be in either: two holds, both named.
+    expect(review("Led the OKR system", ["R9.9"])).toEqual([
+      expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" }),
+      expect.objectContaining({ message: "responsibility is not in the cited facts", value: "system", detail: "the cited facts name no object for it" }),
+    ]);
+    expect(hard("Led the OKR system", ["R9.9"])).toEqual([]);
+    expect(review("Led the OKR system", []).map((f) => f.message)).toEqual(["no fact cited for this line", "responsibility is not in the cited facts"]);
+    expect(review("Led the OKR system", ["R1.3"])).toEqual([]);
   });
-  it("holds a name that appears in no fact for review, and passes the names that do", () => {
-    // Every name in the line is on the profile; the verb that opens it is not, and a sentence initial miss is soft: measured at 12 of 12 false positives (D-017).
+  it("holds a new entity or responsibility for review, passes a rewording, and no longer reads a capitalised verb as a name", () => {
+    // Every name in the line is on the profile, and the verb that opens it is a verb, not a name: nothing held, nothing soft (D-022 supersedes the D-017 soft class).
     expect(review("Reported to the CEO at Arvento using Power BI")).toEqual([]);
-    expect(soft("Reported to the CEO at Arvento using Power BI")).toEqual([expect.objectContaining({ value: "Reported", detail: "sentence initial" })]);
-    expect(review("Led migration to Salesforce for the Deloitte team")).toEqual([expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce" })]);
-    expect(namesOf("Built dashboards in Power BI. Reported to the CFO monthly.")).toEqual(["Power BI", "CFO"]);
-    // A comma ends a name, so a list of known names is several known names; a plural of a known name is known.
-    expect(namesOf("Skills in Excel, Power BI, and financial modelling.")).toEqual(["Excel", "Power BI"]);
+    expect(soft("Reported to the CEO at Arvento using Power BI")).toEqual([]);
+    // A tool in no fact is held; so is a responsibility the cited facts do not name, with the word the cited fact uses in its place.
+    expect(review("Led migration to Salesforce for the Deloitte team")).toEqual([
+      expect.objectContaining({ message: "responsibility is not in the cited facts", value: "migration", detail: "the cited fact says strategy" }),
+      expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce", detail: "capitalised" }),
+    ]);
     expect(review("Built reporting in Excel, Power BI for the PMOs")).toEqual([]);
-    // Two known words run together are not a known name, and a new acronym is not either.
-    expect(review("Built reporting in Power Excel")).toEqual([expect.objectContaining({ value: "Power Excel" })]);
-    expect(review("Owned the KPI framework")).toEqual([expect.objectContaining({ value: "KPI" })]);
-    expect(soft("Owned the KPI framework")).toEqual([expect.objectContaining({ value: "Owned", detail: "sentence initial" })]);
+    // Words are looked up one at a time: two known words side by side pass. The old run rule held "Power Excel"; the entity rule does not.
+    expect(review("Built reporting in Power Excel")).toEqual([]);
+    // An acronym in no fact is held by its form; the verb that opens the line is not a name.
+    expect(review("Owned the KPI framework").map((f) => [f.value, f.detail])).toEqual([
+      ["framework", "the cited fact says strategy"],
+      ["KPI", "by its form"],
+    ]);
+    expect(soft("Owned the KPI framework")).toEqual([]);
   });
 });
 
@@ -207,11 +216,11 @@ describe("change set validation", () => {
     expect(bad.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:18", "pct:15"]);
     // A summary with a value and no citation is rejected like any line.
     const unc = validateChangeSet({ summary: "Leader with 10 years of experience.", summaryFacts: [], changes: [], skills: [] }, base, set);
-    // "Leader" opens the sentence and is on no fact: soft, it travels with the packet (D-017). Citing nothing is itself held.
+    // "Leader" opens the sentence, is not a verb and is on no fact: held (D-022). Citing nothing is itself held.
     expect(unc.map((f) => [f.level, f.bullet, f.message])).toEqual([
       ["review", "summary", "no fact cited for this line"],
       ["hard", "summary", "value with no fact cited for it"],
-      ["soft", "summary", "name appears in no confirmed fact"],
+      ["review", "summary", "name appears in no confirmed fact"],
     ]);
   });
   it("reports an edit to a line that does not exist and a skill that does not exist as soft, never as a pass", () => {

@@ -83,6 +83,40 @@ function readAnswer(mode: TailorMode, text: string, base: ResumeDocument): { cs:
   return { cs, applied };
 }
 
+interface Attempt {
+  n: number;
+  outcome: AttemptOutcome;
+  candidate: { cs: ChangeSet; applied: Applied } | null;
+  findings: PacketFinding[];
+  error?: string;
+}
+
+/** What packets.error holds. */
+export const ERROR_STORE = 500;
+/** Each earlier attempt's share of it, so the last attempt's message always has the rest. */
+export const TRAIL_PER_ATTEMPT = 120;
+
+/**
+ * The error text for the row: the earlier attempts as a trail, then the
+ * last attempt's own message. Built to fit the store with the last message
+ * whole where it matters: the cost report counts calls of unknown cost by
+ * a phrase near the start of that message (UNKNOWN_COST_MARK), and a
+ * truncation from the end must never cut it away. So each earlier attempt
+ * is capped first and the last message gets whatever room remains, never
+ * less than ERROR_STORE minus the capped trail; a parse failure that lists
+ * every schema issue cannot push a later timeout out of the store.
+ */
+export function storedError(log: Attempt[]): string {
+  const cap = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 3)}...` : s);
+  const final = log[log.length - 1];
+  const trail = log
+    .slice(0, -1)
+    .map((a) => cap(`attempt ${a.n} ${a.outcome}${a.error ? `: ${a.error}` : `: ${a.findings.filter((f) => f.level === "hard").length} hard finding(s)`}`, TRAIL_PER_ATTEMPT))
+    .join(". ");
+  const head = trail ? `${trail}. attempt ${final.n} failed: ` : "";
+  return head + cap(final.error ?? "", ERROR_STORE - head.length);
+}
+
 export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: ScoringJob, opts: TailorOptions = {}): Promise<TailorOutcome> {
   const mode = opts.mode ?? "changes";
   const model = opts.model ?? env().MODEL_TAILOR ?? "gpt-5.6-luna";
@@ -114,13 +148,6 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     });
   };
 
-  interface Attempt {
-    n: number;
-    outcome: AttemptOutcome;
-    candidate: { cs: ChangeSet; applied: Applied } | null;
-    findings: PacketFinding[];
-    error?: string;
-  }
   const log: Attempt[] = [];
   for (let n = 1; n <= 2; n += 1) {
     const previous = log[log.length - 1];
@@ -153,11 +180,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
   const final = log[log.length - 1];
   const status = final.outcome;
   const resume = final.outcome === "ready" && final.candidate ? final.candidate.applied.resume : null;
-  const trail = log
-    .slice(0, -1)
-    .map((a) => `attempt ${a.n} ${a.outcome}${a.error ? `: ${a.error}` : `: ${a.findings.filter((f) => f.level === "hard").length} hard finding(s)`}`)
-    .join(". ");
-  const error = final.error ? (trail ? `${trail}. attempt ${final.n} failed: ${final.error}` : final.error) : undefined;
+  const error = final.error ? storedError(log) : undefined;
   const changes = final.candidate?.cs.changes ?? [];
   const outcome: TailorOutcome = {
     jobId: job.id,
@@ -194,7 +217,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
         tokensOut: totals.tokensOut,
         usd: outcome.usd,
         ms: totals.ms,
-        error: error?.slice(0, 500) ?? null,
+        error: error ?? null,
       })
       .onConflictDoUpdate({
         target: [packets.userId, packets.jobId],
@@ -215,7 +238,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           tokensOut: totals.tokensOut,
           usd: outcome.usd,
           ms: totals.ms,
-          error: error?.slice(0, 500) ?? null,
+          error: error ?? null,
           updatedAt: sql`now()`,
         },
       });

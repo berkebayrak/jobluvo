@@ -6,6 +6,33 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 17 September 2026
 
+### D-016. The packet attempt history is a measurement requirement, deferred
+
+Since #29 each tailoring attempt owns its candidate, findings and outcome, and the packet row is the last attempt. That closed the promotion path: a rejected candidate can no longer become ready because the retry failed to parse. Its cost is that a packet invalid on attempt one and failed on attempt two stores an empty findings array; the fact that the model invented a value survives only as a hard finding count inside the error string. That is the right trade for correctness. But those rows are evidence: the wrong citation rate and the invention rate (D-013) are counted over findings, and a row whose findings were on an earlier attempt drops out of both. So the immutable attempt history the review names as design improvement B, one row per attempt with its findings, its change set and its outcome, and the packet pointing at the latest attempt and separately at the latest valid one, is what restores the measurement, not a nicety. Due with the review's item 9, attempt ownership and terminal states, where a schema change is already planned. Until then the stored findings count what the last attempt found, and the sample summary must say so.
+
+### D-015. The SDK never retries and every model call carries a timeout chosen against the 60 second function
+
+The client was built with the SDK's defaults: two retries on a timeout, a lost connection, 408, 409, 429 or any 5xx, and a ten minute timeout. Both were wrong for this code. A retry underneath `tailorCall` or the scoring call is a call the meter never sees: the caller writes one cost row per call it makes, and a generation the provider completed and billed before the response was lost would be paid for again with no row for it, unmetered spend inside the number phase 0 exists to produce. And the routes that call a model declare `maxDuration = 60`, the Vercel Hobby ceiling, so the ten minute timeout could never fire; the function would be killed first, with no error and no usage.
+
+Now `maxRetries` is 0 on the client and on every request, because the attempt loops in run.ts and the claim already own retries and count them; two retry layers is how a two call packet becomes four paid calls. Each call site states its own budget from the 60 s ceiling and the client refuses one above 40 s:
+
+| Call | Timeout | Budget | Measured on this date |
+|---|---|---|---|
+| Scoring | 12 s | SCORE_BATCH 20 at concurrency 5 is four waves, 48 s, 12 s left for the claim and the writes | 400 calls: p50 2.5 s, p99 7.6 s, max 10.5 s |
+| Tailoring | 20 s | two attempts per packet, 40 s, 20 s left for the facts, the validator and the packet row | 228 calls: p50 4.5 s, p99 10.6 s, max 17.1 s |
+| Extraction | 40 s | one call per upload, 20 s left for the file and the writes | 17 calls: p50 10.6 s, p99 18.5 s, max 18.7 s; 8.6 ms per output token, so the 4,000 token cap fits in 34 s |
+
+A call that times out or loses its connection is a call of unknown cost: no usage came back and the provider may have finished and billed it. It is reported as such, no cost row is written, and the message carries a fixed phrase into the match or packet row's error text. `npm run cost-report` counts those rows by kind and prints a worst case at the kind's mean cost per call beside the recorded spend, so the invisible retry has not been traded for an invisible timeout; that line is also the check on the budgets above, since a rising count says the margin over the observed max was wrong. A row counts once whatever its attempts, so the count is a floor. Extraction cannot be counted this way: a failed upload stores no error text on the document, so its unknown calls wait for the document status column that review finding 5 asks for. Recording the provider's request id against each call waits for the attempt ownership work (item 9).
+
+Two behaviours follow from the values and are recorded here rather than discovered later. Neither is built now.
+
+1. A timeout on tailoring attempt one ends the packet. The loop in run.ts breaks on a transport error, and packets have no attempts based requeue the way matches have one, so a single slow generation is a dead packet with no second call at either layer. That is fine for the phase 0 sample. On the product path an apply would fail in front of the user, so the retry decision for the apply path is an open item.
+2. A scoring timeout marks the match failed and burns one of its three attempts. The claim picks failed rows with attempts under three up again, so one timeout is survivable, but three timeouts on one job leave it permanently failed and taking no slot; a new input revision restarting its own attempts is review finding 11 (item 9).
+
+The budgets are thin on purpose: 12 s is 14 percent above the observed scoring max and 20 s is 17 percent above the observed tailoring max, and the tail they clear is provider latency, which is the thing that moves. They are defensible against the 60 s function and that constraint is real. Each is written next to its observed max in the code so the next change sees the headroom it spends.
+
+Whether any row written before this date hides a retried call cannot be decided from the rows: nothing recorded a request id or a retry count. What the durations show: 52 of 400 scoring calls and 4 of 228 tailoring calls ran longer than twice the median plus the SDK's first backoff, which is what one billed retry would look like and also what a slow generation looks like. If every one of them hid one billed call the unrecorded spend would be USD 0.026 on scoring and 0.003 on tailoring against USD 0.20 and 0.17 recorded, and the per call figures in D-011 and D-013 would be at most 13 and 2 percent low. The slowest tailoring call, 17.1 s for 326 output tokens against 14.7 ms per token typical, is the one row that looks most like a hidden retry. None of this moves the phase 0 conclusion, which turns on the scored per applied ratio, and none of it is claimed as a correction.
+
 ### D-014. Extraction per user: USD 0.0021, the PDF sent as a file, no parser dependency
 
 The third term of the cost per application (D-011), measured on this date with `npm run extract-sample`: Jack Miller's resume, rendered from his seeded facts by `npm run resume-pdf` so the extractor has a ground truth, sent five times as the PDF and five times as plain text to gpt-5.6-luna, reasoning off, strict JSON of the facts with the resume's own words as evidence for each.

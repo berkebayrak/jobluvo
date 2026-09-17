@@ -24,6 +24,15 @@ export type TailorMode = "changes" | "document";
 
 export const MAX_CHANGES = 6;
 export const MAX_OUTPUT_TOKENS: Record<TailorMode, number> = { changes: 900, document: 2500 };
+/**
+ * Per call, against a 60 s function: a packet is at most two attempts,
+ * 2 x 20 s = 40 s, leaving 20 s for the facts, the validator and the packet
+ * row. Measured over 228 calls on 17 Sep 2026, both modes: p50 4.5 s,
+ * p99 10.6 s, max 17.1 s. So 20 s is 17 percent above the observed max:
+ * thin, and the tail is provider latency. The unknown cost line in
+ * `npm run cost-report` says whether the margin was wrong (D-015).
+ */
+export const TIMEOUT_MS = 20_000;
 export const REASONING: ReasoningEffort = "none";
 export const DEFAULT_MODEL = "gpt-5.6-luna";
 
@@ -175,6 +184,7 @@ export async function tailorCall(
       schema: opts.mode === "changes" ? CHANGES_SCHEMA : DOCUMENT_SCHEMA,
       maxOutputTokens: MAX_OUTPUT_TOKENS[opts.mode],
       reasoning: REASONING,
+      timeoutMs: TIMEOUT_MS,
     });
     return { text: call.text, model, usage: call.usage, usd: call.usd, ms: call.ms };
   } catch (e) {

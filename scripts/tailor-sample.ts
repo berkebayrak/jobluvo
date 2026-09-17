@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { dbPool } from "@/db/client";
 import { resumeFacts } from "@/server/match/profile";
 import { cellStats, citationStats, runStats } from "@/server/match/report";
@@ -32,6 +33,7 @@ import { currentUserId } from "@/server/user";
  *   npm run tailor-sample -- --tag sample-x      the run tag prefix, default sample-<today>
  *   npm run tailor-sample -- --model gpt-5.6-x   another priced model
  *   npm run tailor-sample -- --no-store          cost rows only, never a packet: a measurement that leaves the stored packets as they are
+ *   npm run tailor-sample -- --save out.json      every outcome's change sets and posting lemmas, so a rule can be re-read on the same answers without a call
  */
 
 function arg(name: string): string | undefined {
@@ -173,7 +175,7 @@ async function main() {
   console.log(`facts message: ${block.length} chars, about ${Math.ceil(block.length / 4)} tokens by the chars/4 rule, ${factEntries(facts).length} facts`);
 
   const sample = await stratifiedSample(db, userId, filter, n);
-  console.log(`candidates ${sample.candidates} in ${sample.cells.length} cells; sample ${sample.chosen.length}`);
+  console.log(`candidates ${sample.candidates} in ${sample.cells.length} cells; sample ${sample.chosen.length}; by family ${JSON.stringify(sample.byFamily)}`);
   if (dry) {
     console.table(sample.cells);
     return;
@@ -186,6 +188,16 @@ async function main() {
     const outcomes = await pool(jobs, 5, (job) => tailorJob(db, facts, job, { mode: "changes", model, run, store }));
     summarise(run, outcomes);
     scopes(facts, outcomes);
+    const save = arg("save");
+    if (save) {
+      writeFileSync(
+        save,
+        JSON.stringify(
+          outcomes.map((o) => ({ jobId: o.jobId, status: o.status, attempts: o.attempts, usd: o.usd, attemptLog: o.attemptLog.map((a) => a.outcome), changeSets: o.changeSets, posting: [...o.posting] })),
+        ),
+      );
+      console.log(`saved ${outcomes.length} outcomes to ${save}`);
+    }
   }
   if (only !== "changes") {
     const run = `${tag}-document`;

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { dbHttp } from "@/db/client";
 import { swipeDecisions } from "@/db/schema";
@@ -10,16 +10,22 @@ const body = z.object({
   reason: z.string().max(500).optional(),
 });
 
-/** Records a decision. The feed excludes swiped jobs through a live join, so this is all it takes. */
+/**
+ * Records a decision as one upsert on the unique (user, job) pair, so a
+ * double tap or a changed mind is one row with the latest decision. The
+ * feed excludes swiped jobs through a live join, so this is all it takes.
+ */
 export async function POST(req: Request) {
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad request" }, { status: 400 });
   const userId = await currentUserId();
-  const db = dbHttp();
-  await db.delete(swipeDecisions).where(and(eq(swipeDecisions.userId, userId), eq(swipeDecisions.jobId, parsed.data.jobId)));
-  const [row] = await db
+  const [row] = await dbHttp()
     .insert(swipeDecisions)
     .values({ userId, jobId: parsed.data.jobId, decision: parsed.data.decision, reason: parsed.data.reason })
+    .onConflictDoUpdate({
+      target: [swipeDecisions.userId, swipeDecisions.jobId],
+      set: { decision: parsed.data.decision, reason: parsed.data.reason ?? null, createdAt: sql`now()` },
+    })
     .returning();
   return Response.json({ decision: row });
 }

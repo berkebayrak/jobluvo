@@ -210,7 +210,8 @@ export const swipeDecisions = pgTable(
     reason: text("reason"),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
-  (t) => [index("swipe_decisions_user_job").on(t.userId, t.jobId)],
+  // One current decision per user and job; the route upserts on it, so a double tap is one row.
+  (t) => [uniqueIndex("swipe_decisions_user_job").on(t.userId, t.jobId)],
 );
 
 /** The observed cost worksheet. Model calls add tokens and usd; ingest adds time. */

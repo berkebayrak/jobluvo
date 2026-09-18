@@ -7,6 +7,7 @@ import { dbPool } from "@/db/client";
 import { costEvents, jobs, matches, packets, profileDocuments, profileFacts, sources, users } from "@/db/schema";
 import { buildResumeFacts, type FactRow } from "@/server/match/profile";
 import { baseResume, factEntries, resumeHash, shapedResume } from "@/server/packet/resume";
+import { parseFlags } from "@/lib/cli";
 
 /*
  * Freezes the packet population and everything needed to reproduce it to
@@ -21,17 +22,14 @@ import { baseResume, factEntries, resumeHash, shapedResume } from "@/server/pack
  * and checks it against the counts read from the database.
  */
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  const v = process.argv[i + 1];
-  return i >= 0 && v !== undefined && !v.startsWith("--") ? v : undefined;
-}
+const FLAGS = { booleans: [], values: ["out"] } as const;
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 const json = (v: unknown) => JSON.stringify(v, null, 1);
 
 async function main() {
-  const out = arg("out") ?? `design/snapshots/${new Date().toISOString().slice(0, 10)}-packets`;
+  const { values } = parseFlags(process.argv.slice(2), FLAGS);
+  const out = values.out ?? `design/snapshots/${new Date().toISOString().slice(0, 10)}-packets`;
   mkdirSync(out, { recursive: true });
   const db = dbPool();
   const takenAt = new Date().toISOString();

@@ -8,6 +8,7 @@ import { stratifiedSample } from "@/server/match/sample";
 import { ScoreError, scoreJob } from "@/server/match/score";
 import { filterFacts } from "@/server/profile/viewer";
 import { currentUserId } from "@/server/user";
+import { oneOf, parseFlags, positiveInteger } from "@/lib/cli";
 
 /*
  * The phase 0 instrument (D-003): scores a stratified sample of about 100 of
@@ -35,17 +36,16 @@ import { currentUserId } from "@/server/user";
  * the feed on purpose; that is why its rows are tagged.
  */
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? (process.argv[i + 1] ?? "true") : undefined;
-}
+const FLAGS = { booleans: ["dry", "reclaim"], values: ["n", "only", "tag"] } as const;
 
 async function main() {
-  const n = Number(arg("n") ?? 100);
-  const only = arg("only");
-  const dry = arg("dry") === "true";
-  const tag = arg("tag") ?? `sample-${new Date().toISOString().slice(0, 10)}`;
-  const reclaim = arg("reclaim") === "true";
+  const { booleans, values } = parseFlags(process.argv.slice(2), FLAGS);
+  const n = positiveInteger(values.n, "n", 100);
+  const only = oneOf(values.only, "only", ["prefix", "nocache"]);
+  const dry = booleans.dry;
+  const tag = values.tag ?? `sample-${new Date().toISOString().slice(0, 10)}`;
+  const reclaim = booleans.reclaim;
+  console.log(`flags: n ${n}, only ${only ?? "both"}, dry ${dry}, reclaim ${reclaim}, tag ${tag}`);
   const db = dbPool();
   const userId = await currentUserId();
   const [profile, facts] = await Promise.all([scoringProfile(db, userId), filterFacts(userId, db)]);

@@ -118,6 +118,41 @@ case 3 they would have made the thinnest column look four times healthier than i
 is recorded here on the user's instruction: getting two labels wrong and saying so is worth
 more than getting them right quietly.
 
+## 19 September 2026
+
+### D-037. The seven packets a withdrawn rule destroyed are rebuilt from their own stored change sets, and the six that cannot be are left invalid
+
+The user's call. Ten packets were rejected on 18 September by `name-unknown` and
+`posting-word-unknown` while those findings were briefly hard, and a rejected packet loses
+its stored resume. D-036 withdrew that level the next day. All ten pass under the rules
+that followed, and none could be promoted, because the document was gone. Three more sat
+invalid from r6 on a rule D-034 had already deleted.
+
+**Seven of the thirteen store the change set they were built from.** For those, the
+tailored document is base plus that change set, and both are on the row, so it is
+reproducible exactly and by nothing but arithmetic. Rebuilding it is reconstruction, not
+invention.
+
+**The constraint, and it is the whole of the decision.** The candidate is rebuilt from the
+base and the stored change set only. It is then read by the validator as it stands today
+and stamped with whatever that says. Nothing is promoted by hand: a rebuilt candidate that
+passes becomes ready, one that holds holds, one that is rejected stays rejected with no
+resume. `replayDecision` gained one branch and `--apply` writes the rebuilt document and
+its hash like any other restamp.
+
+**Why this does not break review five's finding 6.** That finding says a row must not be
+promoted without a verifiable candidate, and it is the reason a row whose stored resume is
+not the base plus its stored changes is revoked rather than trusted. A candidate rebuilt
+from its own stored change set is verifiable in the only sense the finding means: the
+inputs are on the row, the function is deterministic, and the result is validated again
+before anything is stamped. The difference between the seven and the six is the change
+set, and that is exactly the line finding 6 draws.
+
+**The six with no stored change set stay invalid.** They were written before change sets
+were kept, nothing can reconstruct them, and no rule here invents a document. That is the
+cost of a check that deleted the evidence a day before it was demoted, and it is left
+visible rather than papered over.
+
 ## 18 September 2026
 
 ### D-036. A guess never destroys work, the model checks its own lines in the same call, and the real checker is a model that is not built yet
@@ -143,10 +178,12 @@ four managers" is not. A check built on a word's shape will always have that edg
 only when what it found is certain. A finding derived from a guess about a word's shape
 holds instead. A new check that cannot say which it is, holds.**
 
-A held finding earns no retry. `name-unknown` is not on the actionable list, so a guess
-never buys a second paid call either. That is a choice inside the decision and it is
-flagged as one: the alternative is to let the model substitute the fact's own word, which
-costs a call on every held packet and can end in the model dropping the line.
+**A held finding earns no retry.** `name-unknown` is not on the actionable list, so a
+guess never buys a second paid call either. This was flagged to the user as a choice made
+rather than asked, and confirmed: a guess should not buy a second paid call, and the
+alternative ends with the model dropping the line to satisfy a check that was wrong in the
+first place. The reasoning stays here rather than in a commit message, because the next
+person to wonder why a held packet does not retry will look for it in the log.
 
 What it does to the numbers on the 28 known false lines, and this is the honest form of
 the count because rejected and held are not the same thing:
@@ -171,9 +208,11 @@ million input tokens that is USD 0.0000212 a call, so at most two calls a packet
 tailoring term and about 1.3 percent of the USD 0.00333 per application figure. It does
 not move the cost per packet meaningfully, which is what the user expected.
 
-The output side is not measured and is not guessed. The schema is closed and the
-instruction says not to write commentary, so output should not grow, but that is an
-expectation and a paid run is what would settle it. No paid run was made.
+**The output side is unmeasured.** Saying so rather than leaving it silent: the schema is
+closed and the instruction says not to write commentary, so output should not grow, but
+that is an expectation and nothing here has tested it. No paid run was made. It gets
+measured with the first paid run of phase 1, and until that number exists the cost of this
+change is known on the input side only.
 
 **What this is worth, stated plainly: a model checking its own output is a soft test.** It
 is weaker than an independent check, because the same weights that wrote the line judge

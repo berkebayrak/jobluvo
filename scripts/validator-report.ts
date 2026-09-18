@@ -67,6 +67,7 @@ function outcomeOf(d: ReplayDecision): string {
   if (d.kind === "hold") return `held, nothing could revalidate it: ${d.why.replace(/:.*$/, "")}`;
   if (d.kind === "no_candidate") return "not replayed, failed, no candidate";
   if (d.kind === "revoke") return `revoked, would pass as ${d.would} but the stored resume is not the base plus the stored changes`;
+  if (d.kind === "rebuild") return `${d.status}, resume rebuilt from the stored change set`;
   return `not promoted, passes as ${d.would} but no resume stored`;
 }
 
@@ -152,7 +153,7 @@ async function main() {
       perPacket.map((p) => ({ row: p.row, decision: p.decision })),
     );
     console.log(
-      `\napplied: ${result.restamped} packets written under the rules as they stand, ${result.changedStatus} changed status, ${result.revoked} of them revoked because their stored resume could not be verified, ${result.held} held because nothing could revalidate them, ${result.untouched} left as they are (failed, or invalid with no resume to promote), ${result.stale} refused because the row moved since it was read`,
+      `\napplied: ${result.restamped} packets written under the rules as they stand, ${result.changedStatus} changed status, ${result.revoked} of them revoked because their stored resume could not be verified, ${result.held} held because nothing could revalidate them, ${result.rebuilt} rebuilt from their own stored change set after a rejection cleared the resume (D-037), ${result.untouched} left as they are (failed, or invalid with no change set to rebuild from), ${result.stale} refused because the row moved since it was read`,
     );
   }
 

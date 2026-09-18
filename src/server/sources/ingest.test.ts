@@ -1,8 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { dbPool, type DbPool, type Tx } from "@/db/client";
 import { jobs, sources, users, type Source } from "@/db/schema";
 import { applyPostings, claimBatch, ingestSource, knownJobs } from "./ingest";
+import { smartrecruiters } from "./smartrecruiters";
 import type { RawPosting } from "./types";
 
 /*
@@ -194,16 +195,29 @@ describe.skipIf(!hasDb)("overlapping claims", () => {
  * the next, even though the list has not changed since and the API would
  * answer a conditional request with a 304.
  */
-describe.skipIf(!hasDb)("ingest over three polls with the budget exhausted", () => {
+describe.skipIf(!hasDb)("ingest over successive polls with the budget exhausted", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   type Item = { id: string; name: string };
+  type Board = { items: Item[]; etag: string; details: Record<string, string> };
   function body(id: string, text: string) {
     return { id, name: text, jobAd: { sections: { jobDescription: { title: "Role", text: `<p>${`${text} owns the ledger and the reconciliation of every payment. `.repeat(3)}</p>` } } } };
   }
 
+  /** The board the first poll finds: two postings, list etag v1. */
+  function boardV1(): Board {
+    return { items: [{ id: "a", name: "A" }, { id: "b", name: "B" }], etag: '"v1"', details: { a: "A", b: "B" } };
+  }
+
+  /** A is renamed on the board, so the list is new and a conditional request is answered in full. */
+  function renameA(state: Board) {
+    state.items = [{ id: "a", name: "A renamed" }, { id: "b", name: "B" }];
+    state.etag = '"v2"';
+    state.details.a = "A renamed";
+  }
+
   /** One list with one etag; the etag changes when the list does. Records every request. */
-  function stubBoard(state: { items: Item[]; etag: string; details: Record<string, string> }) {
+  function stubBoard(state: Board) {
     const listHeaders: (string | null)[] = [];
     const detailUrls: string[] = [];
     vi.stubGlobal(
@@ -236,11 +250,44 @@ describe.skipIf(!hasDb)("ingest over three polls with the budget exhausted", () 
     return Object.fromEntries(rows.map((r) => [r.nativeId, r]));
   }
 
-  it("a body withheld by the budget arrives on the next poll although the list would answer 304", async () => {
+  /*
+   * The four polls below were one test making thirteen sequential steps
+   * against a remote database, each of them several queries. It ran 9.8
+   * seconds alone and timed out at 30 seconds inside the full suite often
+   * enough to stop a branch going green on its first run. The shape was the
+   * problem and the timeout was not, which is the same call made on
+   * confirm.test.ts and on the check chain (review five).
+   *
+   * One test per poll now, each named for what that poll proves. Polls 1 and
+   * 2 run through ingestSource. Polls 3 and 4 start from the state the
+   * earlier polls leave, set here rather than replayed, which is what keeps
+   * them short; the assertions in the first two are what say that state is
+   * the real one.
+   */
+
+  /**
+   * The state a completed poll leaves, reached through the adapter and the
+   * upsert but without the claim, the employer lock and the source
+   * bookkeeping ingestSource also does. The stub sees the same list request a
+   * real poll would make, so the list hashes stored here are the adapter's
+   * own and the next poll reads them exactly as it would after a full poll.
+   */
+  async function seedPoll(tx: Tx, source: Source, detailBudget: number): Promise<Source> {
+    const known = await knownJobs(tx, source.id);
+    const result = await smartrecruiters.fetch(source, {
+      detailBudget,
+      known: new Map([...known].map(([k, v]) => [k, { listHash: v.listHash, detailPending: v.detailPending, hasBody: v.hasBody }])),
+    });
+    if (result.notModified) throw new Error("the seed expected a full list, not a 304");
+    await applyPostings(tx, source, result.postings, known);
+    const [s] = await tx.update(sources).set({ etag: result.etag ?? source.etag }).where(eq(sources.id, source.id)).returning();
+    return s;
+  }
+
+  it("a first poll sends no etag, fetches every body, and stores the list etag", async () => {
     await withSource(async (tx, source) => {
       const db = tx as unknown as DbPool;
-      const state = { items: [{ id: "a", name: "A" }, { id: "b", name: "B" }], etag: '"v1"', details: { a: "A", b: "B" } };
-      const calls = stubBoard(state);
+      const calls = stubBoard(boardV1());
 
       // Poll 1: nothing known, both bodies fetched, the etag stored.
       const p1 = await ingestSource(db, source, { detailBudget: 40 });
@@ -248,52 +295,88 @@ describe.skipIf(!hasDb)("ingest over three polls with the budget exhausted", () 
       expect(p1.inserted).toBe(2);
       expect(calls.listHeaders).toEqual([null]);
       expect(calls.detailUrls).toEqual(["a", "b"]);
-      let rows = await byNative(tx, source.id);
+      const rows = await byNative(tx, source.id);
       expect(rows.a.descriptionText).toContain("A owns the ledger");
       expect(rows.b.descriptionText).toContain("B owns the ledger");
-      let src = await reread(tx, source.id);
+      const src = await reread(tx, source.id);
       expect(src.etag).toBe('"v1"');
       expect(src.lastStatus).toBe("ok");
+    });
+  });
+
+  it("a changed listing the budget cannot refetch keeps its stored body, is marked pending, and the new etag is stored", async () => {
+    await withSource(async (tx, source) => {
+      const db = tx as unknown as DbPool;
+      const state = boardV1();
+      const calls = stubBoard(state);
+      const seeded = await seedPoll(tx, source, 40);
 
       // Poll 2: A changed on the board, so the list is new and the conditional
       // request is answered in full. The budget is exhausted before A's body.
-      state.items = [{ id: "a", name: "A renamed" }, { id: "b", name: "B" }];
-      state.etag = '"v2"';
-      state.details.a = "A renamed";
-      const p2 = await ingestSource(db, src, { detailBudget: 0 });
+      renameA(state);
+      const p2 = await ingestSource(db, seeded, { detailBudget: 0 });
       expect(p2.status).toBe("ok");
       expect(p2.detailPending).toBe(1);
       expect(calls.listHeaders).toEqual([null, '"v1"']);
       expect(calls.detailUrls).toEqual(["a", "b"]);
-      rows = await byNative(tx, source.id);
+      const rows = await byNative(tx, source.id);
       expect(rows.a.detailPending).toBe(true);
       expect(rows.a.descriptionText).toContain("A owns the ledger");
       expect(rows.b.detailPending).toBe(false);
-      src = await reread(tx, source.id);
+      const src = await reread(tx, source.id);
       expect(src.etag).toBe('"v2"');
+    });
+  });
+
+  it("a pending row makes the next poll skip the etag, so a body the budget withheld arrives although the list would answer 304", async () => {
+    await withSource(async (tx, source) => {
+      const db = tx as unknown as DbPool;
+      const state = boardV1();
+      const calls = stubBoard(state);
+      await seedPoll(tx, source, 40);
+      // What poll 2 leaves, asserted in the test above: A renamed on the board,
+      // A's row still carrying the old body and marked pending, the new etag stored.
+      renameA(state);
+      await tx.update(jobs).set({ detailPending: true }).where(and(eq(jobs.sourceId, source.id), eq(jobs.nativeId, "a")));
+      const [pending] = await tx.update(sources).set({ etag: '"v2"' }).where(eq(sources.id, source.id)).returning();
 
       // Poll 3: the list is unchanged since v2, so a conditional request would
       // get a 304 and A would stay pending. The pending row makes the adapter
       // skip the etag, the list comes back in full, and only A's body is fetched.
-      const p3 = await ingestSource(db, src, { detailBudget: 40 });
+      const p3 = await ingestSource(db, pending, { detailBudget: 40 });
       expect(p3.status).toBe("ok");
       expect(p3.detailPending).toBe(0);
-      expect(calls.listHeaders).toEqual([null, '"v1"', null]);
+      // The first entry is the seed's own list request. The second is poll 3,
+      // which carried no etag although the source row holds one.
+      expect(calls.listHeaders).toEqual([null, null]);
       expect(calls.detailUrls).toEqual(["a", "b", "a"]);
-      rows = await byNative(tx, source.id);
+      const rows = await byNative(tx, source.id);
       expect(rows.a.detailPending).toBe(false);
       expect(rows.a.title).toBe("A renamed");
       expect(rows.a.descriptionText).toContain("A renamed owns the ledger");
       expect(rows.b.descriptionText).toContain("B owns the ledger");
-      src = await reread(tx, source.id);
+      const src = await reread(tx, source.id);
       expect(src.etag).toBe('"v2"');
+    });
+  });
+
+  it("with nothing pending the etag goes out again, the 304 is honoured, and no body is refetched", async () => {
+    await withSource(async (tx, source) => {
+      const db = tx as unknown as DbPool;
+      const state = boardV1();
+      renameA(state);
+      const calls = stubBoard(state);
+      // What poll 3 leaves: every body stored at the current list, nothing pending, etag v2.
+      const drained = await seedPoll(tx, source, 40);
+      expect(drained.etag).toBe('"v2"');
+      expect((await byNative(tx, source.id)).a.detailPending).toBe(false);
 
       // Poll 4: nothing pending, the etag goes out again and the 304 is honoured.
-      const p4 = await ingestSource(db, src, { detailBudget: 40 });
+      const p4 = await ingestSource(db, drained, { detailBudget: 40 });
       expect(p4.status).toBe("not_modified");
-      expect(calls.listHeaders).toEqual([null, '"v1"', null, '"v2"']);
-      expect(calls.detailUrls).toEqual(["a", "b", "a"]);
-      rows = await byNative(tx, source.id);
+      expect(calls.listHeaders).toEqual([null, '"v2"']);
+      expect(calls.detailUrls).toEqual(["a", "b"]);
+      const rows = await byNative(tx, source.id);
       expect(rows.a.detailPending).toBe(false);
       expect(rows.a.descriptionText).toContain("A renamed owns the ledger");
     });

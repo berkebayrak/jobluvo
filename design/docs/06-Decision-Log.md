@@ -120,6 +120,65 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-040. A figure is certain only when the profile's own figures could be read, so `value-unknown` holds when any of them could not
+
+The user's call, from the sixth review's item 3. D-036 lets exactly one finding reject a
+packet, and the argument for it is one sentence: a figure either appears on the profile or it
+does not, so the answer is certain. That is true of the profile. It was not true of this
+code.
+
+**Why.** The lookup compares parsed values. A fact whose own number the normaliser could not
+read contributes no value to compare against, so "no fact carries this figure" could mean
+"the fact that carries it could not be read". `factSet` already computed which facts those
+are, kept the map, and no check ever consulted it.
+
+**Two cases, both reproduced before anything was changed.**
+
+| The fact says | It parses to | The truthful line | What happened |
+|---|---|---|---|
+| "Joined in twenty ten" | nothing; reported unreadable | "Joined in 2010" | rejected, and the packet lost its document |
+| "USD 9,2 million" | USD 9 and a separate 2000000; reported nothing | "USD 9.2 million" | rejected |
+
+**The rule.** `value-unknown` is hard while every number on the profile was readable, and
+review otherwise. The finding says which it is: the held one reads "value matches no readable
+fact, and a number phrase on the profile could not be read" and names the phrases. It is not
+on `ACTIONABLE`, so a held value buys no second paid call, which is right for a different
+reason than D-036's: a retry cannot make a fact readable.
+
+**The scope is profile wide, which is wider than the review asked for, and the user chose
+it.** The review said to route on the cited facts. The lookup is profile wide, so the fact
+that would have supported a line need not be one the line cites, and a cited-facts rule would
+still have rejected a line whose support sits in an uncited unreadable fact. The two differ by
+nothing on the data on hand: neither live profile carries an unreadable phrase.
+
+**The second case needed a fix the review's own prescription did not reach, and this is a
+judgement call made rather than asked.** Routing on `facts.unreadable` fixes "twenty ten",
+which is reported, and does nothing for "USD 9,2 million", which is not: the separator rule
+strips a comma only before whole groups of three, and the rest of the pipeline then read "9"
+and "2 million" without complaint. A comma left between digits is now reported as unreadable,
+with the scale word after it so the phrase reads as written. Nothing tries to decide whether
+that comma is a decimal point or a typed separator, because the text does not say and either
+guess invents a figure the user did not write.
+
+**What it costs, and it is a real cost rather than a free correction.** On a profile carrying
+any unreadable number phrase, a genuinely invented figure is held for a person instead of
+rejected. `validate.test.ts` asserts exactly that, on the profile where "five thousand two
+million" cannot be read: "Managed 8 teams" against facts of 3 and 5 is still found, and it is
+now held. The same line on a profile whose numbers all read is still rejected. That is the
+general rule of D-036 applied honestly rather than selectively: the finding cannot say whether
+the absence of a match is the line's fault or the evidence's, so it holds.
+
+**Measured before shipping, and the measurement is that nothing moves.** Both live profiles
+carry zero unreadable phrases; their only `digit,digit` sequences are 2,400 and 2,000, which
+are genuine separators. Over the 80 saved answers of
+`design/snapshots/2026-09-18-packets` the table is unchanged at 74 ready, 6 held, 0 invalid,
+and no `value-unknown` fires at all. The stored packets read the same under r9 as under r8:
+83 ready, 18 held, 6 invalid, no row moving. So this is a correctness fix for profiles nobody
+has uploaded yet, and it should not be reported as an improvement to any number.
+
+`VALIDATOR_REVISION` is `2026-09-19.r9`. The restamp that writes it is applied from merged
+code and its table is reported with the rest.
+
 ### D-039. A line the retry names is the model's decision, and the merge stops overriding it
 
 The user's call, from the sixth review's item 2. It is damage this project created in the

@@ -13,7 +13,7 @@ export { normaliseNumbers } from "./normalise";
  * `npm run validator-report` restamps the stored packets under the new
  * one (D-017).
  */
-export const VALIDATOR_REVISION = "2026-09-18.r8";
+export const VALIDATOR_REVISION = "2026-09-19.r9";
 
 /*
  * The guarantee behind "nothing is added that is not on your profile", and
@@ -30,6 +30,18 @@ export const VALIDATOR_REVISION = "2026-09-18.r8";
  * shape, and shapes are wrong often enough that three false positive families
  * turned up in a day and a fourth has no fix. That holds the packet for a
  * person, with the tailored resume kept and the word named.
+ *
+ * "A figure either appears on the profile or it does not" is true of the
+ * profile and was not true of this code, which is the sixth review's item 3.
+ * The lookup runs over parsed values, so a fact whose own number the
+ * normaliser could not read contributes nothing to compare against, and a
+ * truthful line was rejected for a figure the profile plainly carries: a fact
+ * reading "Joined in twenty ten" left "Joined in 2010" matching nothing.
+ * `factSet` had already computed which facts those are and then dropped the
+ * answer on the floor. So `value-unknown` rejects only while every number on
+ * the profile was readable, and holds otherwise. Not found in the parsed
+ * evidence is not the same as not on the profile, and only one of those two
+ * is certain enough to destroy work (D-040).
  *
  * The general rule, which every check added here answers to: a finding may
  * reject a packet only when what it found is certain. A finding derived from a
@@ -88,6 +100,13 @@ export interface FactSet {
   lemmas: Set<string>;
   /** Per fact id, the number phrases the normaliser could not read; a value checked against such a fact is held, not rejected. */
   unreadable: Map<string, string[]>;
+  /**
+   * Every such phrase on the profile, deduped. Profile wide because the lookup
+   * is profile wide: the fact that would have supported a line need not be one
+   * the line cites, so an unreadable number anywhere is a gap in the evidence
+   * this check reads (D-040).
+   */
+  unreadablePhrases: string[];
 }
 
 export function factSet(entries: FactEntry[]): FactSet {
@@ -102,7 +121,8 @@ export function factSet(entries: FactEntry[]): FactSet {
     if (phrases.length) unreadable.set(e.id, phrases);
   }
   const corpus = entries.map((e) => e.text).join("\n");
-  return { entries, entryById: new Map(entries.map((e) => [e.id, e])), byId, all, corpus: corpus.toLowerCase(), lemmas: lemmasOf(corpus), unreadable };
+  const unreadablePhrases = [...new Set([...unreadable.values()].flat())];
+  return { entries, entryById: new Map(entries.map((e) => [e.id, e])), byId, all, corpus: corpus.toLowerCase(), lemmas: lemmasOf(corpus), unreadable, unreadablePhrases };
 }
 
 /** The role a line belongs to: R2 for the bullet R2.3 and for the heading R2; null for the summary and anything else. */
@@ -120,9 +140,23 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
   for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "review", bullet, code: "cited-fact-missing", message: "cited fact does not exist", value: id });
   if (!cited.length) out.push({ level: "review", bullet, code: "no-fact-cited", message: "no fact cited for this line" });
 
-  // The one check: a value in no confirmed fact at all.
+  // The one check: a value in no confirmed fact at all. It rejects only while every number on the profile was
+  // readable; otherwise the absence of a match is a gap in the evidence rather than a finding about the line (D-040).
+  const unread = facts.unreadablePhrases;
   for (const p of claimsOf(line)) {
-    if (!facts.all.some((c) => sameValue(c, p))) out.push({ level: "hard", bullet, code: "value-unknown", message: "value appears in no confirmed fact", value: p.key });
+    if (facts.all.some((c) => sameValue(c, p))) continue;
+    if (!unread.length) {
+      out.push({ level: "hard", bullet, code: "value-unknown", message: "value appears in no confirmed fact", value: p.key });
+      continue;
+    }
+    out.push({
+      level: "review",
+      bullet,
+      code: "value-unknown",
+      message: "value matches no readable fact, and a number phrase on the profile could not be read",
+      value: p.key,
+      detail: `unreadable on the profile: ${unread.slice(0, 3).join("; ")}${unread.length > 3 ? `, and ${unread.length - 3} more` : ""}`,
+    });
   }
 
   // A number phrase the normaliser could not read is a value the lookup never ran on. Held, never passed.

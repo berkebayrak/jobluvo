@@ -28,6 +28,22 @@ import { applyChanges, type ChangeSet } from "./resume";
  * 2. What the retry did is recorded, on the attempt log and as a soft
  *    finding, so a packet says how it was reached. A soft finding does not
  *    hold the packet; this is provenance, not a defect.
+ *
+ * Review five's finding 8 is that the rule above was read off the shape of a
+ * change set rather than off what the change set does to the document, and
+ * three things slipped through that gap. A tailored summary the retry did not
+ * repeat was not counted as a line at all, so it vanished and the answer was
+ * still described as having kept every line. A retry that wrote the base text
+ * back for a tailored line dropped it just as surely as omitting it, but the
+ * merge saw an entry for that line and refused to restore it while the
+ * description went on claiming the line "was put back". And a skill order the
+ * retry replaced with the base order was invisible, because only an empty
+ * order counted as dropped. All three reproduced against this module.
+ *
+ * So one rule serves all of it: a line is what the applied document says it
+ * is. `effectOf` applies the change set and reads the result against the
+ * base, and the summary and the skill order are read the same way as any
+ * bullet. Nothing is now called restored that was not restored.
  */
 
 /** What the retry did to the previous answer's edited lines. */
@@ -40,18 +56,34 @@ export type RetryKind =
 
 export interface RetryClassification {
   kind: RetryKind;
-  /** Lines the previous answer edited that the retry does not edit at all. */
+  /** Lines the previous answer edited that the retry leaves at the base text. "summary" is one of them. */
   dropped: string[];
-  /** Lines the previous answer edited. */
+  /** Lines the previous answer edited, the summary counted as one. */
   of: number;
   /** Of the dropped lines, those the validator had no hard or review finding on, which are the ones put back. */
   clean: string[];
-  /** True when the previous answer set a skill order and the retry did not. */
+  /** True when the previous answer put the skills in an order other than the base's and the retry leaves them in the base's. */
   droppedSkillOrder: boolean;
 }
 
-/** The bullets a change set actually changes, by the document the base gives: a change whose text equals the base's is not an edit. */
-const editedBullets = (base: ResumeDocument, cs: ChangeSet): Set<string> => new Set(applyChanges(base, cs).diff.filter((d) => d.bullet !== "summary").map((d) => d.bullet));
+/**
+ * What a change set does to the base document: the lines whose text it ends
+ * up changing, and the order it ends up putting the skills in. Read off the
+ * applied document rather than off the change set, so a change that restates
+ * the base text is not an edit however it is written, and the summary counts
+ * as a line like any other (finding 8).
+ */
+function effectOf(base: ResumeDocument, cs: ChangeSet): { lines: Set<string>; skills: string[] } {
+  const { resume } = applyChanges(base, cs);
+  const baseText = new Map<string, string>();
+  for (const role of base.experience) for (const b of role.bullets) baseText.set(b.id, b.text);
+  const lines = new Set<string>();
+  for (const role of resume.experience) for (const b of role.bullets) if (baseText.get(b.id) !== b.text) lines.add(b.id);
+  if (resume.summary !== base.summary) lines.add("summary");
+  return { lines, skills: resume.skills.map((s) => s.id) };
+}
+
+const sameOrder = (a: string[], b: string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** The bullets the validator objected to: hard or review, never soft, which does not hold a line. */
 export const objectedTo = (findings: PacketFinding[]): Set<string> =>
@@ -64,15 +96,20 @@ export const objectedTo = (findings: PacketFinding[]): Set<string> =>
  * @param previousFindings the validator's findings on `previous`, which say which of its lines were objected to
  */
 export function classifyRetry(base: ResumeDocument, previous: ChangeSet, next: ChangeSet, previousFindings: PacketFinding[]): RetryClassification {
-  const before = editedBullets(base, previous);
-  const after = editedBullets(base, next);
+  const baseSkills = base.skills.map((s) => s.id);
+  const first = effectOf(base, previous);
+  const second = effectOf(base, next);
+  const before = first.lines;
+  const after = second.lines;
   const dropped = [...before].filter((b) => !after.has(b));
   const objected = objectedTo(previousFindings);
   const clean = dropped.filter((b) => !objected.has(b));
-  const droppedSkillOrder = previous.skills.length > 0 && next.skills.length === 0;
+  // A reorder the retry leaves at the base order is dropped, whether it wrote
+  // no order or wrote the base's back.
+  const droppedSkillOrder = !sameOrder(first.skills, baseSkills) && sameOrder(second.skills, baseSkills);
   const added = [...after].filter((b) => !before.has(b));
-  // The retry reverted when it leaves the base resume untouched and the answer before it did not.
-  const revertedToBase = after.size === 0 && !next.summary && before.size > 0;
+  // The retry reverted when it leaves the base resume untouched, order included, and the answer before it did not.
+  const revertedToBase = after.size === 0 && sameOrder(second.skills, baseSkills) && before.size > 0;
   const kind: RetryKind = revertedToBase
     ? "reverted to the base resume"
     : dropped.length === 0
@@ -92,24 +129,33 @@ export function describeRetry(c: RetryClassification): string {
       ? `the retry ${c.kind === "dropped edited lines" ? "dropped" : "edited a different set of lines and dropped"} ${c.dropped.length} of ${c.of} edited lines`
       : `the retry ${c.kind}`;
   const kept = c.clean.length
-    ? `; ${c.clean.length} ${c.clean.length === 1 ? "line the validator had not objected to was" : "lines the validator had not objected to were"} put back from the answer before it`
+    ? `; ${c.clean.length} ${c.clean.length === 1 ? "line the validator had not objected to was" : "lines the validator had not objected to were"} put back from the answer before it${c.clean.includes("summary") ? ", the summary among them" : ""}`
     : "";
   const skills = c.droppedSkillOrder ? "; the skill order was dropped and put back" : "";
   return head + kept + skills;
 }
 
 /**
- * The retry's answer with the previous answer's clean dropped lines put back.
- * Only lines the validator did not object to are restored, and the result is
- * validated whole by the caller. The retry's own text always wins on a line
- * both answers edit.
+ * The retry's answer with the previous answer's clean dropped lines put back,
+ * the summary and the skill order among them. Only lines the validator did not
+ * object to are restored, and the result is validated whole by the caller. The
+ * retry's own text always wins on a line both answers edit.
+ *
+ * A line the retry left at the base text is dropped whether it omitted the
+ * line or wrote the base text back in its place, so an entry of next's for
+ * such a line is a no op by construction and the previous answer's line
+ * replaces it rather than being refused. That refusal is what let
+ * describeRetry claim a restoration that had not happened (finding 8).
  */
 export function mergeRetry(previous: ChangeSet, next: ChangeSet, c: RetryClassification): ChangeSet {
   if (!c.clean.length && !c.droppedSkillOrder) return next;
-  const restored = previous.changes.filter((ch) => c.clean.includes(ch.bullet) && !next.changes.some((n) => n.bullet === ch.bullet));
+  const restore = new Set(c.clean);
+  const summary = restore.has("summary");
   return {
     ...next,
-    changes: [...next.changes, ...restored],
+    summary: summary ? previous.summary : next.summary,
+    summaryFacts: summary ? previous.summaryFacts : next.summaryFacts,
+    changes: [...next.changes.filter((ch) => !restore.has(ch.bullet)), ...previous.changes.filter((ch) => restore.has(ch.bullet))],
     skills: c.droppedSkillOrder ? previous.skills : next.skills,
   };
 }

@@ -393,6 +393,8 @@ export const profileDocuments = pgTable("profile_documents", {
   status: documentStatusEnum("status").notNull().default("processing"),
   /** Why it failed. A call of unknown cost leaves its mark here, so the cost report can count it (D-015). */
   error: text("error"),
+  /** What extraction could not read as a fact, one line each: an item the schema refused, an ambiguity the model flagged. Stored with the facts so the reason a fact is missing survives a reload (review four, finding 9). */
+  issues: jsonb("issues").$type<string[]>().notNull().default([]),
   uploadedAt: ts("uploaded_at").notNull().defaultNow(),
 });
 

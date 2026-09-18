@@ -1,0 +1,1 @@
+ALTER TABLE "profile_documents" ADD COLUMN "issues" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -178,6 +178,17 @@ describe.skipIf(!hasDb)("the upload path and the document's state", () => {
     });
   });
 
+  it("a successful upload stores the lines extraction could not read as facts on the document, and the view carries them (review four, finding 9)", async () => {
+    await withUser(async (tx, userId) => {
+      call().mockResolvedValueOnce(answer({ ...base, employment: [{ ...base.employment[0], start: "March 2022" }], issues: ["The second page is a scan."] }));
+      const out = await extractUpload(tx, userId, file);
+      expect(out.issues).toEqual(["The second page is a scan.", expect.stringContaining("Head of Strategy and PMO at Arvento: start")]);
+      const [d] = await tx.select({ issues: profileDocuments.issues }).from(profileDocuments).where(eq(profileDocuments.id, out.documentId));
+      expect(d.issues).toEqual(out.issues);
+      expect((await profileView(tx, userId)).documents[0].issues).toEqual(out.issues);
+    });
+  });
+
   it("an upload whose extractor finds nothing is ready and empty, never verified", async () => {
     await withUser(async (tx, userId) => {
       call().mockResolvedValueOnce(answer({ ...base, name: null, email: null, location: null, links: [], employment: [], education: [], skills: [], answers: [] }));

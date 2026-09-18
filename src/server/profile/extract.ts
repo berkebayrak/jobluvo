@@ -320,7 +320,8 @@ export async function extractUpload(
           result.facts.map((f) => ({ userId, documentId: doc.id, kind: f.kind, data: f.data, evidence: f.evidence, origin: "upload" as const, status: "extracted" as const })),
         );
       }
-      await tx.update(profileDocuments).set({ status: "ready" }).where(eq(profileDocuments.id, doc.id));
+      // The issues land with the facts: what could not be read is part of what was read (review four, finding 9).
+      await tx.update(profileDocuments).set({ status: "ready", issues: result.issues }).where(eq(profileDocuments.id, doc.id));
     });
   } catch (e) {
     await fail(`storing the facts failed: ${e instanceof Error ? e.message : String(e)}`);

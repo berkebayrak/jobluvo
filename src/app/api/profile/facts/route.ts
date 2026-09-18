@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const db = dbPool();
   if ("replaceWith" in parsed.data) {
     try {
-      return Response.json(await replaceWithDocument(db, userId, parsed.data.replaceWith, parsed.data.seen));
+      return Response.json(await replaceWithDocument(db, userId, parsed.data.replaceWith, parsed.data.seen, { acknowledgeIssues: parsed.data.acknowledgeIssues }));
     } catch (e) {
       if (e instanceof ReplaceRefused) return Response.json({ error: e.message, reason: e.reason }, { status: e.reason === "not_found" ? 404 : 409 });
       throw e;

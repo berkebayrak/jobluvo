@@ -52,11 +52,15 @@ function run(command: string): { code: number; ms: number } {
   return { code: r.status, ms };
 }
 
-/** Standard output of a command, for the small git reads. Their exit codes are checked too. */
-function git(args: string): string {
-  const r = spawnSync(`git ${args}`, { shell: true, encoding: "utf8" });
+/**
+ * Standard output of a git read, and its exit code is checked too. The arguments are
+ * passed as a list and no shell is involved: `--format=%h %s` through a shell is one
+ * argument split into two, and git reads the second as a path and exits 128.
+ */
+function git(args: string[]): string {
+  const r = spawnSync("git", args, { encoding: "utf8" });
   if (r.status !== 0) {
-    console.error(`git ${args} failed with ${r.status}`);
+    console.error(`git ${args.join(" ")} failed with ${r.status}: ${(r.stderr ?? "").trim()}`);
     process.exit(1);
   }
   return (r.stdout ?? "").trim();
@@ -66,7 +70,7 @@ function main() {
   const flags = parseFlags(process.argv.slice(2), { booleans: ["allow-dirty"] as const, values: [] as const });
   console.log("flags:", JSON.stringify(flags.booleans));
 
-  const dirty = git("status --porcelain");
+  const dirty = git(["status", "--porcelain"]);
   if (dirty && !flags.booleans["allow-dirty"]) {
     console.error("\nthe working tree is not clean, so these checks would not describe any commit:\n");
     for (const line of dirty.split("\n")) console.error("  " + line);
@@ -75,7 +79,7 @@ function main() {
     process.exit(1);
   }
 
-  const head = git("log -1 --format=%h %s");
+  const head = git(["log", "-1", "--format=%h %s"]);
   if (dirty) console.log(`\nchecking the WORKING TREE, which is not ${head.split(" ")[0]} and is not any commit`);
   else console.log(`\nchecking ${head}`);
 

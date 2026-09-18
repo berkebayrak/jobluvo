@@ -103,7 +103,7 @@ const FIELDS: Record<string, FieldSpec[]> = {
   ],
 };
 
-/** The form's text for a field value, and back. */
+/** The form's text for a field value, and back. An emptied text field is sent as "", an explicit clear the server reads as such; a field the form never shows is not sent, and the server keeps it (review four, finding 11). */
 const toText = (v: unknown, type: FieldSpec["type"]) => (type === "lines" ? (Array.isArray(v) ? v.join("\n") : "") : v == null ? "" : String(v));
 function fromText(text: string, type: FieldSpec["type"]): unknown {
   const t = text.trim();
@@ -113,13 +113,14 @@ function fromText(text: string, type: FieldSpec["type"]): unknown {
       .map((l) => l.replace(/^[-•]\s*/, "").trim())
       .filter(Boolean);
   if (type === "number") return t === "" ? undefined : Number(t);
-  return t === "" ? undefined : t;
+  return t;
 }
 
 /**
  * Every value of a waiting fact, so nothing is confirmed unseen: a role
- * shows each of its lines, not a count of them. Confirmed facts keep the
- * delivered one line row.
+ * shows each of its lines, a skill its evidence line, a project its notes,
+ * a contact each of its parts, never a count or a name alone (review four,
+ * finding 11). Confirmed facts keep the delivered one line row.
  */
 function FactDetail({ f }: { f: Fact }) {
   const d = f.data as Record<string, unknown>;
@@ -164,16 +165,114 @@ function FactDetail({ f }: { f: Fact }) {
       </>
     );
   }
+  if (f.kind === "skill") {
+    return (
+      <>
+        <b style={{ fontWeight: 500 }}>
+          {s("name")}
+          {d.years != null ? `, ${s("years")} years` : ""}
+        </b>
+        <div className="sub">{s("evidence") ? `Where the resume shows it: ${s("evidence")}` : "No line from the resume attached. The scorer and the tailored resume read that line."}</div>
+      </>
+    );
+  }
+  if (f.kind === "project") {
+    return (
+      <>
+        <b style={{ fontWeight: 500 }}>{s("name")}</b>
+        {lines("notes").length ? (
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {lines("notes").map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        ) : (
+          <div className="sub">No lines.</div>
+        )}
+      </>
+    );
+  }
+  if (f.kind === "contact") {
+    const parts = [
+      ["Name", s("name")],
+      ["Email", s("email")],
+      ["Location", s("location")],
+    ].filter(([, v]) => v);
+    return (
+      <>
+        {parts.map(([k, v]) => (
+          <div key={k}>
+            <span className="sub">{k}: </span>
+            {v}
+          </div>
+        ))}
+      </>
+    );
+  }
+  if (f.kind === "answer") {
+    return (
+      <>
+        <b style={{ fontWeight: 500 }}>{s("question")}</b>
+        <div>{s("answer")}</div>
+      </>
+    );
+  }
   return <>{factRow(f, 0).value}</>;
 }
 
-/** The inline edit of one waiting fact. Save posts the whole fact at the version the page showed. */
-function EditForm({ f, busy, onSave, onCancel }: { f: Fact; busy: boolean; onSave: (data: Record<string, unknown>) => void; onCancel: () => void }) {
+/**
+ * The inline edit of one waiting fact. The draft is bound to the version
+ * the editor opened on, and Save posts that version, never the one the
+ * list holds now. When the save comes back as changed, the page reloads
+ * the fact and the form shows the newer value beside the draft; nothing is
+ * resubmitted until the user keeps the draft on that version or discards
+ * it (review four, finding 10).
+ */
+function EditForm({
+  f,
+  busy,
+  conflict,
+  onSave,
+  onCancel,
+  onKeep,
+}: {
+  f: Fact;
+  busy: boolean;
+  conflict: boolean;
+  onSave: (data: Record<string, unknown>, version: number) => void;
+  onCancel: () => void;
+  onKeep: () => void;
+}) {
   const spec = FIELDS[f.kind] ?? [];
+  const [version, setVersion] = useState(f.version);
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(spec.map((x) => [x.key, toText(f.data[x.key], x.type)])));
   const data = () => Object.fromEntries(spec.map((x) => [x.key, fromText(values[x.key] ?? "", x.type)]).filter(([, v]) => v !== undefined));
   return (
     <div style={{ display: "grid", gap: 8 }}>
+      {conflict ? (
+        <div className="sub" style={{ border: "1px solid var(--border)", padding: 8 }}>
+          This fact changed since you opened it. It now reads:
+          <div style={{ margin: "4px 0 6px", color: "var(--fg)" }}>
+            <FactDetail f={f} />
+          </div>
+          Your draft is below, unsaved. Keep it on the current version, or discard it.
+          <div className="row" style={{ gap: 6, marginTop: 6 }}>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
+              Discard my draft
+            </Button>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setVersion(f.version);
+                onKeep();
+              }}
+            >
+              Keep my draft on the current version
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {spec.map((x) =>
         x.type === "lines" ? (
           <label key={x.key} style={{ display: "grid", gap: 4 }}>
@@ -189,7 +288,7 @@ function EditForm({ f, busy, onSave, onCancel }: { f: Fact; busy: boolean; onSav
         <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
           Cancel
         </Button>
-        <Button size="sm" disabled={busy} onClick={() => onSave(data())}>
+        <Button size="sm" disabled={busy || conflict} onClick={() => onSave(data(), version)}>
           Save
         </Button>
       </div>
@@ -301,53 +400,79 @@ export default function ProfilePage() {
    */
   const decide = async (body: Record<string, unknown>, done: string) => {
     setBusy("decide");
-    const r = await fetch("/api/profile/facts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    setBusy(null);
-    const j = (await r.json().catch(() => ({}))) as Partial<DecideResult> & { error?: string };
-    await load();
-    if (!r.ok) {
-      showToast({ text: j.error ? `${j.error.charAt(0).toUpperCase()}${j.error.slice(1)}.` : "That did not save. Try again." });
-      return;
+    try {
+      const r = await fetch("/api/profile/facts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const j = (await r.json().catch(() => ({}))) as Partial<DecideResult> & { error?: string };
+      await load();
+      if (!r.ok) {
+        showToast({ text: j.error ? `${j.error.charAt(0).toUpperCase()}${j.error.slice(1)}.` : "That did not save. Try again." });
+        return;
+      }
+      if (j.asked && j.skipped?.length) {
+        const asked = j.asked.confirm + j.asked.reject;
+        showToast({ text: `${(j.confirmed ?? 0) + (j.rejected ?? 0)} of ${asked} saved. The rest had already changed, the list is refreshed.` });
+        return;
+      }
+      showToast({ text: done });
+    } catch {
+      showToast({ text: "That did not reach Jobluvo. Check your connection and try again." });
+    } finally {
+      setBusy(null);
     }
-    if (j.asked && j.skipped?.length) {
-      const asked = j.asked.confirm + j.asked.reject;
-      showToast({ text: `${(j.confirmed ?? 0) + (j.rejected ?? 0)} of ${asked} saved. The rest had already changed, the list is refreshed.` });
-      return;
-    }
-    showToast({ text: done });
   };
 
-  /** One waiting fact rewritten by the user, at the version the page showed. The reload brings back the next version. */
+  /**
+   * One waiting fact rewritten by the user, at the version the editor opened on. A save refused as changed reloads the fact and
+   * marks the editor in conflict: the draft stays, the newer value is shown, and nothing is resubmitted until the user decides.
+   */
   const [editing, setEditing] = useState<string | null>(null);
-  const saveEdit = async (f: Fact, data: Record<string, unknown>) => {
+  const [conflict, setConflict] = useState<string | null>(null);
+  const saveEdit = async (f: Fact, data: Record<string, unknown>, version: number) => {
     setBusy("decide");
-    const r = await fetch("/api/profile/facts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ edit: { id: f.id, version: f.version, data } }) });
-    setBusy(null);
-    const j = (await r.json().catch(() => ({}))) as { error?: string };
-    if (!r.ok) {
-      showToast({ text: j.error ? `${j.error.charAt(0).toUpperCase()}${j.error.slice(1)}.` : "That did not save. Try again." });
-      if (r.status !== 422) await load();
-      return;
+    try {
+      const r = await fetch("/api/profile/facts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ edit: { id: f.id, version, data } }) });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string };
+      if (!r.ok) {
+        if (j.reason === "changed") {
+          await load();
+          setConflict(f.id);
+          showToast({ text: "This fact changed since you opened it. Check the current version before saving your draft." });
+          return;
+        }
+        showToast({ text: j.error ? `${j.error.charAt(0).toUpperCase()}${j.error.slice(1)}.` : "That did not save. Try again." });
+        if (r.status !== 422) await load();
+        return;
+      }
+      setEditing(null);
+      setConflict(null);
+      await load();
+      showToast({ text: "Saved. Confirm it when it reads right." });
+    } catch {
+      showToast({ text: "That did not reach Jobluvo. Check your connection and try again." });
+    } finally {
+      setBusy(null);
     }
-    setEditing(null);
-    await load();
-    showToast({ text: "Saved. Confirm it when it reads right." });
   };
 
   const upload = async (file: File) => {
     setBusy("upload");
-    const form = new FormData();
-    form.append("file", file);
-    const r = await fetch("/api/profile/upload", { method: "POST", body: form });
-    setBusy(null);
-    if (!r.ok) {
-      const j = (await r.json().catch(() => ({}))) as { error?: string };
-      showToast({ text: j.error ?? "Upload failed." });
-      return;
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const r = await fetch("/api/profile/upload", { method: "POST", body: form });
+      if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        showToast({ text: j.error ?? "Upload failed." });
+        return;
+      }
+      const j = (await r.json()) as { facts: number; issues: string[] };
+      await load();
+      showToast({ text: `${j.facts} facts read from ${file.name}. Check them below.${j.issues.length ? ` ${j.issues.length} lines could not be read as facts; they are listed under the document.` : ""}` });
+    } catch {
+      showToast({ text: "The upload did not reach Jobluvo. Check your connection and try again." });
+    } finally {
+      setBusy(null);
     }
-    const j = (await r.json()) as { facts: number; issues: string[] };
-    await load();
-    showToast({ text: `${j.facts} facts read from ${file.name}. Check them below.${j.issues.length ? ` ${j.issues.length} to look at.` : ""}` });
   };
 
   const resumeFacts = (facts ?? []).filter((f) => RESUME_KINDS.has(f.kind) && f.status !== "rejected");
@@ -569,7 +694,17 @@ export default function ProfilePage() {
                           <span className="k">{row.label}</span>
                           <span className="v" style={{ fontWeight: 400, textAlign: "left" }}>
                             {editing === f.id ? (
-                              <EditForm f={f} busy={busy === "decide"} onSave={(data) => void saveEdit(f, data)} onCancel={() => setEditing(null)} />
+                              <EditForm
+                                f={f}
+                                busy={busy === "decide"}
+                                conflict={conflict === f.id}
+                                onSave={(data, version) => void saveEdit(f, data, version)}
+                                onCancel={() => {
+                                  setEditing(null);
+                                  setConflict(null);
+                                }}
+                                onKeep={() => setConflict(null)}
+                              />
                             ) : (
                               <>
                                 <FactDetail f={f} />

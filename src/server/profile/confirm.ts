@@ -187,7 +187,10 @@ export class EditRefused extends Error {
  * showed; the data must satisfy the kind's schema in facts.ts, the origin
  * becomes "edit", the version moves on, and the fact stays waiting, so
  * what the user confirms next is the text they wrote and nothing else. The
- * evidence stays: it is what the resume said, which the edit corrects.
+ * evidence stays: it is what the resume said, which the edit corrects. An
+ * empty string is an explicit clear and the field goes; a field the edit
+ * does not mention is kept where the kind keeps one (review four, finding
+ * 11).
  */
 export async function editFact(db: DbPool | Tx, userId: string, edit: { id: string; version: number; data: Record<string, unknown> }): Promise<{ id: string; version: number; data: Record<string, unknown> }> {
   return db.transaction(async (tx) => {
@@ -209,7 +212,9 @@ export async function editFact(db: DbPool | Tx, userId: string, edit: { id: stri
     // The evidence a skill carries in its data is the resume's own words for it, read by the scorer and the packet; an edit that
     // does not mention it keeps it, so editing the years cannot silently erase it. The form shows it, so it can be changed on purpose.
     const old = fact.data as Record<string, unknown>;
-    const data = fact.kind === "skill" && edit.data.evidence === undefined && typeof old.evidence === "string" ? { ...edit.data, evidence: old.evidence } : edit.data;
+    const kept = fact.kind === "skill" && edit.data.evidence === undefined && typeof old.evidence === "string" ? { ...edit.data, evidence: old.evidence } : edit.data;
+    // "" is an explicit clear, distinct from omission: the form sends it for a field the user emptied.
+    const data = Object.fromEntries(Object.entries(kept).filter(([, v]) => v !== ""));
     const parsed = schema.safeParse(data);
     if (!parsed.success) throw new EditRefused("invalid", parsed.error.issues.map((i) => `${i.path.join(".") || "value"}: ${i.message}`).join("; "));
     const [row] = await tx

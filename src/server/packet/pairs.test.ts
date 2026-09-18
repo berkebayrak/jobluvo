@@ -36,6 +36,25 @@ import { checkLine, factSet } from "./validate";
  *
  * Add a pair whenever a miss is found in the wild, with its author; never
  * remove one.
+ *
+ * One thing to know before relying on the 26. They are case 1 by definition,
+ * so every one of them is a line a future rule must not block, and a control
+ * that is really a case 3 line would quietly veto any rule built to catch
+ * case 3, which is the thinnest column in the set. Two sit close to that line
+ * and are named here rather than reclassified, because which side they fall on
+ * is the user's call and not this file's (D-041):
+ *
+ *   "Used Salesforce for the sales pipeline."
+ *     -> "Used Salesforce to run the sales pipeline."
+ *        The fact does not say the person ran the pipeline.
+ *
+ *   "Delivered 9 growth projects for banks, using a conjoint study of 2,000
+ *    customers that lifted ARPU 6 percent."
+ *     -> "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent."
+ *        "using" becomes "ran": the fact does not say who ran the study.
+ *
+ * So "26 of 26 truthful pass" is not evidence that the control set is
+ * conservative. It says these 26 pass.
  */
 
 const RESUME = { rowId: "r", origin: "upload" as const, hasEvidence: true };

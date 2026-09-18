@@ -90,6 +90,22 @@ describe("normaliser", () => {
     expect(readNumbers("one million hundred")).toEqual({ text: "one million hundred", unreadable: ["one million hundred"] });
     expect(readNumbers("eight teams").unreadable).toEqual([]);
   });
+  it("review four, finding 7: a tens word takes a units word under ten only, digits scale a hundred, every separator drops, and a sign stays", () => {
+    expect(readNumbers("twenty ten teams")).toEqual({ text: "twenty ten teams", unreadable: ["twenty ten"] });
+    expect(normaliseNumbers("2 hundred users")).toBe("200 users");
+    expect(normaliseNumbers("1,234,567,890,123 rows")).toBe("1234567890123 rows");
+    expect(normaliseNumbers("achieved -11 percent growth")).toBe("achieved -11 percent growth");
+    expect(normaliseNumbers("USD 175k-215k")).toBe("usd 175000 215000");
+    expect(normaliseNumbers("2019-2023")).toBe("2019 2023");
+    expect(valuesOf("achieved -11 percent growth")).toEqual(new Set(["pct:-11"]));
+    expect(valuesOf("constructor 2023")).toEqual(new Set(["year:2023"]));
+    expect(valuesOf("toString 2023 and valueOf 2024")).toEqual(new Set(["year:2023", "year:2024"]));
+    expect(valuesOf("a study of 2,000 customers")).toEqual(new Set(["num:2000"]));
+    expect(valuesOf("joined in 2000")).toEqual(new Set(["year:2000"]));
+    expect(valuesOf("in 2023 revenue grew 20 percent")).toEqual(new Set(["year:2023", "pct:20"]));
+    expect(valuesOf("class of 2020")).toEqual(new Set(["year:2020"]));
+    expect(valuesOf("Sep 2023 to Jan 2024")).toEqual(new Set(["date:2023-09", "date:2024-01"]));
+  });
   it("reads dates, percentages and money into one form each", () => {
     expect(valuesOf("Jan 2023")).toEqual(new Set(["date:2023-01"]));
     expect(valuesOf("January 2023")).toEqual(new Set(["date:2023-01"]));

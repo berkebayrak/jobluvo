@@ -36,7 +36,8 @@ function retainedIndex(outcomes: string[]): number {
 }
 
 function main() {
-  const { values } = parseFlags(process.argv.slice(2), { booleans: [], values: ["dir", "run", "answers"] } as const);
+  const { values, booleans } = parseFlags(process.argv.slice(2), { booleans: ["examples"], values: ["dir", "run", "answers"] } as const);
+  const examples = booleans.examples;
   const dir = values.dir ?? "design/snapshots/2026-09-18-packets";
   const run = values.run ?? "families-18sep-changes";
   const read = <T>(name: string): T => JSON.parse(readFileSync(join(dir, name), "utf8")) as T;
@@ -139,6 +140,57 @@ function main() {
     out("| Packet | Stored | Attempts as run | Retained | Re-read per attempt | Category |");
     out("|---|---|---|---|---|---|");
     for (const r of differing) out(`| ${r.id.slice(0, 8)} | ${r.stored} | ${r.outcomes.join(" > ")} | ${r.retained + 1} | ${r.reread.join(" > ")} | ${r.category} |`);
+    out();
+  }
+
+  // What the rules as they stand add to or remove from the retained attempt's stored findings: the delta a rule change owes before it ships.
+  out("## Findings the rules as they stand add or remove on the retained attempts");
+  out();
+  const added = new Map<string, number>();
+  const removed = new Map<string, number>();
+  const addedPackets = new Map<string, Set<string>>();
+  const sig = (f: PacketFinding) => `${f.level}: ${f.message}${f.detail && /says|fact:/.test(f.detail) ? "" : ""}`;
+  for (const p of packets) {
+    const o = byJob.get(p.jobId);
+    if (!o) continue;
+    const retained = retainedIndex(o.attemptLog);
+    const cs = o.changeSets[retained];
+    if (!cs) continue;
+    const now = validateChangeSet(cs, base, set, posting(o)).filter((f) => f.level !== "soft");
+    const was = p.findings.filter((f) => f.level !== "soft");
+    const key = (f: PacketFinding) => `${f.level}|${f.bullet}|${f.message}|${f.value ?? ""}`;
+    const wasKeys = new Set(was.map(key));
+    const nowKeys = new Set(now.map(key));
+    for (const f of now) if (!wasKeys.has(key(f))) { added.set(sig(f), (added.get(sig(f)) ?? 0) + 1); addedPackets.set(sig(f), (addedPackets.get(sig(f)) ?? new Set()).add(p.id)); }
+    for (const f of was) if (!nowKeys.has(key(f))) removed.set(sig(f), (removed.get(sig(f)) ?? 0) + 1);
+  }
+  out("| Added, by finding | Edits | Packets |");
+  out("|---|---|---|");
+  for (const [k, n] of [...added].sort((a, b) => b[1] - a[1])) out(`| ${k} | ${n} | ${addedPackets.get(k)?.size ?? 0} |`);
+  out();
+  out("| Removed, by finding | Edits |");
+  out("|---|---|");
+  for (const [k, n] of [...removed].sort((a, b) => b[1] - a[1])) out(`| ${k} | ${n} |`);
+  out();
+  if (examples) {
+    out("Examples of added findings, first 40:");
+    out();
+    let shown = 0;
+    for (const p of packets) {
+      const o = byJob.get(p.jobId);
+      if (!o) continue;
+      const cs = o.changeSets[retainedIndex(o.attemptLog)];
+      if (!cs) continue;
+      const now = validateChangeSet(cs, base, set, posting(o)).filter((f) => f.level !== "soft");
+      const wasKeys = new Set(p.findings.map((f) => `${f.level}|${f.bullet}|${f.message}|${f.value ?? ""}`));
+      for (const f of now) {
+        if (wasKeys.has(`${f.level}|${f.bullet}|${f.message}|${f.value ?? ""}`) || shown >= 40) continue;
+        const line = f.bullet === "summary" ? cs.summary : cs.changes.find((c) => c.bullet === f.bullet)?.text;
+        out(`- ${p.id.slice(0, 8)} ${f.bullet} [${f.level}] ${f.message} (${f.value ?? ""}) ${f.detail ?? ""}`);
+        out(`  line: ${line}`);
+        shown += 1;
+      }
+    }
     out();
   }
 

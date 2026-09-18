@@ -133,6 +133,15 @@ export function parseDocument(text: string): DocumentOutput {
 }
 
 /** The stable message: every confirmed fact with its id. */
+/**
+ * The revision of the prompt: the messages, the schemas and the retry
+ * instruction together. Bumped with every change to any of them, and
+ * written into a sample's saved answers so a measurement says which prompt
+ * produced the answers it is reading (review four, finding 18). p2 is the
+ * retry being shown the answer it is correcting (finding 14).
+ */
+export const PROMPT_REVISION = "2026-09-18.p2";
+
 export function factsBlock(entries: FactEntry[]): string {
   return ["CANDIDATE FACTS, each with its id", "", ...entries.map((e) => `${e.id}: ${e.text}`)].join("\n");
 }

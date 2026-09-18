@@ -7,6 +7,7 @@ import { applyChanges, baseResume, factEntries, resumeHash, shapedResume, type C
 import { CITATION_KIND, CITATION_KINDS, codeOf, type CitationKind } from "@/server/packet/codes";
 import { classifyRetry, mergeRetry } from "@/server/packet/retry";
 import { factSet, isHard, needsReview, validateChangeSet } from "@/server/packet/validate";
+import { readAnswers } from "@/server/packet/answers";
 
 /*
  * Reconciles a stored sample against its saved answers, packet by packet,
@@ -45,7 +46,10 @@ function main() {
   const run = values.run ?? "families-18sep-changes";
   const read = <T>(name: string): T => JSON.parse(readFileSync(join(dir, name), "utf8")) as T;
   const packets = (read<Packet[]>("packets.json")).filter((p) => p.run === run);
-  const saved = read<SavedOutcome[]>(values.answers ?? "families-18sep-saved-answers.json");
+  // Either format: a bare array from before headers existed, or a file with one (finding 18).
+  const answersFile = readAnswers(readFileSync(join(dir, values.answers ?? "families-18sep-saved-answers.json"), "utf8"));
+  const saved = answersFile.outcomes as unknown as SavedOutcome[];
+  const header = answersFile.header;
   const profiles = read<Record<string, Profile>>("profiles.json");
   const costs = (read<CostRow[]>("cost_events.json")).filter((c) => c.run === run);
 
@@ -65,6 +69,21 @@ function main() {
   out(`# Reconciliation of ${run}, read from ${dir}`);
   out();
   out(`Packets ${packets.length}, saved answers ${saved.length}, cost rows ${costs.length}. Profile ${hashes[0]!.slice(0, 12)}, ${factEntries(facts).length} facts. Rules as they stand at the code revision this ran on; the baseline is the stored status and findings, read before any rule was applied.`);
+  out();
+  // What produced the answers, from their own header, and whether it matches what is being read against them.
+  if (header) {
+    out(
+      `The answers say they came from run ${header.run}, started ${header.startedAt}, model ${header.model}, prompt ${header.promptRevision}, validator ${header.validatorRevision}, over ${header.jobs} jobs, on profile ${header.factsHash.slice(0, 12)}.`,
+    );
+    if (header.factsHash !== hashes[0]) throw new Error(`the answers were written against profile ${header.factsHash.slice(0, 12)} and the packets are on ${hashes[0]!.slice(0, 12)}`);
+    const rebuilt = resumeHash(base);
+    if (header.baseResumeHash !== rebuilt) throw new Error(`the base resume rebuilt here (${rebuilt.slice(0, 12)}) is not the one the answers were edits to (${header.baseResumeHash.slice(0, 12)})`);
+    out(`The profile and the base resume the answers were written against are the ones rebuilt here.`);
+  } else {
+    out("The answers carry no header: written before a sample recorded what produced it (finding 18). The model, the prompt revision and the validator revision behind them are not on record and are not guessed here.");
+  }
+  // A run that died part way saves what it finished, so a short file is a fact about the run, not a broken read.
+  if (header && saved.length < header.jobs) out(`The file is short: ${saved.length} of the ${header.jobs} jobs the run meant to do.`);
   out();
 
   const byJob = new Map(saved.map((o) => [o.jobId, o]));

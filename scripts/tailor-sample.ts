@@ -1,12 +1,10 @@
-import { writeFileSync } from "node:fs";
 import { dbPool } from "@/db/client";
 import { resumeFacts } from "@/server/match/profile";
 import { cellStats, citationStats, runStats } from "@/server/match/report";
 import { loadScoringJobs } from "@/server/match/run";
 import { stratifiedSample } from "@/server/match/sample";
-import { factEntries } from "@/server/packet/resume";
+import { baseResume, factEntries } from "@/server/packet/resume";
 import { tailorJob, type TailorOutcome } from "@/server/packet/run";
-import { baseResume } from "@/server/packet/resume";
 import { factSet, isHard, needsReview, validateChangeSet } from "@/server/packet/validate";
 import type { ResumeFacts } from "@/server/match/profile";
 import { factsBlock } from "@/server/packet/tailor";
@@ -14,6 +12,10 @@ import { filterFacts } from "@/server/profile/viewer";
 import { currentUserId } from "@/server/user";
 import { oneOf, parseFlags, positiveInteger } from "@/lib/cli";
 import { CITATION_KIND, CITATION_KINDS, codeOf, type FindingCode } from "@/server/packet/codes";
+import { answersHeader, savedAnswer, writeAnswers, type SavedAnswer } from "@/server/packet/answers";
+import { PROMPT_REVISION } from "@/server/packet/tailor";
+import { VALIDATOR_REVISION } from "@/server/packet/validate";
+import { env } from "@/lib/env";
 
 /*
  * The tailoring half of the phase 0 instrument (D-003): the same 100 jobs
@@ -44,14 +46,18 @@ import { CITATION_KIND, CITATION_KINDS, codeOf, type FindingCode } from "@/serve
 
 const FLAGS = { booleans: ["dry", "no-store"], values: ["n", "only", "model", "tag", "save"] } as const;
 
-async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>, each?: (r: R, done: number) => void): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
+  let done = 0;
   const worker = async () => {
     for (;;) {
       const i = next++;
       if (i >= items.length) return;
       out[i] = await fn(items[i]);
+      done += 1;
+      // Each outcome is handed over as it lands, so a run that dies has everything it had finished (finding 18).
+      each?.(out[i], done);
     }
   };
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
@@ -198,18 +204,35 @@ async function main() {
 
   if (only !== "document") {
     const run = `${tag}-changes`;
-    const outcomes = await pool(jobs, 5, (job) => tailorJob(db, facts, job, { mode: "changes", model, run, store }));
+    // The header says what produced these answers, so a measurement reading them next week is not told by hand (finding 18).
+    const header = save
+      ? answersHeader({
+          run,
+          startedAt: new Date().toISOString(),
+          model: model ?? env().MODEL_TAILOR ?? "gpt-5.6-luna",
+          promptRevision: PROMPT_REVISION,
+          validatorRevision: VALIDATOR_REVISION,
+          factsHash: facts.factsHash,
+          baseResume: baseResume(facts),
+          jobs: jobs.length,
+        })
+      : null;
+    const saved: SavedAnswer[] = [];
+    const outcomes = await pool(
+      jobs,
+      5,
+      (job) => tailorJob(db, facts, job, { mode: "changes", model, run, store }),
+      (o, done) => {
+        if (!save || !header) return;
+        // Written after every outcome, through a temporary file and a rename: the cost of a crash is one answer.
+        saved.push(savedAnswer(o));
+        writeAnswers(save, header, saved);
+        if (done === 1 || done % 10 === 0 || done === jobs.length) console.log(`  saved ${done} of ${jobs.length} to ${save}`);
+      },
+    );
     summarise(run, outcomes);
     scopes(facts, outcomes);
-    if (save) {
-      writeFileSync(
-        save,
-        JSON.stringify(
-          outcomes.map((o) => ({ jobId: o.jobId, status: o.status, attempts: o.attempts, selected: o.selected, usd: o.usd, attemptLog: o.attemptLog, changeSets: o.changeSets, posting: [...o.posting] })),
-        ),
-      );
-      console.log(`saved ${outcomes.length} outcomes to ${save}`);
-    }
+    if (save) console.log(`saved ${saved.length} outcomes to ${save}, header run ${run}, prompt ${PROMPT_REVISION}, validator ${VALIDATOR_REVISION}, facts ${facts.factsHash.slice(0, 12)}`);
   }
   if (only !== "changes") {
     const run = `${tag}-document`;

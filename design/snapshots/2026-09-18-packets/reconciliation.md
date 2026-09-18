@@ -2,6 +2,8 @@
 
 Packets 80, saved answers 80, cost rows 128. Profile c9f231127f13, 40 facts. Rules as they stand at the code revision this ran on; the baseline is the stored status and findings, read before any rule was applied.
 
+The answers carry no header: written before a sample recorded what produced it (finding 18). The model, the prompt revision and the validator revision behind them are not on record and are not guessed here.
+
 ## Statuses, three readings of the same 80 answers
 
 | Reading | Ready | Held | Invalid | None |
@@ -146,6 +148,8 @@ Answers with both a first and a retained attempt parsed: 80 of 80. Counted in ci
 |---|---|---|---|---|---|---|---|---|
 | First attempt | 394 | 25 | 22 | 0 | 0 | 39 | 9.90 | 0 |
 | Retained attempt | 240 | 4 | 2 | 0 | 0 | 5 | 2.08 | 0 |
+
+The retained attempt has 154 fewer cited lines than the first, 39 percent of them, because a retry that drops a line drops its citation problem with it (finding 14). Read the two rates against that: a line deleted is not a line corrected. The merge rule of finding 14 puts back the lines the validator had not objected to, so a run under it does not lose the denominator this way.
 
 ## Spend, every cost row tied to an attempt
 

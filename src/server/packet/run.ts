@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
-import { costEvents, packets, type PacketFinding, type ResumeDocument } from "@/db/schema";
+import { packets, type PacketFinding, type ResumeDocument } from "@/db/schema";
+import { recordCost } from "@/server/cost";
 import { env } from "@/lib/env";
 import { resumeFacts, type ResumeFacts } from "@/server/match/profile";
 import { loadScoringJobs } from "@/server/match/run";
@@ -185,7 +186,9 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     totals.tokensOut += r.usage.outputTokens;
     totals.usd += r.usd;
     totals.ms += r.ms;
-    await db.insert(costEvents).values({
+    // The worksheet is not the work: a row that cannot be written is reported and dropped, never thrown, so a paid and
+    // validated answer is still stored and a failed call still reports why it failed (finding 16).
+    await recordCost(db, {
       kind: "tailor",
       model,
       userId: facts.userId,

@@ -13,7 +13,7 @@ export { normaliseNumbers } from "./normalise";
  * `npm run validator-report` restamps the stored packets under the new
  * one (D-017).
  */
-export const VALIDATOR_REVISION = "2026-09-18.r5";
+export const VALIDATOR_REVISION = "2026-09-18.r6";
 
 /*
  * The guarantee behind "nothing is added that is not on your profile".

@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dbPool, type Tx } from "@/db/client";
 import { jobs, packets, sources, users, type PacketFinding, type ResumeDocument } from "@/db/schema";
-import { applyReplay, replayDecision, sameDocument, summaryNotRevalidated, unverifiable, type ReplayRow } from "./replay";
+import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, summaryNotRevalidated, unreplayable, unverifiable, type ReplayRow } from "./replay";
 import { resumeHash } from "./resume";
 import { consumableResume } from "./run";
 import { VALIDATOR_REVISION } from "./validate";
@@ -180,7 +180,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(resumeHash(r.resume!)).toBe(r.resumeHash);
       expect(Object.keys(r.resume!)).not.toEqual(Object.keys(doc));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, stale: 0, untouched: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 0, stale: 0, untouched: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("invalid");
       expect(after.resume).toBeNull();
@@ -197,7 +197,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       // A new run lands on the same user and job after the report read it.
       await tx.update(packets).set({ status: "needs_review", findings: [summaryReview], updatedAt: sql`now() + interval '1 second'` }).where(eq(packets.id, id));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, stale: 1, untouched: 0 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 1, untouched: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("needs_review");
       expect(after.findings).toEqual([summaryReview]);
@@ -212,7 +212,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(consumableResume(r)).toEqual(r.resume);
       // The base plus the stored changes is not the stored resume: the candidate is a different document.
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [], drifted) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 1, stale: 0, untouched: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 1, held: 0, stale: 0, untouched: 0 });
       const after = await read(tx, id);
       // The assertion is on the gate, not on the decision: nothing downstream may consume this row.
       expect(consumableResume(after)).toBeNull();
@@ -223,6 +223,52 @@ describe.skipIf(!hasDb)("replay write guard", () => {
     });
   });
 
+  it("holds a ready row no profile reproduces, keeps its resume, and the gate stops serving it", async () => {
+    await withPacket(async (tx, id) => {
+      const r = await read(tx, id);
+      // Before: ready, and the gate serves the stored document on evidence nothing can check.
+      expect(consumableResume(r)).toEqual(r.resume);
+      const result = await applyReplay(tx, [{ row: r, decision: unreplayable(r, profileNotReproducible()) }]);
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 1, stale: 0, untouched: 0 });
+      const after = await read(tx, id);
+      // The assertion is on the gate: nothing downstream may consume this row.
+      expect(consumableResume(after)).toBeNull();
+      expect(after.status).toBe("needs_review");
+      // Held, not destroyed: the document may be perfectly good and what is missing is the evidence to say so.
+      expect(after.resume).toEqual(r.resume);
+      expect(after.findings.map((f) => f.code)).toContain("profile-not-reproducible");
+    });
+  });
+
+  it("holds a ready row whose posting has moved, so a stamp is never made from a different question", async () => {
+    await withPacket(async (tx, id) => {
+      const r = await read(tx, id);
+      // The replay itself finds nothing wrong; the input it read is not the one the model was given.
+      const decision = replayDecision(r, [], r.resume, [postingMoved()]);
+      expect(decision.kind).toBe("restamp");
+      expect(decision.kind === "restamp" && decision.status).toBe("needs_review");
+      const result = await applyReplay(tx, [{ row: r, decision }]);
+      expect(result.restamped).toBe(1);
+      const after = await read(tx, id);
+      expect(consumableResume(after)).toBeNull();
+      expect(after.findings.map((f) => f.code)).toContain("posting-moved");
+    });
+  });
+
+  it("leaves a failed or invalid row alone when nothing can revalidate it, since neither is consumable", async () => {
+    await withPacket(async (tx, id) => {
+      const r = await read(tx, id);
+      for (const status of ["failed", "invalid"]) {
+        expect(unreplayable({ ...r, status }, profileNotReproducible())).toEqual({ kind: "no_candidate" });
+      }
+      // And a repeated hold does not stack the same reason twice.
+      const once = unreplayable(r, profileNotReproducible());
+      const twice = unreplayable({ ...r, findings: once.kind === "hold" ? once.findings : [] }, profileNotReproducible());
+      expect(twice.kind === "hold" && twice.findings.filter((f) => f.code === "profile-not-reproducible")).toHaveLength(1);
+      expect((await read(tx, id)).status).toBe("ready");
+    });
+  });
+
   it("writes nothing for a decision that is not a restamp", async () => {
     await withPacket(async (tx, id) => {
       const r = await read(tx, id);
@@ -230,7 +276,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
         { row: r, decision: { kind: "no_candidate" } },
         { row: r, decision: { kind: "no_resume", would: "ready", findings: [], coverage: "bullets" } },
       ]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, stale: 0, untouched: 2 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 2 });
       expect((await read(tx, id)).status).toBe("ready");
     });
   });

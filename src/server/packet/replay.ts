@@ -31,6 +31,20 @@ import { isHard, needsReview, VALIDATOR_REVISION } from "./validate";
  *    was the way the repair failed open (review four, finding 1): the row
  *    stayed ready and consumableResume kept serving a document nothing
  *    could verify.
+ * 6. A row that cannot be revalidated at all is held, not left alone.
+ *    Two ways that happens, and the first is how the repair of #56 still
+ *    failed open (review five, finding 6). When no profile on hand
+ *    reproduces the packet's facts hash, there is nothing to validate
+ *    against; the report called that "excluded", left the row out of the
+ *    write, and a ready row stayed ready and stayed consumable. When the
+ *    job's text has moved since the packet was written, the posting the
+ *    validator reads is not the posting the model was given, so a stamp
+ *    made from it describes a different question. Both hold the row: a
+ *    review finding says which, the resume is kept for a person, and a
+ *    later replay can promote it again once the input is back. Held is
+ *    the right level and invalid is not: the stored resume may be
+ *    perfectly good, and what is missing is the evidence to say so.
+ *
  * 5. Coverage is named. A row that stores its change set is replayed
  *    whole, summary and skill order included, and nothing is retained
  *    from the original run: the stamp means "passes the rules as they
@@ -65,12 +79,22 @@ export type ReplayCoverage = "full" | "bullets";
 export type ReplayDecision =
   | { kind: "restamp"; status: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument | null; coverage: ReplayCoverage }
   | { kind: "revoke"; status: "invalid"; would: ReplayStatus; findings: PacketFinding[]; resume: null; coverage: ReplayCoverage }
+  /** The row could not be revalidated at all, so it is held and its resume kept: not consumable, not destroyed. */
+  | { kind: "hold"; status: "needs_review"; findings: PacketFinding[]; resume: ResumeDocument | null; why: string }
   | { kind: "no_candidate" }
   | { kind: "no_resume"; would: ReplayStatus; findings: PacketFinding[]; coverage: ReplayCoverage };
 
 /** The review finding a legacy row with a summary carries: the replay read its bullets and could not read its summary again. */
 export const SUMMARY_NOT_REVALIDATED = "summary not revalidated: the packet stores no change set";
 export const summaryNotRevalidated = (): PacketFinding => ({ level: "review", bullet: "summary", code: "summary-not-revalidated", message: SUMMARY_NOT_REVALIDATED });
+
+/** The review finding a row carries when no profile on hand reproduces the facts it was built on. */
+export const PROFILE_NOT_REPRODUCIBLE = "profile not reproducible: no fact set on hand has this packet's facts hash, so nothing on it could be revalidated";
+export const profileNotReproducible = (): PacketFinding => ({ level: "review", bullet: null, code: "profile-not-reproducible", message: PROFILE_NOT_REPRODUCIBLE });
+
+/** The review finding a row carries when the job's text has moved since the packet was written. */
+export const POSTING_MOVED = "posting moved: the job's text has changed since this packet was written, so the words the model was given cannot be read again";
+export const postingMoved = (): PacketFinding => ({ level: "review", bullet: null, code: "posting-moved", message: POSTING_MOVED });
 
 /** The hard finding a revoked row carries: nothing can verify the document it stored. */
 export const UNVERIFIABLE_RESUME = "stored resume is not the base plus the stored changes";
@@ -92,12 +116,26 @@ export const sameDocument = (a: ResumeDocument, b: ResumeDocument): boolean => r
  * @param replayed the validator's findings today: over the whole stored change set when the row has one, over the stored bullet changes otherwise
  * @param candidate the base plus the stored change set, or the base plus the stored changes and the stored summary on a legacy row; null when the row has no resume to rebuild
  */
-export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candidate: ResumeDocument | null): ReplayDecision {
+/**
+ * A row nothing could revalidate: held with the reason, its resume kept. A
+ * failed row has nothing to hold and an invalid one is already off every
+ * consumable path, so both are left where they are.
+ */
+export function unreplayable(row: ReplayRow, finding: PacketFinding): ReplayDecision {
+  if (row.status !== "ready" && row.status !== "needs_review") return { kind: "no_candidate" };
+  // The stored findings are kept beside the reason: nothing was re-read, so nothing the row already carried is withdrawn.
+  return { kind: "hold", status: "needs_review", findings: [...row.findings.filter((f) => f.code !== finding.code), finding], resume: row.resume, why: finding.message };
+}
+
+/**
+ * @param extra findings that hold the row whatever the replay finds, for an input the replay could not read the way the run did
+ */
+export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candidate: ResumeDocument | null, extra: PacketFinding[] = []): ReplayDecision {
   if (row.status === "failed") return { kind: "no_candidate" };
   const coverage: ReplayCoverage = row.changeSet ? "full" : "bullets";
   // Full coverage retains nothing; bullets only keeps the summary's old findings and, when there is a summary, holds the row on it.
   const legacySummary = coverage === "bullets" && !!row.resume?.summary;
-  const findings = coverage === "full" ? replayed : [...replayed, ...retainedFindings(row.findings), ...(legacySummary ? [summaryNotRevalidated()] : [])];
+  const findings = [...(coverage === "full" ? replayed : [...replayed, ...retainedFindings(row.findings), ...(legacySummary ? [summaryNotRevalidated()] : [])]), ...extra];
   const status = statusOf(findings);
   if (status === "invalid") return { kind: "restamp", status, findings, resume: null, coverage };
   if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) {
@@ -115,6 +153,8 @@ export interface ApplyResult {
   changedStatus: number;
   /** Of those, ready or held rows revoked to invalid because their stored resume could not be verified. */
   revoked: number;
+  /** Of those, rows held because nothing could revalidate them: the profile is gone or the posting moved. */
+  held: number;
   /** Rows refused because they moved between the read and the write. */
   stale: number;
   /** Rows the decision left alone: no candidate, or no resume to promote. */
@@ -123,12 +163,13 @@ export interface ApplyResult {
 
 /** Writes each restamp, guarded by the `updated_at` the row was read with, so a packet replaced under the report is never stamped with findings from its predecessor. */
 export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; decision: ReplayDecision }[]): Promise<ApplyResult> {
-  const out: ApplyResult = { restamped: 0, changedStatus: 0, revoked: 0, stale: 0, untouched: 0 };
+  const out: ApplyResult = { restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 0 };
   for (const { row, decision } of decisions) {
-    if (decision.kind !== "restamp" && decision.kind !== "revoke") {
+    if (decision.kind !== "restamp" && decision.kind !== "revoke" && decision.kind !== "hold") {
       out.untouched += 1;
       continue;
     }
+    // A hold keeps the resume it could not verify, for the review screen, and the status stops it being consumed.
     const written = await db
       .update(packets)
       .set({
@@ -148,6 +189,7 @@ export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; 
     out.restamped += 1;
     if (row.status !== decision.status) out.changedStatus += 1;
     if (decision.kind === "revoke") out.revoked += 1;
+    if (decision.kind === "hold") out.held += 1;
   }
   return out;
 }

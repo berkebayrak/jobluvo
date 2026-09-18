@@ -7,8 +7,10 @@ import { entityFindings, entityTokens, lemmasOf, nounShaped, tokensOf } from "./
  * every test below that asked it. What is left is the existence check and the
  * claim position scope that keeps the posting rule off ordinary rewording.
  *
- * These findings are hard now, not review: the user's rule is that a name in
- * no confirmed fact rejects the packet.
+ * Every finding here is review, never hard (D-036). All of them rest on
+ * reading a word's shape, and a shape is a guess: a guess may hold a packet
+ * for a person, it may not destroy the work. The value check in validate.ts is
+ * the only one certain enough to reject.
  */
 
 const profile = lemmasOf(
@@ -85,15 +87,17 @@ describe("findings", () => {
     expect(found("Used Excel")).toEqual([]);
   });
 
-  it("rejects a name that is in no confirmed fact, by form, by capital, or at the start of a sentence", () => {
+  it("holds a name that is in no confirmed fact, by form, by capital, or at the start of a sentence", () => {
     expect(found("Built C++ applications")).toEqual([["C++", "name appears in no confirmed fact", "by its form"]]);
     expect(found("Built dashboards using Tableau")).toEqual([["Tableau", "name appears in no confirmed fact", "capitalised"]]);
     expect(found("Reported EBITDA to the CEO")).toEqual([["EBITDA", "name appears in no confirmed fact", "by its form"]]);
     expect(found("Salesforce implementation specialist")).toEqual([["Salesforce", "name appears in no confirmed fact", "opens the sentence and is not a verb"]]);
-    expect(entityFindings("Built C++ applications", "R1.1", profile, none)[0].level).toBe("hard");
+    expect(entityFindings("Built C++ applications", "R1.1", profile, none)[0].level).toBe("review");
+    // The tailored line survives a guess. That is the whole of D-036.
+    expect(entityFindings("Built C++ applications", "R1.1", profile, none).some((f) => f.level === "hard")).toBe(false);
   });
 
-  it("rejects a word the model took from the posting, in a claim position, that no fact carries", () => {
+  it("holds a word the model took from the posting, in a claim position, that no fact carries", () => {
     expect(found("Implemented salesforce workflows", lemmasOf("Salesforce experience required"))).toEqual([
       ["salesforce", "word from the posting appears in no confirmed fact", "the posting uses it"],
     ]);
@@ -102,7 +106,7 @@ describe("findings", () => {
     expect(found("Built dashboards and recruitment systems", lemmasOf("Salesforce, recruitment systems")).map((f) => f[0]).sort()).toEqual(["recruitment", "systems"]);
   });
 
-  it("rejects a qualification no fact carries, and passes one a fact supports", () => {
+  it("holds a qualification no fact carries, and passes one a fact supports", () => {
     expect(found("Certified in Excel")).toEqual([["Certified", "qualification appears in no confirmed fact", "a certification or licence is a claim wherever it stands"]]);
     const certified = new Set([...profile, ...lemmasOf("Certified Scrum Master since 2019.")]);
     expect(entityFindings("Certified in Excel", "R1.1", certified, none)).toEqual([]);

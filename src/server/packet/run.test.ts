@@ -301,36 +301,35 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       const out = await tailorJob(tx, facts, job);
       expect(out.status).toBe("invalid");
       expect(out.attempts).toBe(2);
-      expect(out.findings.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["Leader", "num:7", "year:2019"]);
+      expect(out.findings.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:7", "year:2019"]);
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("invalid");
       expect(p.resume).toBeNull();
-      expect(p.findings.filter((f) => f.level === "hard")).toHaveLength(3);
-      // "Leader" opens the summary, is not a verb and is on no fact. It was held before and rejects the packet now (D-034).
-      expect(p.findings.filter((f) => f.level === "review")).toEqual([]);
+      expect(p.findings.filter((f) => f.level === "hard")).toHaveLength(2);
+      // "Leader" opens the summary, is not a verb and is on no fact: held (D-036). The packet is invalid on its values regardless.
+      expect(p.findings.filter((f) => f.level === "review").map((f) => f.value)).toEqual(["Leader"]);
     });
   });
 
-  it("a name in no fact rejects the packet, earns one retry, and leaves no resume to consume", async () => {
+  it("a name in no fact holds the packet, keeps the resume, and does not spend a second call on a guess", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
       const line = { bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] };
       call().mockResolvedValueOnce(answer([line])).mockResolvedValueOnce(answer([line]));
       const out = await tailorJob(tx, facts, job);
-      // "KPI" is on no fact. This was a hold before the meaning comparison came out; the user's rule makes it hard (D-034).
-      // "with KPI reporting" attaching words the fact does not have was the other finding here, and that rule is gone.
-      expect(out.status).toBe("invalid");
-      expect(out.attempts).toBe(2);
-      expect(call()).toHaveBeenCalledTimes(2);
-      const retry = call().mock.calls[1][2];
-      expect(retry.retryOf?.map((f) => f.value)).toEqual(["KPI"]);
-      expect(holding(out.findings).map((f) => [f.level, f.value])).toEqual([["hard", "KPI"]]);
+      // "KPI" is on no fact, read from the shape of the word. A guess holds the packet and never destroys the work (D-036),
+      // and it is not on the actionable list, so no second paid call is spent asking a model to fix a guess.
+      expect(out.status).toBe("needs_review");
+      expect(out.attempts).toBe(1);
+      expect(call()).toHaveBeenCalledTimes(1);
+      expect(holding(out.findings).map((f) => [f.level, f.value])).toEqual([["review", "KPI"]]);
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
-      expect(p.status).toBe("invalid");
-      expect(p.resume).toBeNull();
-      // The one door downstream: a rejected packet has no resume, a ready one's leaves through it.
+      expect(p.status).toBe("needs_review");
+      expect(p.resume).not.toBeNull();
+      expect(p.resume?.experience[0].bullets[0].text).toBe(line.text);
+      // The one door downstream: a held packet's resume does not leave through it, a ready one's does.
       expect(consumableResume(p)).toBeNull();
-      expect(consumableResume({ ...p, status: "ready", resume: facts ? p.resume : null })).toBeNull();
+      expect(consumableResume({ ...p, status: "ready" })).toEqual(p.resume);
     });
   });
 

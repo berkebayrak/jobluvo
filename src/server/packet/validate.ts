@@ -13,17 +13,27 @@ export { normaliseNumbers } from "./normalise";
  * `npm run validator-report` restamps the stored packets under the new
  * one (D-017).
  */
-export const VALIDATOR_REVISION = "2026-09-18.r7";
+export const VALIDATOR_REVISION = "2026-09-18.r8";
 
 /*
  * The guarantee behind "nothing is added that is not on your profile", and
  * only that.
  *
  * One question is asked of a proposed line: does every value and every name
- * in it appear somewhere in the user's confirmed facts. A value or a name
- * that appears nowhere is a hard finding and rejects the packet; the model
- * can fix an invention from the finding, so a hard finding earns one retry,
- * then the packet is invalid.
+ * in it appear somewhere in the user's confirmed facts.
+ *
+ * What the answer costs the packet depends on how certain the question was
+ * (D-036). A number or an amount in no confirmed fact is fabrication and
+ * nothing else: the reader is a pattern that matched a figure, and a figure
+ * either appears on the profile or it does not. That rejects the packet, and
+ * earns the one retry. A name in no confirmed fact is a guess about a word's
+ * shape, and shapes are wrong often enough that three false positive families
+ * turned up in a day and a fourth has no fix. That holds the packet for a
+ * person, with the tailored resume kept and the word named.
+ *
+ * The general rule, which every check added here answers to: a finding may
+ * reject a packet only when what it found is certain. A finding derived from a
+ * guess holds instead. A new check that cannot say which it is, holds.
  *
  * The lookup is profile wide, not against the facts the line cites. That is
  * the user's decision (D-034) and it is the whole of what the code now

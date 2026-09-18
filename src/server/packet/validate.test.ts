@@ -184,22 +184,26 @@ describe("the lookup is profile wide, not against the cited facts", () => {
     expect(checkLine("Used constructor injection across the teams.", "R1.2", ["R1.2"], odd).filter((f) => f.level !== "soft")).toEqual([]);
   });
 
-  it("rejects a name in no confirmed fact, and passes one the profile has under any role", () => {
-    expect(hard("Led migration to Salesforce for the Deloitte team").map((f) => [f.message, f.value])).toEqual([["name appears in no confirmed fact", "Salesforce"]]);
-    expect(hard("Owned the KPI framework").map((f) => f.value)).toEqual(["KPI"]);
+  it("holds a name in no confirmed fact rather than rejecting it, and passes one the profile has under any role", () => {
+    // A name is a guess about a word's shape, so it holds the packet and keeps the resume (D-036).
+    expect(hard("Led migration to Salesforce for the Deloitte team")).toEqual([]);
+    expect(review("Led migration to Salesforce for the Deloitte team").map((f) => [f.message, f.value])).toEqual([["name appears in no confirmed fact", "Salesforce"]]);
+    expect(hard("Owned the KPI framework")).toEqual([]);
+    expect(review("Owned the KPI framework").map((f) => f.value)).toEqual(["KPI"]);
     // Every name on the profile, wherever it sits: nothing fires.
     expect(checkLine("Reported to the CEO at Arvento using Power BI", "R1.1", ALL, set)).toEqual([]);
     expect(hard("Built reporting in Excel, Power BI for the PMOs")).toEqual([]);
     expect(hard("Built reporting in Power Excel")).toEqual([]);
   });
 
-  it("a capitalised word at the start that is not in the verb list reads as a name, which is this check's false positive", () => {
+  it("a capitalised word at the start that is not in the verb list reads as a name, and holds rather than rejects", () => {
     // "Oversight" opens the line, is not a verb, and the profile has "oversaw" rather than the noun, so a lemma lookup
-    // does not find it. At review level this was a hold; at hard level, the rule the user chose, it rejects a truthful
-    // rewording. Recorded rather than tuned away: it is what a word lookup costs, and no list closes it (D-034).
-    expect(hard("Oversight of four managers and two analysts").map((f) => f.value)).toEqual(["Oversight"]);
-    // The same claim opened by a verb the list knows passes.
-    expect(hard("Oversaw four managers and two analysts")).toEqual([]);
+    // does not find it. No list closes this, which is precisely why the finding may not destroy the work: it holds the
+    // packet, the resume is kept and a person reads it (D-036). This example is the one that decided the level.
+    expect(review("Oversight of four managers and two analysts").map((f) => f.value)).toEqual(["Oversight"]);
+    expect(hard("Oversight of four managers and two analysts")).toEqual([]);
+    // The same claim opened by a verb the list knows is not flagged at all.
+    expect(review("Oversaw four managers and two analysts")).toEqual([]);
   });
 });
 
@@ -216,8 +220,9 @@ describe("change set validation", () => {
       base,
       set,
     );
-    // "M&A" is capitalised and on no fact, so it is rejected now where it was held before.
-    expect(good.filter((f) => f.level === "hard").map((f) => [f.code, f.value])).toEqual([["name-unknown", "M&A"]]);
+    // "M&A" is capitalised and on no fact: held, and the packet keeps its resume.
+    expect(good.filter((f) => f.level === "hard")).toEqual([]);
+    expect(good.filter((f) => f.level === "review").map((f) => [f.code, f.value])).toEqual([["name-unknown", "M&A"]]);
     const bad = validateChangeSet(
       { summary: null, summaryFacts: [], changes: [{ bullet: "R1.2", text: "Cut operating cost 15 percent in an 18 month program.", facts: ["R1.2"] }], skills: [] },
       base,
@@ -227,10 +232,10 @@ describe("change set validation", () => {
     // A summary with a value and no citation is rejected like any line.
     const unc = validateChangeSet({ summary: "Leader with 10 years of experience.", summaryFacts: [], changes: [], skills: [] }, base, set);
     // Citing nothing is held. "10 years" is on the profile, so the value passes wherever it was cited from.
-    // "Leader" opens the sentence, is not a verb and is on no fact: rejected now, held before.
+    // "Leader" opens the sentence, is not a verb and is on no fact: held, never rejected (D-036).
     expect(unc.map((f) => [f.level, f.bullet, f.message])).toEqual([
       ["review", "summary", "no fact cited for this line"],
-      ["hard", "summary", "name appears in no confirmed fact"],
+      ["review", "summary", "name appears in no confirmed fact"],
     ]);
   });
   it("reports an edit to a line that does not exist and a skill that does not exist as soft, never as a pass", () => {

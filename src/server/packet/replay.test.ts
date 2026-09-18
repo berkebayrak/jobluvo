@@ -85,7 +85,7 @@ describe("replay decision", () => {
   it("names its coverage: a row with a change set is replayed whole and retains nothing, a legacy row with a summary is held on it, one without is fully covered", () => {
     // Full coverage: the summary's old findings are not retained; what the replay found over the whole change set is the row's findings.
     expect(replayDecision(row({ changeSet, findings: [summaryReview] }), [], doc)).toEqual({ kind: "restamp", status: "ready", findings: [], resume: doc, coverage: "full" });
-    expect(replayDecision(row({ changeSet, findings: [] }), [summaryHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [summaryHard], resume: null, coverage: "full" });
+    expect(replayDecision(row({ changeSet, findings: [] }), [summaryHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [summaryHard], resume: doc, coverage: "full" });
     // Bullets only, with a summary: cannot be stamped ready, held with the finding that says why, the old summary findings kept.
     expect(replayDecision(row({ findings: [summarySoft] }), [], doc)).toEqual({
       kind: "restamp",
@@ -109,8 +109,9 @@ describe("replay decision", () => {
   });
 
   it("revokes a ready or held row whose stored resume is not the base plus the stored changes, and cannot promote an invalid one", () => {
-    // A ready row on a document nothing can verify: revoked, invalid, the resume dropped, a hard finding that says why.
-    expect(replayDecision(row({ resume: drifted, changeSet }), [], doc)).toEqual({ kind: "revoke", status: "invalid", would: "ready", findings: [unverifiable()], resume: null, coverage: "full" });
+    // A ready row on a document nothing can verify: revoked, invalid, a hard finding that says why. The document it
+    // could not verify is kept rather than deleted (D-038); the status is what stops it being served.
+    expect(replayDecision(row({ resume: drifted, changeSet }), [], doc)).toEqual({ kind: "revoke", status: "invalid", would: "ready", findings: [unverifiable()], resume: drifted, coverage: "full" });
     // A held row with no resume at all: the same.
     expect(replayDecision(row({ status: "needs_review", resume: null, resumeHash: null, findings: [summaryReview] }), [], null)).toEqual({
       kind: "revoke",
@@ -134,9 +135,13 @@ describe("replay decision", () => {
     expect(sameDocument(drifted, doc)).toBe(false);
   });
 
-  it("stamps invalid whatever the resume, and drops it", () => {
-    expect(replayDecision(row({}), [bulletHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard, summaryNotRevalidated()], resume: null, coverage: "bullets" });
-    expect(replayDecision(row({ changeSet }), [bulletHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard], resume: null, coverage: "full" });
+  it("stamps invalid whatever the resume, and keeps the document it rejected", () => {
+    // D-038: a rejection blocks the document, it does not delete it. Clearing it here is what left the demotion of
+    // D-036 with nothing to promote a day later.
+    expect(replayDecision(row({}), [bulletHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard, summaryNotRevalidated()], resume: doc, coverage: "bullets" });
+    expect(replayDecision(row({ changeSet }), [bulletHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard], resume: doc, coverage: "full" });
+    // A row that had no document to begin with still has none: nothing is invented.
+    expect(replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] }), [bulletHard], null)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard], resume: null, coverage: "bullets" });
   });
 });
 
@@ -213,8 +218,10 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 0, stale: 0, untouched: 0 , rebuilt: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("invalid");
-      expect(after.resume).toBeNull();
-      expect(after.resumeHash).toBeNull();
+      // The rejection blocks the document and keeps it: the gate is the status, not the absence of a resume (D-038).
+      expect(after.resume).toEqual(r.resume);
+      expect(after.resumeHash).toBe(r.resumeHash);
+      expect(consumableResume(after)).toBeNull();
       expect(after.findings).toEqual([bulletHard, summarySoft, summaryNotRevalidated()]);
       const [stamped] = await tx.select({ validatorRev: packets.validatorRev }).from(packets).where(eq(packets.id, id));
       expect(stamped.validatorRev).toBe(VALIDATOR_REVISION);
@@ -247,8 +254,10 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       // The assertion is on the gate, not on the decision: nothing downstream may consume this row.
       expect(consumableResume(after)).toBeNull();
       expect(after.status).toBe("invalid");
-      expect(after.resume).toBeNull();
-      expect(after.resumeHash).toBeNull();
+      // The document nothing could verify is kept, not deleted. It may be perfectly good; what is missing is the
+      // evidence to say so, and deleting it answers nothing (D-038).
+      expect(after.resume).toEqual(r.resume);
+      expect(after.resumeHash).toBe(r.resumeHash);
       expect(after.findings).toEqual([summarySoft, summaryNotRevalidated(), unverifiable()]);
     });
   });

@@ -120,6 +120,66 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-038. A rejection blocks the document, it does not delete it
+
+The user's call, from the sixth review, and it is first on that review's list because every
+other item on it is reversible and this one is not.
+
+Three places cleared a stored resume when a packet was rejected: the run, when the retained
+attempt carried a hard finding; a restamp, when the rules as they stand reject a row that
+was ready or held; and a revoke, when a row's stored resume is not the base plus its stored
+changes. All three now keep the document and its hash on the row. `consumableResume` is
+unchanged and is still the one door: it serves a `ready` packet and nothing else, so a kept
+document is no more submittable than an absent one.
+
+**What deleting it bought, measured: nothing.** Over the one day the name and posting word
+findings were hard, clearing the resume on rejection destroyed ten tailored documents and
+caught no fabrication (D-036). The demotion arrived the next day and could promote none of
+them, so D-037 had to be written to rebuild seven from their stored change sets, and six
+could not be rebuilt at all. Every one of those mechanisms exists to undo a deletion that
+answered no question. Keeping the document is cheaper than all of them and it is the only
+one that works before the fact.
+
+**What the snapshot says about the six, checked before this was written.** The six packets
+still invalid were described as having no artifact anywhere. That is true of two of them and
+false of four:
+
+| Packet | In `design/snapshots/2026-09-18-packets` | Finding that rejected it |
+|---|---|---|
+| 01b8f46b | needs_review, 18 bullets, hash dbdfc737 | posting word, "roadmap" |
+| b40e9ede | needs_review, 18 bullets and a summary, hash 968dda58 | posting word, "members" |
+| 96e3b4bf | needs_review, 18 bullets, hash 1ad14acd | posting word, "relationships" |
+| 433b326a | needs_review, 18 bullets and a summary, hash 1b66028e | name, "KPI" |
+| d5684230 | invalid, no resume | `value-not-in-cited`, `num:6` |
+| 2e4fdc00 | invalid, no resume | `value-not-in-cited`, `num:6` |
+
+The snapshot was frozen at 12:00 UTC on 18 September and the restamp that cleared those four
+ran after it. **Nothing is restored here.** Reading a file is not a recovery, and a document
+taken from an external file is not "the base plus the row's own stored change set", which is
+the line review five's finding 6 draws and the whole of what made D-037 legitimate.
+Restoring them is a separate decision and it is the user's. What is corrected now is the
+claim: "no change set" is not "no artifact", and the earlier wording said it was.
+
+**Two judgement calls made rather than asked, recorded here rather than in a commit
+message.**
+
+The revoke path keeps its document too. The review's item says "rejecting", and a revoke is a
+rejection the validator did not ask for: the row is rejected because nothing can verify what
+it stored, not because anything was found in it. The same argument applies unchanged. The
+document may be perfectly good and what is missing is the evidence to say so, and deleting it
+does not supply the evidence. If the user wants the revoke path to keep deleting, that is one
+line.
+
+A rejected row's kept document is not re-verified against the base plus its changes. The
+status check comes first, so an invalid row is stamped and its document kept without asking
+whether it rebuilds. Nothing promotes an invalid row, so nothing rests on it; the moment
+something does, that path has to verify first, and the rebuild branch of D-037 is where it
+would go.
+
+**What this does not change.** It does not make a rejected document available to anything. It
+does not weaken a finding, move a level, or alter what the validator reads. The status column
+means exactly what it meant. The only difference is that the evidence survives the verdict.
+
 ### D-037. The seven packets a withdrawn rule destroyed are rebuilt from their own stored change sets, and the six that cannot be are left invalid
 
 The user's call. Ten packets were rejected on 18 September by `name-unknown` and

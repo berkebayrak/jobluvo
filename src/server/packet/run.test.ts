@@ -7,6 +7,7 @@ import type { ScoringJob } from "@/server/match/score";
 import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { resumeFacts } from "@/server/match/profile";
 import { unknownCostStats } from "@/server/match/report";
+import { resumeHash } from "./resume";
 import { consumableResume, ERROR_STORE, tailorJob } from "./run";
 import { VALIDATOR_REVISION } from "./validate";
 import * as tailor from "./tailor";
@@ -304,7 +305,12 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       expect(out.findings.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:7", "year:2019"]);
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("invalid");
-      expect(p.resume).toBeNull();
+      // The rejected document is kept with its hash and the status is what stops it (D-038). Deleting it destroyed ten
+      // tailored resumes on 18 September and caught nothing; the one door downstream is consumableResume, asserted below.
+      expect(p.resume).not.toBeNull();
+      expect(p.resumeHash).toBe(resumeHash(p.resume!));
+      expect(p.resume?.experience[0].bullets[1].text).toBe("Own the planning cycle for 7 business units.");
+      expect(consumableResume(p)).toBeNull();
       expect(p.findings.filter((f) => f.level === "hard")).toHaveLength(2);
       // "Leader" opens the summary, is not a verb and is on no fact: held (D-036). The packet is invalid on its values regardless.
       expect(p.findings.filter((f) => f.level === "review").map((f) => f.value)).toEqual(["Leader"]);

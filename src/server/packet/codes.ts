@@ -44,6 +44,8 @@ export const FINDING_CODES = [
   "skill-missing",
   // Written by the replay and the run rather than the validator.
   "summary-not-revalidated",
+  "profile-not-reproducible",
+  "posting-moved",
   "unverifiable-resume",
   "retry-provenance",
 ] as const;
@@ -110,6 +112,8 @@ const LEGACY: [string, FindingCode][] = [
   ["empty line", "empty-line"],
   ["no such skill", "skill-missing"],
   ["summary not revalidated", "summary-not-revalidated"],
+  ["profile not reproducible", "profile-not-reproducible"],
+  ["posting moved", "posting-moved"],
   ["stored resume is not the base plus the stored changes", "unverifiable-resume"],
   ["this answer is a retry", "retry-provenance"],
 ];

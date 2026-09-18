@@ -4,7 +4,7 @@ import { jobs, packets, profileFacts, type PacketFinding } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
 import { lemmasOf } from "@/server/packet/entities";
 import { codeOf, type FindingCode } from "@/server/packet/codes";
-import { applyReplay, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
+import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, unreplayable, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
 
@@ -62,9 +62,9 @@ async function candidateProfiles(db: ReturnType<typeof dbPool>, userId: string):
 }
 
 /** The column a packet lands in: the status it would be stamped with, or why it is not stamped. */
-function outcomeOf(d: ReplayDecision | "excluded"): string {
-  if (d === "excluded") return "excluded, no profile reproduces the hash";
+function outcomeOf(d: ReplayDecision): string {
   if (d.kind === "restamp") return d.coverage === "full" ? d.status : `${d.status}, bullets only`;
+  if (d.kind === "hold") return `held, nothing could revalidate it: ${d.why.replace(/:.*$/, "")}`;
   if (d.kind === "no_candidate") return "not replayed, failed, no candidate";
   if (d.kind === "revoke") return `revoked, would pass as ${d.would} but the stored resume is not the base plus the stored changes`;
   return `not promoted, passes as ${d.would} but no resume stored`;
@@ -89,8 +89,10 @@ async function main() {
       factsHash: packets.factsHash,
       error: packets.error,
       updatedAt: sql<string>`${packets.updatedAt}::text`,
+      contentHash: packets.contentHash,
       title: jobs.title,
       posting: jobs.descriptionCore,
+      jobContentHash: jobs.contentHash,
     })
     .from(packets)
     .innerJoin(jobs, eq(jobs.id, packets.jobId));
@@ -98,7 +100,7 @@ async function main() {
   for (const p of rows) byUser.set(p.userId, [...(byUser.get(p.userId) ?? []), p]);
 
   const apply = process.argv.includes("--apply");
-  const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision | "excluded"; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null; rebuilds: boolean | null }[] = [];
+  const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null; rebuilds: boolean | null; excluded: boolean; postingMoved: boolean }[] = [];
   const profilesUsed: Record<string, number> = {};
   for (const [userId, ps] of byUser) {
     const candidates = await candidateProfiles(db, userId);
@@ -106,9 +108,16 @@ async function main() {
       const row: ReplayRow = { id: p.id, status: p.status, resume: p.resume, resumeHash: p.resumeHash, findings: p.findings, changeSet: p.changeSet, updatedAt: p.updatedAt };
       const match = candidates.find((c) => c.facts.factsHash === p.factsHash);
       if (!match) {
-        perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision: "excluded", findings: p.findings, outcome: outcomeOf("excluded"), hashHolds: null, rebuilds: null });
+        // Nothing to validate against. The row is held rather than skipped: leaving it was how a ready packet nothing
+        // could check stayed ready and stayed consumable (review five, finding 6).
+        const decision = unreplayable(row, profileNotReproducible());
+        const findings = decision.kind === "hold" ? decision.findings : p.findings;
+        perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision, findings, outcome: outcomeOf(decision), hashHolds: null, rebuilds: null, excluded: true, postingMoved: false });
         continue;
       }
+      // The posting the validator is about to read against the revision the packet was written with. A job whose text has
+      // moved cannot be read again the way the run read it, so the row is held rather than stamped from a different question.
+      const moved = !!p.jobContentHash && !!p.contentHash && p.jobContentHash !== p.contentHash;
       profilesUsed[match.name] = (profilesUsed[match.name] ?? 0) + 1;
       const entries = factEntries(match.facts);
       const set = factSet(entries);
@@ -118,36 +127,42 @@ async function main() {
       const posting = lemmasOf(`${p.title}\n${p.posting ?? ""}`);
       const replayed = p.changeSet ? validateChangeSet(p.changeSet, base, set, posting) : validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set, posting);
       const candidate = p.changeSet ? applyChanges(base, p.changeSet).resume : p.resume ? applyChanges(base, { summary: p.resume.summary, summaryFacts: [], changes: p.changes, skills: [] }).resume : null;
-      const decision = replayDecision(row, replayed, candidate);
+      const decision = replayDecision(row, replayed, candidate, moved ? [postingMoved()] : []);
       const findings = decision.kind === "no_candidate" ? p.findings : decision.findings;
       const hashHolds = p.resume ? resumeHash(p.resume) === p.resumeHash : null;
       const rebuilds = p.resume && candidate ? sameDocument(p.resume, candidate) : null;
-      perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision, findings, outcome: outcomeOf(decision), hashHolds, rebuilds });
+      perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision, findings, outcome: outcomeOf(decision), hashHolds, rebuilds, excluded: false, postingMoved: moved });
     }
   }
-  const replayed = perPacket.filter((p) => p.decision !== "excluded");
-  const full = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind !== "no_candidate" && p.decision.coverage === "full").length;
-  const bulletsOnly = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind !== "no_candidate" && p.decision.coverage === "bullets").length;
+  const replayed = perPacket.filter((p) => !p.excluded);
+  const has = (p: (typeof perPacket)[number]) => p.decision.kind === "restamp" || p.decision.kind === "revoke" || p.decision.kind === "no_resume";
+  const full = replayed.filter((p) => has(p) && "coverage" in p.decision && p.decision.coverage === "full").length;
+  const bulletsOnly = replayed.filter((p) => has(p) && "coverage" in p.decision && p.decision.coverage === "bullets").length;
   console.log(`coverage: ${full} packets replayed whole from their stored change set, ${bulletsOnly} bullets only (stored before change sets were kept; a summary on such a row is held, not stamped ready)`);
+  const excluded = perPacket.filter((p) => p.excluded);
+  const moved = perPacket.filter((p) => p.postingMoved);
+  console.log(
+    `inputs the replay could not read the way the run did: ${excluded.length} packets whose facts hash no profile on hand reproduces, ${moved.length} whose job text has moved since. Every one of them that is ready or held today is held by --apply and its resume kept, never left consumable on evidence nothing can check (review five, finding 6)`,
+  );
 
   if (apply) {
+    // Every row, the excluded ones included: an excluded row that is ready today is exactly the one that must not be skipped.
     const result = await applyReplay(
       db,
-      replayed.map((p) => ({ row: p.row, decision: p.decision as ReplayDecision })),
+      perPacket.map((p) => ({ row: p.row, decision: p.decision })),
     );
     console.log(
-      `\napplied: ${result.restamped} packets restamped under the rules as they stand, ${result.changedStatus} changed status, ${result.revoked} of them revoked because their stored resume could not be verified, ${result.untouched} left as they are (failed, or invalid with no resume to promote), ${result.stale} refused because the row moved since it was read`,
+      `\napplied: ${result.restamped} packets written under the rules as they stand, ${result.changedStatus} changed status, ${result.revoked} of them revoked because their stored resume could not be verified, ${result.held} held because nothing could revalidate them, ${result.untouched} left as they are (failed, or invalid with no resume to promote), ${result.stale} refused because the row moved since it was read`,
     );
   }
 
   const edits = replayed.reduce((a, p) => a + p.edits, 0);
-  const excluded = perPacket.length - replayed.length;
-  console.log(`packets on hand ${rows.length}, replayed ${replayed.length} (${edits} bullet edits), excluded ${excluded} whose facts hash no profile on hand reproduces`);
+  console.log(`packets on hand ${rows.length}, replayed ${replayed.length} (${edits} bullet edits), ${excluded.length} whose facts hash no profile on hand reproduces and are held instead`);
   console.log("profiles the packets were built on:", JSON.stringify(profilesUsed));
   const withResume = perPacket.filter((p) => p.hashHolds !== null);
   const rebuilds = perPacket.filter((p) => p.rebuilds).length;
-  const noResume = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "no_resume").length;
-  const revoked = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "revoke").length;
+  const noResume = replayed.filter((p) => p.decision.kind === "no_resume").length;
+  const revoked = replayed.filter((p) => p.decision.kind === "revoke").length;
   console.log(
     `stored resumes: ${withResume.length}; ${rebuilds} are the base plus their stored changes and summary (skill order not stored, not compared); ${noResume} pass today but have no such resume and are not promoted; ${revoked} ready or held rows have a resume that cannot be verified and are revoked to invalid by --apply; resume_hash names the stored resume on ${withResume.filter((p) => p.hashHolds).length} of ${withResume.length} (the rest are rewritten by --apply)`,
   );
@@ -161,14 +176,14 @@ async function main() {
     grid[p.status][p.outcome] = (grid[p.status][p.outcome] ?? 0) + 1;
   }
   console.table(grid);
-  const stamped = (s: string) => replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "restamp" && p.decision.status === s).length;
-  const withCandidate = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "restamp");
+  const stamped = (s: string) => replayed.filter((p) => p.decision.kind === "restamp" && p.decision.status === s).length;
+  const withCandidate = replayed.filter((p) => p.decision.kind === "restamp");
   console.log(
     `stamped: ${stamped("ready")} ready, ${stamped("needs_review")} held for review, ${stamped("invalid")} invalid, of ${withCandidate.length} with a candidate; held is ${withCandidate.length ? ((100 * stamped("needs_review")) / withCandidate.length).toFixed(1) : "0"} percent of them`,
   );
   // Counted from the decision's status, never from the outcome label, which also names the coverage.
-  const stampedStatus = (p: (typeof perPacket)[number]) => (p.decision !== "excluded" && (p.decision.kind === "restamp" || p.decision.kind === "revoke") ? p.decision.status : null);
-  const readyToday = replayed.filter((p) => p.status === "ready");
+  const stampedStatus = (p: (typeof perPacket)[number]) => (p.decision.kind === "restamp" || p.decision.kind === "revoke" || p.decision.kind === "hold" ? p.decision.status : null);
+  const readyToday = perPacket.filter((p) => p.status === "ready");
   const heldOfReady = readyToday.filter((p) => stampedStatus(p) === "needs_review").length;
   const invalidOfReady = readyToday.filter((p) => stampedStatus(p) === "invalid").length;
   const heldByCoverage = readyToday.filter((p) => stampedStatus(p) === "needs_review" && p.findings.some((f) => f.message === SUMMARY_NOT_REVALIDATED)).length;

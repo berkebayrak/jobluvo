@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   contentHash,
+  countryCodeOf,
+  decodeEntities,
   eligibilityOf,
   descriptionCore,
   detectRepeated,
@@ -73,6 +75,16 @@ describe("parseLocation", () => {
     expect(parseLocation("Remote")).toMatchObject({ remote: true });
     expect(parseLocation("Remote").country).toBeUndefined();
   });
+  it("is not fooled by a location or an entity named like a key on Object.prototype", () => {
+    const loc = parseLocation("Constructor, Prototype");
+    expect(loc.city).toBe("Constructor");
+    expect(loc.country).toBeUndefined();
+    expect(loc.region).toBeUndefined();
+    expect(parseLocation("Berlin, constructor").country).toBeUndefined();
+    expect(decodeEntities("a &constructor; b &amp; c")).toBe("a &constructor; b & c");
+    expect(countryCodeOf("constructor")).toBeUndefined();
+  });
+
   it("reads a well known US city on its own, and no other city", () => {
     expect(parseLocation("Chicago")).toMatchObject({ city: "Chicago", country: "US" });
     expect(parseLocation("NYC")).toMatchObject({ city: "New York", country: "US" });

@@ -21,6 +21,17 @@ Packets 80, saved answers 80, cost rows 128. Profile c9f231127f13, 40 facts. Rul
 | 1e23eacd | needs_review | needs_review > invalid | 1 | needs_review > invalid | retained attempt differs from the last attempt (finding 13) |
 | 6c9f0179 | needs_review | needs_review > invalid | 1 | needs_review > invalid | retained attempt differs from the last attempt (finding 13) |
 
+## Findings the rules as they stand add or remove on the retained attempts
+
+| Added, by finding | Edits | Packets |
+|---|---|---|
+
+| Removed, by finding | Edits |
+|---|---|
+
+Examples of added findings, first 40:
+
+
 ## Unchanged packets, the whole document against the base
 
 Packets with a stored resume 78. Identical to the base resume, summary and skill order included: 13. Packets with zero bullet edits: 24, of which 11 are also identical as a whole document and 13 changed the summary or skill order only.

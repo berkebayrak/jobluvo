@@ -7,7 +7,8 @@ import type { RawLocation, RawPosting } from "@/server/sources/types";
  * database, no network, so every rule here has a unit test.
  */
 
-const ENTITIES: Record<string, string> = {
+// Every table indexed by text from a posting is a Map: a Record indexed by "constructor" answers with Object.prototype's (review four, finding 7).
+const ENTITIES = new Map(Object.entries({
   amp: "&",
   lt: "<",
   gt: ">",
@@ -21,14 +22,14 @@ const ENTITIES: Record<string, string> = {
   mdash: "—",
   ndash: "–",
   hellip: "…",
-};
+}));
 
 /** Decodes HTML entities, including the double encoded content Greenhouse returns. */
 export function decodeEntities(s: string): string {
   return s
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m);
+    .replace(/&([a-z]+);/gi, (m, name) => ENTITIES.get(name.toLowerCase()) ?? m);
 }
 
 /** Strips tags to plain text with paragraph breaks preserved as blank lines. */
@@ -77,7 +78,7 @@ const US_STATES = new Set(
 );
 const US_WORDS = /^(?:the\s+)?(united states(?: of america)?|usa|u\.s\.a?\.?|us)$/i;
 /** Country names as boards write them, to ISO 3166 alpha 2. A name not here is kept as `countryName`, never guessed. */
-const COUNTRY_CODES: Record<string, string> = {
+const COUNTRY_CODES = new Map(Object.entries({
   us: "US", usa: "US", "united states": "US", "united states of america": "US",
   gb: "GB", uk: "GB", "united kingdom": "GB", england: "GB", scotland: "GB", wales: "GB",
   ca: "CA", canada: "CA",
@@ -127,8 +128,8 @@ const COUNTRY_CODES: Record<string, string> = {
   my: "MY", malaysia: "MY",
   tw: "TW", taiwan: "TW",
   hk: "HK", "hong kong": "HK",
-};
-const US_STATE_NAMES: Record<string, string> = {
+}));
+const US_STATE_NAMES = new Map(Object.entries({
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT",
   delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA",
   kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI",
@@ -137,7 +138,7 @@ const US_STATE_NAMES: Record<string, string> = {
   oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD",
   tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV",
   wisconsin: "WI", wyoming: "WY", "district of columbia": "DC",
-};
+}));
 /*
  * Cities that read as US on their own. Only names whose US reading is the
  * dominant one: no Cambridge, London, Richmond, Vancouver, Birmingham,
@@ -166,7 +167,7 @@ const METRO = /^(?:greater\s+)?(.+?)\s+(?:bay\s+area|metropolitan\s+area|metro(?
  * table is the context that resolves the code; a city in neither table with
  * such a code is left unknown rather than guessed.
  */
-const NON_US_CITIES: Record<string, string> = {
+const NON_US_CITIES = new Map(Object.entries({
   berlin: "DE", munich: "DE", münchen: "DE", hamburg: "DE", frankfurt: "DE", cologne: "DE", köln: "DE", düsseldorf: "DE", stuttgart: "DE",
   toronto: "CA", vancouver: "CA", montreal: "CA", montréal: "CA", ottawa: "CA", calgary: "CA", edmonton: "CA", waterloo: "CA", quebec: "CA", québec: "CA",
   bengaluru: "IN", bangalore: "IN", mumbai: "IN", delhi: "IN", "new delhi": "IN", hyderabad: "IN", pune: "IN", chennai: "IN", gurugram: "IN", gurgaon: "IN", noida: "IN", kolkata: "IN",
@@ -176,7 +177,7 @@ const NON_US_CITIES: Record<string, string> = {
   "buenos aires": "AR",
   jakarta: "ID",
   "kuala lumpur": "MY",
-};
+}));
 const NOT_A_PLACE = /^(n\/?a|tbd|tba|various|multiple(?: locations)?|flexible|global|worldwide|other|none|any|anywhere|nationwide|international)$/i;
 const REMOTE_WORDS = /\b(remote|work from home|wfh|distributed|telecommute|home[- ]based)\b/i;
 
@@ -230,31 +231,31 @@ export function parseLocation(raw: string, hint?: { country?: string; remote?: b
     // table does not know is left unknown rather than guessed.
     if (loc.city && key.length === 2) {
       const isState = US_STATES.has(key);
-      const isCountry = !!COUNTRY_CODES[key];
+      const isCountry = COUNTRY_CODES.has(key);
       const cityKey = loc.city.toLowerCase();
       const usCity = US_CITIES.has(cityKey);
-      const abroad = NON_US_CITIES[cityKey];
+      const abroad = NON_US_CITIES.get(cityKey);
       if (isState && (usCity || !isCountry)) {
         loc.region = key.toUpperCase();
         loc.country = "US";
         continue;
       }
-      if (isCountry && (!isState || abroad === COUNTRY_CODES[key])) {
-        loc.country = COUNTRY_CODES[key];
+      if (isCountry && (!isState || abroad === COUNTRY_CODES.get(key))) {
+        loc.country = COUNTRY_CODES.get(key);
         continue;
       }
       if (isState && isCountry) continue;
     }
-    if (COUNTRY_CODES[key]) {
-      loc.country = COUNTRY_CODES[key];
+    if (COUNTRY_CODES.has(key)) {
+      loc.country = COUNTRY_CODES.get(key);
       continue;
     }
-    if (US_STATE_NAMES[key] && (loc.city || !US_CITIES.has(key))) {
+    if (US_STATE_NAMES.has(key) && (loc.city || !US_CITIES.has(key))) {
       // "New York, New York" is a city then a state; "California" alone or
       // "Remote - Texas" is a state with no city. Both are in the US. A name
       // that is both a city and a state, "New York" or "Washington", is the
       // city when nothing precedes it.
-      loc.region = US_STATE_NAMES[key];
+      loc.region = US_STATE_NAMES.get(key);
       loc.country = "US";
       continue;
     }
@@ -266,7 +267,7 @@ export function parseLocation(raw: string, hint?: { country?: string; remote?: b
   }
   if (!loc.country && cityIsUs) loc.country = "US";
   if (!loc.country && hint?.country) {
-    const c = COUNTRY_CODES[hint.country.toLowerCase()] ?? hint.country.toUpperCase();
+    const c = COUNTRY_CODES.get(hint.country.toLowerCase()) ?? hint.country.toUpperCase();
     if (c.length === 2) loc.country = c;
   }
   return loc;
@@ -276,7 +277,8 @@ export function parseLocation(raw: string, hint?: { country?: string; remote?: b
 export function countryCodeOf(name: string | undefined): string | undefined {
   if (!name) return undefined;
   const key = name.trim().toLowerCase();
-  if (COUNTRY_CODES[key]) return COUNTRY_CODES[key];
+  const code = COUNTRY_CODES.get(key);
+  if (code) return code;
   return /^[a-z]{2}$/.test(key) ? key.toUpperCase() : undefined;
 }
 

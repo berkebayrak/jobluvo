@@ -149,7 +149,9 @@ describe("the validator on the review's rewrites", () => {
       ["money:usd:9200000", ["operating", "cost"]],
       ["period:year", ["operating", "cost"]],
     ]);
-    expect(claimsOf("presented to the board twice a year").map((c) => c.key)).toEqual(["period:year"]);
+    expect(claimsOf("presented to the board twice a year").map((c) => c.key)).toEqual(["period:2xyear"]);
+    expect(claimsOf("presented to the board once a year").map((c) => c.key)).toEqual(["period:year"]);
+    expect(claimsOf("presented to the board 3 times a year").map((c) => c.key)).toEqual(["period:3xyear"]);
     expect(claimsOf("reviewed quarterly").map((c) => c.key)).toEqual(["period:quarter"]);
     expect(claimsOf("a 3 year program").map((c) => c.key)).toEqual(["num:3"]);
   });
@@ -167,8 +169,8 @@ describe("the validator on the review's rewrites", () => {
       ["pct:10", "value does not mean what the fact means: up became down"],
     ]);
     expect(at("R1.6", "Reduced costs by 20 percent and increased revenue by 10 percent", ["R1.6"])).toEqual([]);
-    // "over 12 months" is a duration; "annually" is a period the fact never gave.
-    expect(hard("R1.1", "Reduced churn by 11 percent annually", ["R1.1"])).toEqual([expect.objectContaining({ message: "value is on the profile but not in the cited facts", value: "period:year" })]);
+    // "over 12 months" is a duration; "annually" is a period the fact never gave, and since "twice a year" is not "annually" it is on no fact at all.
+    expect(hard("R1.1", "Reduced churn by 11 percent annually", ["R1.1"])).toEqual([expect.objectContaining({ message: "value appears in no confirmed fact", value: "period:year" })]);
     // The predicate's verb is not its metric: "Led" for "Ran" is rewording, and rule 1's business, not a changed measure.
     const led = at("R1.1", "Led the retention work that reduced churn by 11 percent over 12 months", ["R1.1"]);
     expect(led.filter((f) => f.level === "hard")).toEqual([]);
@@ -178,8 +180,12 @@ describe("the validator on the review's rewrites", () => {
       ["num:12", "the fact and the line measure different things"],
     ]);
     expect(review("R1.1", "Drove churn down 11 percent over 12 months", ["R1.1"])).toEqual([]);
-    // A period takes no role: "targets" before "twice a year" says what is presented, not that the period is a target.
+    // A period takes no role: "targets" before "twice a year" says what is presented, not that the period is a target. Plans and
+    // priorities are generic objects, not measures, so the period is not held on them.
     expect(at("R1.7", "Present plans and priorities to the board twice a year", ["R1.7"])).toEqual([]);
+    // A period is bound to its predicate by a shared measure word: "the audit committee" shares nothing with "presented to the board", so the period is held on it.
+    expect(review("R1.7", "Present plans to the audit committee twice a year", ["R1.7"]).map((f) => f.value)).toEqual(["period:2xyear"]);
+    expect(at("R1.7", "Present measurable plans to the board twice a year", ["R1.7"])).toEqual([]);
     // The line's side is its own predicate; the fact's side is its whole sentence, so folding the fact's clauses into one predicate passes.
     expect(at("R1.3", "Grew revenue with the new pricing from USD 9M to USD 14M in 2023", ["R1.3"]).filter((f) => f.level !== "soft")).toEqual([
       expect.objectContaining({ level: "review", value: "money:usd:9000000" }),
@@ -193,8 +199,9 @@ describe("the validator on the review's rewrites", () => {
     expect(claimsOf("Revenue grew 20 percent").map((c) => c.metric)).toEqual([["revenue"]]);
     expect(at("R1.1", "Reduced churn by 11 percent over 12 months", ["R1.1"])).toEqual([]);
     expect(at("R1.1", "Reduced churn by 11 percent", ["R1.1"])).toEqual([]);
-    // A period the fact gave, in another wording, is the same period.
-    expect(at("R1.7", "Own annual planning; present to the board yearly", ["R1.7"])).toEqual([]);
+    // A period the fact gave, in another wording, is the same period; its frequency is part of it, so "yearly" is not "twice a year".
+    expect(at("R1.7", "Own annual planning; present to the board twice yearly", ["R1.7"])).toEqual([]);
+    expect(hard("R1.7", "Own annual planning; present to the board yearly", ["R1.7"])).toEqual([expect.objectContaining({ value: "period:year" })]);
     expect(hard("R1.7", "Own annual planning; present to the board monthly", ["R1.7"])).toEqual([expect.objectContaining({ value: "period:month" })]);
   });
   it("a value in no cited fact is still hard the way it was", () => {

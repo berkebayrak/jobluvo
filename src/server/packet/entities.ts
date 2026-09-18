@@ -1,5 +1,5 @@
 import type { PacketFinding } from "@/db/schema";
-import { lemma } from "./claims";
+import { GENERIC_OBJECTS, lemma } from "./claims";
 import { normaliseNumbers } from "./normalise";
 
 /*
@@ -88,13 +88,7 @@ export const RESPONSIBILITY_VERBS = new Set([
 export const CLAIM_OPENERS = new Set(["experience", "experienced", "expertise", "skilled", "background", "proficient", "specialising", "specializing", "specialist", "track", "record"]);
 const PARTICLES = new Set(["up", "out", "off", "down", "over", "through"]);
 
-/** Objects that name no domain: "present progress", "deliver results". Claiming one asserts nothing a fact could contradict. */
-export const GENERIC_OBJECTS = new Set([
-  "progress", "result", "results", "update", "updates", "recommendation", "recommendations", "decision", "decisions", "outcome", "outcomes", "priority", "priorities",
-  "plan", "plans", "finding", "findings", "option", "options", "proposal", "proposals", "insight", "insights", "material", "materials", "input", "inputs", "output", "outputs",
-  "status", "summary", "summaries", "report", "reports", "practice", "practices", "process", "processes", "initiative", "initiatives", "work", "effort", "efforts",
-  "value", "impact", "improvement", "improvements", "change", "changes", "growth", "success",
-]);
+export { GENERIC_OBJECTS };
 
 const CURRENCIES = new Set(["usd", "eur", "gbp", "cad", "try", "us"]);
 const isValue = (low: string) => /^\d/.test(low);

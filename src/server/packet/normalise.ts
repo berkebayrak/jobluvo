@@ -11,8 +11,13 @@
  * by a smaller scale's group ("two million five hundred thousand"). Two
  * number words that the grammar does not join are two numbers: "three and
  * five teams" is 3 and 5, never 8. A phrase the grammar cannot read, "five
- * thousand two million", is left as its words and reported, so the
- * validator can hold the line rather than pass a value it never saw.
+ * thousand two million" or "twenty ten", is left as its words and reported,
+ * so the validator can hold the line rather than pass a value it never saw.
+ *
+ * Review four, finding 7: a tens word takes a units word under ten only,
+ * digits before "hundred" scale like digits before "thousand", every
+ * thousands separator is dropped however many there are, and a minus sign
+ * before a digit is part of the number, not a hyphen to open.
  */
 
 const UNITS = new Map<string, number>([
@@ -49,14 +54,19 @@ type Last = "unit" | "tens" | "hundred" | "scale" | "and";
 
 /** `normaliseNumbers` with the phrases it could not read. */
 export function readNumbers(text: string): NumberReading {
-  let t = text.toLowerCase().replace(/[–—]/g, " ").replace(/(\d),(\d{3})(?!\d)/g, "$1$2").replace(/(\d),(\d{3})(?!\d)/g, "$1$2");
-  // A hyphen carries no value: "3-year", "three-year", "two-thirds" all open up. The one in a YYYY-MM date stays.
+  let t = text.toLowerCase().replace(/[–—]/g, " ");
+  // Thousands separators, however many groups: a comma between digits goes when only whole groups of three follow it, "1,234,567,890,123" and never "1,2345".
+  t = t.replace(/(?<=\d),(?=\d{3}(?:,\d{3})*(?!\d))/g, "");
+  // A hyphen before a digit that follows nothing alphanumeric is a sign, "-11 percent", and stays. Every other hyphen carries no value:
+  // "3-year", "three-year", "two-thirds", "2019-2023" all open up. The one in a YYYY-MM date stays.
+  t = t.replace(/(^|[^a-z0-9)])-(?=\d)/g, "$1\u2212");
   t = t.replace(/-(?!(?:0[1-9]|1[0-2])(?![\d.]))/g, " ");
+  t = t.replace(/\u2212/g, "-");
   t = t.replace(/(\d+(?:\.\d+)?)\s?(k|m|mn|b|bn|million|billion|thousand)\b/g, (_, n: string, s: string) => fmt(Number(n) * SCALES[s]));
   t = t.replace(/(\d+)(st|nd|rd|th)\b/g, "$1");
   // "team of six." is a number followed by a full stop, not a word the tables do not know.
   t = t.replace(/([a-z])([.;:!?)])/g, "$1 $2");
-  const words = t.split(/(\s+|[^a-z0-9.%$€£])/);
+  const words = t.split(/(\s+|[^a-z0-9.%$€£-])/);
   const out: string[] = [];
   const unreadable: string[] = [];
 
@@ -106,12 +116,20 @@ export function readNumbers(text: string): NumberReading {
       else pendingSpace = true;
       continue;
     }
+    if (/^-\d/.test(w)) {
+      // A signed digit token: a number of its own, never composed with a word before it.
+      flush();
+      out.push(w);
+      continue;
+    }
     const unit = UNITS.get(w);
     const tens = TENS.get(w);
     const big = BIG.get(w);
     if (unit !== undefined) {
       // A units word joins a tens word, a hundred, a scale, or the "and" after those. After anything else it is a new number.
       if (!(last === "tens" || last === "hundred" || last === "scale" || last === "and")) flush();
+      // "twenty ten" is no number: a tens word takes a units word under ten only.
+      if (last === "tens" && unit >= 10) bad = true;
       group = (group ?? 0) + unit;
       last = "unit";
       take(w);
@@ -121,7 +139,14 @@ export function readNumbers(text: string): NumberReading {
       last = "tens";
       take(w);
     } else if (w === "hundred") {
-      // "two hundred", "a hundred", "twenty hundred". After a hundred or a scale word it reads nothing.
+      // "two hundred", "a hundred", "twenty hundred", and "2 hundred" with the digits before it as the group. After a hundred or a scale word it reads nothing.
+      if (!open()) {
+        const i = lastToken();
+        if (i >= 0 && /^\d+(\.\d+)?$/.test(out[i])) {
+          group = Number(out[i]);
+          out.splice(i);
+        }
+      }
       if (last === "hundred" || last === "scale" || last === "and") bad = true;
       group = (group ?? 1) * 100;
       last = "hundred";

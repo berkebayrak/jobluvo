@@ -76,21 +76,48 @@ const posting = lemmasOf("Salesforce, recruitment systems, dashboards, analytics
  */
 type Author = "rules" | "independent";
 
+/**
+ * What the false lines of this pair do, against the validator's principle:
+ * a tailored line may change how something is said, it may not change what
+ * is being claimed (the top of design/docs/06-Decision-Log.md).
+ *
+ * The truthful lines of every pair are case 1 by definition, so the case
+ * here names what the FALSE lines do.
+ *
+ * - "case 2": the same number attached to a different thing.
+ * - "case 3": the same work at a higher level of authority.
+ * - "invention": a value, entity, tool or qualification in no cited fact at
+ *   all. Never in dispute, which is why it is not one of the principle's
+ *   three cases, but most of this file is it and saying so is the point:
+ *   counting it beside case 3 is how "28 of 28" hid that nobody had written
+ *   a case 3 test.
+ * - "polarity": the claim is negated rather than moved or promoted. It fits
+ *   the principle's sentence and none of its three cases; whether it becomes
+ *   a named case 4 is the user's call, recorded in the log.
+ */
+type Case = "case 2" | "case 3" | "invention" | "polarity";
+
+/** A false line, at the pair's case unless it says otherwise: one pair can hold lines that fail in different ways. */
+type FalseLine = string | { line: string; case: Case };
+
 interface Pair {
   finding: string;
   author: Author;
+  /** The case the pair's false lines belong to, unless a line names its own. */
+  case: Case;
   bullet: string;
   cited: string[];
   /** Lines that must pass with no hard or review finding. */
   truthful: string[];
   /** Lines that must be held or rejected. */
-  false: string[];
+  false: FalseLine[];
 }
 
 const PAIRS: Pair[] = [
   {
     finding: "3A, a value paired with a sibling value's measure",
     author: "rules",
+    case: "case 2",
     bullet: "R1.1",
     cited: ["R1.1"],
     truthful: ["Cut churn 11 percent and reduced acquisition cost 5 percent.", "Reduced churn by 11 percent while cutting acquisition cost by 5 percent."],
@@ -99,14 +126,17 @@ const PAIRS: Pair[] = [
   {
     finding: "3B, the opening verb is a relationship",
     author: "rules",
+    case: "case 3",
     bullet: "R1.2",
     cited: ["R1.2"],
     truthful: ["Coached 6 analysts.", "Trained six analysts."],
-    false: ["Managed 6 analysts.", "Hired 6 analysts."],
+    // Training becoming managing is the promotion. Hiring is a different activity, not a higher rung of the same one.
+    false: ["Managed 6 analysts.", { line: "Hired 6 analysts.", case: "invention" }],
   },
   {
     finding: "3C, a denial",
     author: "rules",
+    case: "polarity",
     bullet: "R1.3",
     cited: ["R1.3"],
     truthful: ["Did not manage the 6 analysts."],
@@ -115,6 +145,7 @@ const PAIRS: Pair[] = [
   {
     finding: "3D, a change against a level",
     author: "rules",
+    case: "case 2",
     bullet: "R1.4",
     cited: ["R1.4"],
     truthful: ["Cut churn by 11 percent.", "Reduced churn by about 11 percent."],
@@ -123,6 +154,7 @@ const PAIRS: Pair[] = [
   {
     finding: "3E, the sign",
     author: "rules",
+    case: "polarity",
     bullet: "R1.5",
     cited: ["R1.5"],
     truthful: ["Revenue growth of -11 percent.", "Achieved revenue growth of -11 percent."],
@@ -131,6 +163,7 @@ const PAIRS: Pair[] = [
   {
     finding: "4A, the frequency of a period",
     author: "rules",
+    case: "case 2",
     bullet: "R1.6",
     cited: ["R1.6"],
     truthful: ["Presented reports twice yearly.", "Presented reports 2 times a year."],
@@ -139,6 +172,7 @@ const PAIRS: Pair[] = [
   {
     finding: "4B, a period bound to its predicate",
     author: "rules",
+    case: "case 2",
     bullet: "R1.7",
     cited: ["R1.7"],
     truthful: ["Cut costs by 11 percent and reviewed budgets annually.", "Reviewed budgets annually; cut costs by 11 percent."],
@@ -147,6 +181,7 @@ const PAIRS: Pair[] = [
   {
     finding: "7, numbers the normaliser reads",
     author: "rules",
+    case: "invention",
     bullet: "R1.9",
     cited: ["R1.9"],
     truthful: ["Grew the team from four to nine people.", "Grew the team from 4 to 9 people."],
@@ -155,6 +190,7 @@ const PAIRS: Pair[] = [
   {
     finding: "a four digit count is not a year",
     author: "rules",
+    case: "invention",
     bullet: "R2.3",
     cited: ["R2.3"],
     truthful: ["Delivered 9 growth projects for banks, with a study of 2,000 customers.", "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent."],
@@ -163,6 +199,7 @@ const PAIRS: Pair[] = [
   {
     finding: "5A, the tool after using or in is a claim",
     author: "rules",
+    case: "invention",
     bullet: "R1.8",
     cited: ["R1.8"],
     truthful: ["Built Excel dashboards.", "Built dashboards in Excel for the sales team.", "Built dashboards with attention to detail."],
@@ -171,6 +208,7 @@ const PAIRS: Pair[] = [
   {
     finding: "5B, every conjunct of a coordinated object",
     author: "rules",
+    case: "invention",
     bullet: "R1.8",
     cited: ["R1.8"],
     truthful: ["Built dashboards and reports in Excel."],
@@ -179,14 +217,18 @@ const PAIRS: Pair[] = [
   {
     finding: "5C, a qualification",
     author: "rules",
+    case: "invention",
     bullet: "R2.1",
     cited: ["R2.1"],
     truthful: ["Worked in Salesforce for the sales pipeline.", "Used Salesforce to run the sales pipeline."],
     false: ["Certified in Salesforce.", "Salesforce certified, ran the sales pipeline."],
   },
   {
+    // Not case 3: leading recruitment is on the profile, under another role. Claiming it on this bullet attributes
+    // another employer's work rather than promoting this one, which is invention as far as the cited facts go.
     finding: "6, a global entity does not support a relationship, and capitalisation changes nothing",
     author: "rules",
+    case: "invention",
     bullet: "R1.8",
     cited: ["R1.8"],
     truthful: ["Built dashboards in Excel."],
@@ -195,6 +237,7 @@ const PAIRS: Pair[] = [
   {
     finding: "D-021, rewordings that must keep passing",
     author: "rules",
+    case: "invention",
     bullet: "R1.10",
     cited: ["R1.10"],
     truthful: ["Led the pricing review across 3 markets.", "Ran pricing reviews across three markets."],
@@ -211,32 +254,42 @@ describe("paired evaluation set", () => {
   it("catches every false line and passes every truthful one, and prints the miss rate", () => {
     const misses: string[] = [];
     const falseHolds: string[] = [];
-    const tally: Record<Author, { falseLines: number; caught: number; truthful: number; passed: number }> = {
-      rules: { falseLines: 0, caught: 0, truthful: 0, passed: 0 },
-      independent: { falseLines: 0, caught: 0, truthful: 0, passed: 0 },
-    };
+    const blank = () => ({ falseLines: 0, caught: 0 });
+    const byAuthor: Record<Author, ReturnType<typeof blank>> = { rules: blank(), independent: blank() };
+    const byCase: Record<Case, ReturnType<typeof blank>> = { "case 2": blank(), "case 3": blank(), invention: blank(), polarity: blank() };
+    let caseOne = 0;
+    let caseOnePassed = 0;
     for (const p of PAIRS) {
-      for (const line of p.false) {
-        tally[p.author].falseLines += 1;
-        if (level(p.bullet, line, p.cited) === "ready") misses.push(`${p.finding}: "${line}" passed`);
-        else tally[p.author].caught += 1;
+      for (const entry of p.false) {
+        const line = typeof entry === "string" ? entry : entry.line;
+        const kind = typeof entry === "string" ? p.case : entry.case;
+        byAuthor[p.author].falseLines += 1;
+        byCase[kind].falseLines += 1;
+        if (level(p.bullet, line, p.cited) === "ready") misses.push(`${kind} ${p.finding}: "${line}" passed`);
+        else {
+          byAuthor[p.author].caught += 1;
+          byCase[kind].caught += 1;
+        }
       }
       for (const line of p.truthful) {
-        tally[p.author].truthful += 1;
+        // Every truthful line is case 1: stronger wording, the same claim, which must pass.
+        caseOne += 1;
         const l = level(p.bullet, line, p.cited);
-        if (l !== "ready") falseHolds.push(`${p.finding}: "${line}" ${l} ${JSON.stringify(checkLine(line, p.bullet, p.cited, set, posting).filter((f) => f.level !== "soft").map((f) => [f.message, f.value]))}`);
-        else tally[p.author].passed += 1;
+        if (l !== "ready") falseHolds.push(`case 1 ${p.finding}: "${line}" ${l} ${JSON.stringify(checkLine(line, p.bullet, p.cited, set, posting).filter((f) => f.level !== "soft").map((f) => [f.message, f.value]))}`);
+        else caseOnePassed += 1;
       }
     }
-    // By author, never summed: a total would let the rules' author's own cases carry the independent ones.
+    // By author and by case, never summed into one figure. A total let one author's cases carry the other's,
+    // and it let "invention", which nobody disputes, carry case 3, which nobody had written a test for.
     for (const author of ["rules", "independent"] as const) {
-      const t = tally[author];
-      if (!t.falseLines && !t.truthful) {
-        console.log(`evaluation set, ${author}: no cases yet`);
-        continue;
-      }
-      console.log(`evaluation set, ${author}: ${t.caught} of ${t.falseLines} false lines caught, ${t.passed} of ${t.truthful} truthful lines passed`);
+      const t = byAuthor[author];
+      console.log(t.falseLines ? `by author, ${author}: ${t.caught} of ${t.falseLines} false lines caught` : `by author, ${author}: no cases yet`);
     }
+    for (const c of ["case 2", "case 3", "invention", "polarity"] as const) {
+      const t = byCase[c];
+      console.log(t.falseLines ? `by case, ${c}: ${t.caught} of ${t.falseLines} false lines caught` : `by case, ${c}: no cases yet`);
+    }
+    console.log(`case 1, stronger wording that must pass: ${caseOnePassed} of ${caseOne} passed`);
     expect(misses).toEqual([]);
     expect(falseHolds).toEqual([]);
   });

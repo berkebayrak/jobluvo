@@ -162,6 +162,12 @@ added that is not on your profile."
   it in `.claude/skills/jobluvo-design/tokens/` too so the design system and the code
   agree.
 - Verify UI changes in the browser, not only in tests.
+- The validator has one principle, at the top of `design/docs/06-Decision-Log.md`: a
+  tailored line may change how something is said, it may not change what is being
+  claimed. Every rule says which of its cases it serves and what it would wrongly block
+  in case 1, stronger wording with the same claim. A rule that cannot say what it costs
+  in case 1 is not ready. Breaking the principle is a product decision and goes back to
+  the user.
 - Never remove, merge, simplify or replace a page, section, animation or interaction that exists in the delivered design (.claude/skills/jobluvo-design/uploads/05-Website.html and the app screens) on your own. If you think something should change, ask first and wait for an answer. Never describe an unapproved change as a deliberate deviation after the fact.
 
 ## Commands

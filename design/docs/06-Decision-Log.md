@@ -4,6 +4,96 @@ Decisions taken during build that the other documents assume but do not state. N
 
 Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implementation-Plan.md), [ATS integration plan](04-Job-Parsing-and-ATS-Integration.md)
 
+---
+
+## The validator's principle
+
+> **A tailored line may change how something is said. It may not change what is being claimed.**
+
+This is the user's decision, not an engineering one, and it governs every rule in
+`src/server/packet/`. It is at the top of this log rather than in date order because
+every validator entry below is answerable to it, including the ones written before it
+existed.
+
+Why it is here at all. The validator was built as a pile of individual rules, each one
+added to catch an example somebody found. There was never a written statement of what it
+is for, which is why every review found a new seam and why nobody could judge whether a
+proposed rule was right or merely effective on the one case that prompted it. Five
+reviews and thirty odd findings is what that costs.
+
+**Case 1. Stronger wording, the same claim. Allowed.** "Helped deliver" to "delivered",
+"improved" to "drove", the posting's vocabulary in place of the resume's. This is what
+tailoring is for, and a rule that blocks it is wrong however many inventions it also
+catches. This is not hypothetical: rule 1's first design held 67 of 90 packets and was
+withdrawn for exactly this, because it measured rewording and tailoring is rewording
+(D-022).
+
+**Case 2. The same number attached to a different thing. Not allowed.** "Reduced churn
+by 11 percent and cut acquisition cost by 5" becoming "reduced acquisition cost by 11
+percent". Nothing was invented, every word appears in the fact, and the achievement is
+false. A number belongs to its subject and moving it is a fabrication.
+
+**Case 3. The same work at a higher level of authority. Not allowed.** "Trained 6
+analysts" to "managed 6 analysts". "Supported recruitment" to "led recruitment". No
+number moved and no word was invented, but the person now claims they ran something they
+took part in. A recruiter reads that as a lie in the same way as case 2, and it is
+exactly what a model does when told to sound stronger.
+
+### What this changes about how the work is done
+
+**Every rule proposed from here says which case it serves, and what it would wrongly
+block in case 1.** A rule that cannot say what it costs in case 1 is not ready to ship.
+
+**Every case in `pairs.test.ts` is labelled with the case it belongs to**, truthful
+controls as case 1, and the set is reported by case rather than as one number. "28 of
+28" hid the fact that nobody had written a case 3 test at all.
+
+**Every measured delta says which case its newly held packets belong to**: case 2, case
+3, or case 1 caught by mistake. The total is not the number to report.
+
+**If a rule change seems to require breaking this, that is a product decision and it
+goes back to the user.** It is not resolved in code and not resolved by argument in a
+pull request.
+
+### What labelling the existing set by case immediately showed
+
+The 28 false lines of `pairs.test.ts`, labelled against the principle and counted by
+case rather than summed:
+
+| Case | False lines |
+|---|---|
+| invention, a value or entity in no cited fact at all | 17 |
+| case 2, a number moved to another subject | 8 |
+| polarity | 2 |
+| **case 3, the same work at a higher authority** | **1** |
+
+Seventeen of the twenty eight test the thing nobody disputes. Case 3, the one a model
+reaches for every time it is told to sound stronger, had a single line: "Trained 6
+analysts" becoming "Managed 6 analysts". "28 of 28" was true and told nobody this. The
+user said the count hid that case 3 was barely tested; labelling says by how much.
+
+Two labels were wrong on the first pass, both in the same direction, and correcting them
+is why the case is recorded per line and not per pair. "Hired 6 analysts" from "Trained
+6 analysts" is a different activity, not a promotion, and the three lines under finding
+6 take another employer's work rather than promoting this employer's. Left as case 3
+they would have made the thinnest column look four times healthier than it is.
+
+### Two things the three cases do not cover, recorded rather than force fitted
+
+Labelling the existing set against the principle turned up two kinds that fit the
+sentence at the top and none of the three named cases. They are written down here
+instead of being filed under the nearest case, because quietly widening a case is how a
+principle stops meaning anything.
+
+- **Plain invention**: a value, entity, tool or qualification that is in no cited fact at
+  all. This was never in dispute and is what the validator was built for, so it is not a
+  boundary the user needed to draw. Labelled `invention`.
+- **Polarity**: "Did not manage 6 analysts" becoming "Managed 6 analysts", and a loss
+  published as a gain when a leading en dash is dropped. Nothing moved and nothing was
+  invented; the claim is negated. It plainly changes what is claimed, and it is not case
+  2 or case 3. Labelled `polarity`, and whether it becomes a named case 4 is the user's
+  call, not one to settle here.
+
 ## 18 September 2026
 
 ### D-033. The pool hands out live connections, and the wake time is on the record with what it was measured against

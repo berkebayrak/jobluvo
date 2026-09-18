@@ -74,6 +74,67 @@ describe("replay decision", () => {
     const legacy = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] });
     // "would: ready" is the sting: it passes today and there is no document left to give anybody.
     expect(replayDecision(legacy, [], null)).toMatchObject({ kind: "no_resume", would: "ready" });
+    // Unless a document is offered from outside and the row's own changes reproduce it, which is the next test.
+  });
+
+  /*
+   * D-043. Four of the six rows D-037 left invalid have their document in a frozen snapshot that is in version
+   * control. The row said it had none, and it did. Restoring it is a repair and not a promotion: the offered
+   * document is accepted only where the row's own stored changes reproduce it, the validator then reads it under
+   * the rules as they stand, and whatever that says is the status.
+   */
+  const noSummary = { ...doc, summary: null };
+  const offered = { document: noSummary, source: "design/snapshots/2026-09-18-packets/packets.json", hash: "abc123" };
+
+  it("restores a document offered from outside when the row's own stored changes reproduce it, and names the source on the row", () => {
+    const legacy = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] });
+    const d = replayDecision(legacy, [], noSummary, [], offered);
+    expect(d.kind).toBe("repair");
+    expect(d.kind === "repair" && d.status).toBe("ready");
+    expect(d.kind === "repair" && d.resume).toEqual(noSummary);
+    expect(d.kind === "repair" && d.source).toBe(offered.source);
+    // The source is on the row, as provenance rather than as a complaint: soft, so it does not hold anything.
+    const f = d.kind === "repair" ? d.findings.find((x) => x.code === "resume-repaired")! : null;
+    expect(f?.level).toBe("soft");
+    expect(f?.value).toBe(offered.source);
+    expect(f?.detail).toContain("abc123");
+  });
+
+  it("refuses a document the row's own stored changes do not reproduce, however good the source", () => {
+    const legacy = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] });
+    // The candidate built from the row's changes is `doc`; the offered document is a different one.
+    const wrong = { ...offered, document: drifted };
+    expect(replayDecision(legacy, [], noSummary, [], wrong)).toMatchObject({ kind: "no_resume", would: "ready" });
+    // And a row with no candidate at all cannot verify anything, so nothing is restored to it either.
+    expect(replayDecision(legacy, [], null, [], offered)).toMatchObject({ kind: "no_resume", would: "ready" });
+  });
+
+  it("stamps a repaired row on what the validator says, never on the fact that it was repaired", () => {
+    const legacy = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] });
+    // Still held by a finding of its own: it comes back held, with its document.
+    expect(replayDecision(legacy, [bulletReview], noSummary, [], offered)).toMatchObject({ kind: "repair", status: "needs_review" });
+    // Still rejected: the document is attached anyway, because a rejection blocks a document and does not decide
+    // whether one exists (D-038), and an invalid row with a document is not a promotion.
+    const rejected = replayDecision(legacy, [bulletHard], noSummary, [], offered);
+    expect(rejected).toMatchObject({ kind: "repair", status: "invalid" });
+    expect(rejected.kind === "repair" && rejected.resume).toEqual(noSummary);
+  });
+
+  it("holds a repaired row on a summary nothing revalidated, exactly as any other row with no change set", () => {
+    // The offered document supplies the summary, and nothing supplies the facts it cited, so the summary is not
+    // revalidated and the row is held on that. A restored summary is never stamped as read when nothing read it.
+    const legacy = row({ status: "invalid", resume: null, resumeHash: null, findings: [] });
+    const d = replayDecision(legacy, [], doc, [], { ...offered, document: doc });
+    expect(d).toMatchObject({ kind: "repair", status: "needs_review", coverage: "bullets" });
+    expect(d.kind === "repair" && d.findings.map((f) => f.code)).toContain("summary-not-revalidated");
+  });
+
+  it("offers nothing to a row that already has a document, or one that can rebuild itself", () => {
+    // A row with its own resume is on the ordinary path; the offer is not consulted.
+    expect(replayDecision(row({}), [], doc, [], offered)).toMatchObject({ kind: "restamp" });
+    // A row with a change set rebuilds from itself, which is stronger evidence than an outside file.
+    const rebuildable = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard], changeSet });
+    expect(replayDecision(rebuildable, [], doc, [], offered)).toMatchObject({ kind: "rebuild" });
   });
 
   it("keeps only the summary's old findings; bullet findings are the replay's", () => {
@@ -215,7 +276,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(resumeHash(r.resume!)).toBe(r.resumeHash);
       expect(Object.keys(r.resume!)).not.toEqual(Object.keys(doc));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 0, stale: 0, untouched: 0 , rebuilt: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 0, stale: 0, untouched: 0, rebuilt: 0, repaired: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("invalid");
       // The rejection blocks the document and keeps it: the gate is the status, not the absence of a resume (D-038).
@@ -234,7 +295,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       // A new run lands on the same user and job after the report read it.
       await tx.update(packets).set({ status: "needs_review", findings: [summaryReview], updatedAt: sql`now() + interval '1 second'` }).where(eq(packets.id, id));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 1, untouched: 0 , rebuilt: 0 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 1, untouched: 0, rebuilt: 0, repaired: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("needs_review");
       expect(after.findings).toEqual([summaryReview]);
@@ -249,7 +310,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(consumableResume(r)).toEqual(r.resume);
       // The base plus the stored changes is not the stored resume: the candidate is a different document.
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [], drifted) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 1, held: 0, stale: 0, untouched: 0 , rebuilt: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 1, held: 0, stale: 0, untouched: 0, rebuilt: 0, repaired: 0 });
       const after = await read(tx, id);
       // The assertion is on the gate, not on the decision: nothing downstream may consume this row.
       expect(consumableResume(after)).toBeNull();
@@ -268,7 +329,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       // Before: ready, and the gate serves the stored document on evidence nothing can check.
       expect(consumableResume(r)).toEqual(r.resume);
       const result = await applyReplay(tx, [{ row: r, decision: unreplayable(r, profileNotReproducible()) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 1, stale: 0, untouched: 0 , rebuilt: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 1, stale: 0, untouched: 0, rebuilt: 0, repaired: 0 });
       const after = await read(tx, id);
       // The assertion is on the gate: nothing downstream may consume this row.
       expect(consumableResume(after)).toBeNull();
@@ -315,7 +376,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
         { row: r, decision: { kind: "no_candidate" } },
         { row: r, decision: { kind: "no_resume", would: "ready", findings: [], coverage: "bullets" } },
       ]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 2 , rebuilt: 0 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 2, rebuilt: 0, repaired: 0 });
       expect((await read(tx, id)).status).toBe("ready");
     });
   });

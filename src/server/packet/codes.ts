@@ -44,6 +44,7 @@ export const FINDING_CODES = [
   "skill-missing",
   // Written by the replay and the run rather than the validator.
   "summary-not-revalidated",
+  "resume-repaired",
   "profile-not-reproducible",
   "posting-moved",
   "unverifiable-resume",

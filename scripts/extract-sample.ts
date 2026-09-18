@@ -5,6 +5,7 @@ import { runStats } from "@/server/match/report";
 import { JACK_RESUME } from "@/server/profile/demo";
 import { extractCall, ExtractError, type ExtractedFact } from "@/server/profile/extract";
 import { currentUserId } from "@/server/user";
+import { oneOf, parseFlags, positiveInteger } from "@/lib/cli";
 
 /*
  * The third term of the cost per application: extraction per user. One
@@ -20,10 +21,7 @@ import { currentUserId } from "@/server/user";
  *   npm run extract-sample -- --tag sample-x
  */
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? (process.argv[i + 1] ?? "true") : undefined;
-}
+const FLAGS = { booleans: [], values: ["n", "only", "tag"] } as const;
 
 /** How much of the seeded resume came back exactly: roles, bullets, degrees, skills, answers. */
 function accuracy(facts: ExtractedFact[]) {
@@ -49,9 +47,11 @@ function accuracy(facts: ExtractedFact[]) {
 }
 
 async function main() {
-  const n = Number(arg("n") ?? 5);
-  const only = arg("only");
-  const tag = arg("tag") ?? `sample-${new Date().toISOString().slice(0, 10)}`;
+  const { values } = parseFlags(process.argv.slice(2), FLAGS);
+  const n = positiveInteger(values.n, "n", 5);
+  const only = oneOf(values.only, "only", ["pdf", "text"]);
+  const tag = values.tag ?? `sample-${new Date().toISOString().slice(0, 10)}`;
+  console.log(`flags: n ${n}, only ${only ?? "both"}, tag ${tag}`);
   const db = dbPool();
   const userId = await currentUserId();
   const bytes = readFileSync("scripts/fixtures/jack-miller-resume.pdf");

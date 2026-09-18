@@ -12,6 +12,7 @@ import type { ResumeFacts } from "@/server/match/profile";
 import { factsBlock } from "@/server/packet/tailor";
 import { filterFacts } from "@/server/profile/viewer";
 import { currentUserId } from "@/server/user";
+import { oneOf, parseFlags, positiveInteger } from "@/lib/cli";
 
 /*
  * The tailoring half of the phase 0 instrument (D-003): the same 100 jobs
@@ -34,12 +35,13 @@ import { currentUserId } from "@/server/user";
  *   npm run tailor-sample -- --model gpt-5.6-x   another priced model
  *   npm run tailor-sample -- --no-store          cost rows only, never a packet: a measurement that leaves the stored packets as they are
  *   npm run tailor-sample -- --save out.json      every outcome's change sets and posting lemmas, so a rule can be re-read on the same answers without a call
+ *
+ * Flags are typed (src/lib/cli.ts): --dry and --no-store take no value and
+ * read the same in any position, --n and --only are validated, an unknown
+ * flag is refused, and the parsed flags are printed before anything runs.
  */
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? (process.argv[i + 1] ?? "true") : undefined;
-}
+const FLAGS = { booleans: ["dry", "no-store"], values: ["n", "only", "model", "tag", "save"] } as const;
 
 async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
@@ -161,12 +163,15 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
 }
 
 async function main() {
-  const n = Number(arg("n") ?? 100);
-  const only = arg("only");
-  const dry = arg("dry") === "true";
-  const model = arg("model");
-  const tag = arg("tag") ?? `sample-${new Date().toISOString().slice(0, 10)}`;
-  const store = arg("no-store") !== "true";
+  const { booleans, values } = parseFlags(process.argv.slice(2), FLAGS);
+  const n = positiveInteger(values.n, "n", 100);
+  const only = oneOf(values.only, "only", ["changes", "document"]);
+  const dry = booleans.dry;
+  const model = values.model;
+  const tag = values.tag ?? `sample-${new Date().toISOString().slice(0, 10)}`;
+  const store = !booleans["no-store"];
+  const save = values.save;
+  console.log(`flags: n ${n}, only ${only ?? "both"}, dry ${dry}, store ${store}, tag ${tag}, model ${model ?? "default"}, save ${save ?? "none"}`);
   const db = dbPool();
   const userId = await currentUserId();
   const [facts, filter] = await Promise.all([resumeFacts(db, userId), filterFacts(userId, db)]);
@@ -188,7 +193,6 @@ async function main() {
     const outcomes = await pool(jobs, 5, (job) => tailorJob(db, facts, job, { mode: "changes", model, run, store }));
     summarise(run, outcomes);
     scopes(facts, outcomes);
-    const save = arg("save");
     if (save) {
       writeFileSync(
         save,

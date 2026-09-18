@@ -28,7 +28,10 @@ Sources of truth:
 - `design/docs/06-Decision-Log.md` decisions taken during build that the other docs
   assume but do not state, newest first, each with what it was measured against.
 - `design/docs/07-Phase-0-Cost-Summary.md` the phase 0 deliverable: the three measured
-  cost terms and the cost per application function against the budget band.
+  cost terms, each named for what it is paid per, and the upstream model cost per
+  application as a band against the budget.
+- `design/snapshots/` frozen data populations with what reproduces them, one dated
+  directory each, read before any restamp or measurement over stored rows.
 
 When product facts and this file disagree, the docs win. Update this file to match.
 
@@ -176,7 +179,12 @@ npm run freshness    # jobs arriving per day and how many pass the filter, by bo
 npm run dedupe-report  # what a dedupe rule change releases and what it withholds, before it ships
 npm run validator-report  # what the claim validator says about every stored packet; -- --apply restamps them under the rules as they stand
 npm run cost-report  # cost per call by run, wrong citations, and calls of unknown cost
+npm run snapshot-packets -- --out <dir>  # freeze packets, cost rows, facts, jobs and the profiles behind them to files, read only
+npm run reconcile-sample -- --dir <dir>  # a stored sample against its saved answers, attempt by attempt, from the snapshot alone
 ```
+
+Every sample script takes typed flags (`src/lib/cli.ts`): a boolean flag such as `--no-store` or
+`--dry` reads the same in any position, and the parsed flags are printed before anything runs.
 
 ## Layout
 

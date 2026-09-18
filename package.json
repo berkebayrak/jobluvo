@@ -30,7 +30,8 @@
     "tailor-sample": "node --env-file=.env.local --import tsx scripts/tailor-sample.ts",
     "resume-pdf": "node --import tsx scripts/resume-pdf.ts",
     "extract-sample": "node --env-file=.env.local --import tsx scripts/extract-sample.ts",
-    "snapshot-packets": "node --env-file=.env.local --import tsx scripts/snapshot-packets.ts"
+    "snapshot-packets": "node --env-file=.env.local --import tsx scripts/snapshot-packets.ts",
+    "reconcile-sample": "node --env-file=.env.local --import tsx scripts/reconcile-sample.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

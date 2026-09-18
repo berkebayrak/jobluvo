@@ -9,12 +9,17 @@ import { FACT_SCHEMAS } from "./facts";
  * or the tailor until the user confirms it, and the origin and state of
  * every fact are kept. Two actions:
  *
- *   decide     confirm or reject single facts by id
+ *   decide     confirm or reject single facts by id. A single confirm adds
+ *              the fact beside whatever is confirmed already, so confirming a
+ *              new resume one fact at a time merges it with the old one; the
+ *              page says so (review four, finding 8).
  *   replace    confirm every extracted fact of one document and retire the
- *              confirmed resume facts that came before it, so the profile is
- *              the resume the user just confirmed and nothing else. Retired
- *              facts are kept as rejected, never deleted: a packet built on
- *              them can still be read (DOC-06).
+ *              resume facts of every other document, confirmed and still
+ *              waiting alike, so the profile is the resume the user just
+ *              confirmed and nothing else and no older upload can be
+ *              confirmed into it afterwards. Retired facts are kept as
+ *              rejected, never deleted: a packet built on them can still be
+ *              read (DOC-06).
  *
  * Preference, authorization and sponsorship facts are never touched here.
  * They are the user's own answers, not resume content.
@@ -47,6 +52,8 @@ export interface ProfileDocumentView {
   status: "processing" | "ready" | "failed";
   state: DocumentState;
   error: string | null;
+  /** What extraction could not read as a fact, one line each; shown whole, so a missing fact has its reason on the page. */
+  issues: string[];
   extracted: number;
   confirmed: number;
   rejected: number;
@@ -69,7 +76,7 @@ export function documentState(d: { status: "processing" | "ready" | "failed"; up
 export async function profileView(db: DbHttp | DbPool | Tx, userId: string): Promise<ProfileView> {
   const [docs, facts] = await Promise.all([
     db
-      .select({ id: profileDocuments.id, filename: profileDocuments.filename, uploadedAt: profileDocuments.uploadedAt, status: profileDocuments.status, error: profileDocuments.error })
+      .select({ id: profileDocuments.id, filename: profileDocuments.filename, uploadedAt: profileDocuments.uploadedAt, status: profileDocuments.status, error: profileDocuments.error, issues: profileDocuments.issues })
       .from(profileDocuments)
       .where(eq(profileDocuments.userId, userId))
       .orderBy(sql`${profileDocuments.uploadedAt} desc`),
@@ -89,6 +96,7 @@ export async function profileView(db: DbHttp | DbPool | Tx, userId: string): Pro
         status: d.status,
         state: documentState({ status: d.status, uploadedAt: d.uploadedAt, ...counts }),
         error: d.error,
+        issues: d.issues ?? [],
         ...counts,
       };
     }),
@@ -230,7 +238,7 @@ export const profileLockKey = (userId: string) => `profile:${userId}`;
 /** A replacement that changed nothing, with the reason the screen shows. */
 export class ReplaceRefused extends Error {
   constructor(
-    public reason: "not_found" | "processing" | "failed" | "nothing_to_confirm" | "changed",
+    public reason: "not_found" | "processing" | "failed" | "nothing_to_confirm" | "changed" | "issues",
     message: string,
   ) {
     super(message);
@@ -238,10 +246,17 @@ export class ReplaceRefused extends Error {
 }
 
 /**
- * Confirms every extracted fact of the document and retires the confirmed
- * resume facts that are not from it. After this the confirmed profile is the
- * document's facts plus the user's own preference, authorization and
- * sponsorship answers.
+ * Confirms every extracted fact of the document and retires the resume
+ * facts of every other document, the confirmed ones and the ones still
+ * waiting ones of every document uploaded before it. After this the
+ * confirmed profile is the document's facts plus the user's own preference,
+ * authorization and sponsorship answers, and no older document has a fact
+ * left to confirm; a newer upload keeps waiting, and confirming it later
+ * replaces this one (review four, finding 8). A
+ * document whose extraction left issues, lines it could not read as facts,
+ * replaces the profile only when the caller says the issues were read
+ * (finding 9): the page shows them and what the replacement removes, and
+ * the refusal names the count.
  *
  * One transaction, opened here so the route and the tests run the same
  * path: on the pool it is a real transaction, inside a test transaction it
@@ -257,11 +272,17 @@ export class ReplaceRefused extends Error {
  * refusal says which, so the screen never shows a click that did nothing
  * as done.
  */
-export async function replaceWithDocument(db: DbPool | Tx, userId: string, documentId: string, seen: FactRef[]): Promise<{ confirmed: number; retired: number }> {
+export async function replaceWithDocument(
+  db: DbPool | Tx,
+  userId: string,
+  documentId: string,
+  seen: FactRef[],
+  opts: { acknowledgeIssues?: boolean } = {},
+): Promise<{ confirmed: number; retired: number; withdrawn: number }> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
     const [doc] = await tx
-      .select({ id: profileDocuments.id, filename: profileDocuments.filename, status: profileDocuments.status, uploadedAt: profileDocuments.uploadedAt })
+      .select({ id: profileDocuments.id, filename: profileDocuments.filename, status: profileDocuments.status, uploadedAt: profileDocuments.uploadedAt, issues: profileDocuments.issues })
       .from(profileDocuments)
       .where(and(eq(profileDocuments.id, documentId), eq(profileDocuments.userId, userId)));
     if (!doc) throw new ReplaceRefused("not_found", "document not found");
@@ -278,15 +299,28 @@ export async function replaceWithDocument(db: DbPool | Tx, userId: string, docum
     const shown = new Map(seen.map((s) => [s.id, s.version]));
     const same = pending.length === shown.size && pending.every((p) => shown.get(p.id) === p.version);
     if (!same) throw new ReplaceRefused("changed", `the facts from ${doc.filename} changed since the page loaded, check them again`);
+    // A fact of a document uploaded before this one, or of no document.
+    const olderDocument = sql`(${profileFacts.documentId} is null or exists (select 1 from ${profileDocuments} d where d.id = ${profileFacts.documentId} and d.uploaded_at < ${doc.uploadedAt}))`;
+    // Counted before the retirement so the answer can say what was confirmed and what was still waiting.
+    const [{ withdrawnBefore }] = await tx
+      .select({ withdrawnBefore: sql<number>`count(*)::int`.mapWith(Number) })
+      .from(profileFacts)
+      .where(and(eq(profileFacts.userId, userId), eq(profileFacts.status, "extracted"), inArray(profileFacts.kind, [...RESUME_KINDS]), olderDocument));
+    const issues = doc.issues ?? [];
+    if (issues.length && !opts.acknowledgeIssues) {
+      throw new ReplaceRefused("issues", `${doc.filename} has ${issues.length} line${issues.length === 1 ? "" : "s"} extraction could not read as facts; read them before it replaces your profile`);
+    }
+    // Every other document's confirmed resume facts go, and the waiting facts of the documents uploaded before this one: an older
+    // upload has no fact left to confirm into the new profile. A newer upload keeps waiting; confirming it later replaces this one.
     const retiredRows = await tx
       .update(profileFacts)
       .set({ status: "rejected", updatedAt: new Date() })
       .where(
         and(
           eq(profileFacts.userId, userId),
-          eq(profileFacts.status, "confirmed"),
           inArray(profileFacts.kind, [...RESUME_KINDS]),
           sql`${profileFacts.documentId} is distinct from ${documentId}`,
+          sql`(${profileFacts.status} = 'confirmed' or (${profileFacts.status} = 'extracted' and ${olderDocument}))`,
         ),
       )
       .returning({ id: profileFacts.id });
@@ -305,6 +339,6 @@ export async function replaceWithDocument(db: DbPool | Tx, userId: string, docum
       )
       .returning({ id: profileFacts.id });
     if (confirmedRows.length !== pending.length) throw new Error(`confirmed ${confirmedRows.length} of ${pending.length} extracted facts; nothing was changed`);
-    return { confirmed: confirmedRows.length, retired: retiredRows.length };
+    return { confirmed: confirmedRows.length, retired: retiredRows.length - withdrawnBefore, withdrawn: withdrawnBefore };
   });
 }

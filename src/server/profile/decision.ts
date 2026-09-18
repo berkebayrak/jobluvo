@@ -17,6 +17,10 @@ export type FactRef = z.infer<typeof factRef>;
  *                          from it. Without `seen` a caller could confirm a
  *                          document's current facts without saying what the
  *                          user reviewed (review three finding 5).
+ *                          `acknowledgeIssues` says the user read the lines
+ *                          extraction could not turn into facts; without it
+ *                          a document with issues is refused (review four
+ *                          finding 9).
  *   { edit }               replace a waiting fact's data with what the user
  *                          typed, at the version the page showed; the fact
  *                          stays waiting at the next version.
@@ -27,7 +31,7 @@ export type FactRef = z.infer<typeof factRef>;
  *                          let a stale page confirm a fact it never showed.
  */
 export const decisionBody = z.union([
-  z.object({ replaceWith: z.string().uuid(), seen: z.array(factRef) }).strict(),
+  z.object({ replaceWith: z.string().uuid(), seen: z.array(factRef), acknowledgeIssues: z.boolean().optional() }).strict(),
   z.object({ edit: z.object({ id: z.string().uuid(), version: z.number().int().positive(), data: z.record(z.string(), z.unknown()) }).strict() }).strict(),
   z.object({ confirm: z.array(factRef).optional(), reject: z.array(factRef).optional() }).strict(),
 ]);

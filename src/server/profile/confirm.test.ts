@@ -108,14 +108,14 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
           { userId, documentId: a.id, kind: "skill", origin: "upload", status: "extracted", evidence: "x", data: { name: "A skill" } },
         ])
         .returning({ id: profileFacts.id });
-      expect(await replaceWithDocument(tx, userId, a.id, await seenOf(tx, userId, a.id))).toEqual({ confirmed: 2, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, a.id, await seenOf(tx, userId, a.id))).toEqual({ confirmed: 2, retired: 2, withdrawn: 0 });
       // The page that showed document a is still open when the user replaces with document b.
       const [b] = await tx.insert(profileDocuments).values({ userId, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
       await tx.insert(profileFacts).values([
         { userId, documentId: b.id, kind: "employment", origin: "upload", status: "extracted", evidence: "x", data: { company: "B Co", title: "Head", start: "2023-03", bullets: ["B line."] } },
         { userId, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
       ]);
-      expect(await replaceWithDocument(tx, userId, b.id, await seenOf(tx, userId, b.id))).toEqual({ confirmed: 2, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, b.id, await seenOf(tx, userId, b.id))).toEqual({ confirmed: 2, retired: 2, withdrawn: 0 });
       // The stale page posts a's ids.
       const stale = await decideFacts(tx, userId, { confirm: aRows.map((r) => ({ id: r.id, version: 1 })) });
       expect(stale).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 2, reject: 0 }, skipped: aRows.map((r) => r.id) });
@@ -140,7 +140,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         { userId, documentId: doc.id, kind: "education", origin: "upload", status: "extracted", evidence: "x", data: { institution: "Koc University", degree: "MBA" } },
         { userId, documentId: doc.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
       ]);
-      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 3, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 3, retired: 2, withdrawn: 0 });
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["New Co"]);
       expect(f.education.map((e) => e.institution)).toEqual(["Koc University"]);
@@ -205,7 +205,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         ["newer.pdf", "check", 2],
         ["older.pdf", "check", 1],
       ]);
-      expect(await replaceWithDocument(tx, userId, older.id, await seenOf(tx, userId, older.id))).toEqual({ confirmed: 1, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, older.id, await seenOf(tx, userId, older.id))).toEqual({ confirmed: 1, retired: 2, withdrawn: 0 });
       const f = (await resumeFacts(tx, userId))!;
       expect(f.employment.map((e) => e.company)).toEqual(["Older Co"]);
       const after = await profileView(tx, userId);
@@ -280,7 +280,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       // An empty list on a document with waiting facts is the unbound form in another shape: refused the same way.
       await expect(replaceWithDocument(tx, userId, doc.id, [])).rejects.toMatchObject({ reason: "changed" });
       // Bound to the current set: the skill at its edited version and the contact, link and project added above.
-      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 4, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 4, retired: 2, withdrawn: 0 });
     });
   });
 
@@ -303,6 +303,51 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       // Once the document is ready the same decision moves.
       await tx.update(profileDocuments).set({ status: "ready" }).where(eq(profileDocuments.id, reading.id));
       expect(await decideFacts(tx, userId, { confirm: [{ id: a.id, version: a.version }] })).toMatchObject({ confirmed: 1, skipped: [] });
+    });
+  });
+
+  it("a replacement withdraws the older documents' waiting facts as well, so a stale single confirm of one afterwards is skipped (review four, finding 8)", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      // Uploaded a minute apart: inside one transaction now() is the transaction's start, so the order has to be written.
+      const [a] = await tx
+        .insert(profileDocuments)
+        .values({ userId, filename: "a.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready", uploadedAt: new Date(Date.now() - 60_000) })
+        .returning({ id: profileDocuments.id });
+      const [b] = await tx.insert(profileDocuments).values({ userId, filename: "b.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
+      const [aFact] = await tx
+        .insert(profileFacts)
+        .values({ userId, documentId: a.id, kind: "employment", origin: "upload", status: "extracted", data: { company: "A Co", title: "Analyst", start: "2020-01", bullets: ["A line."] } })
+        .returning({ id: profileFacts.id, version: profileFacts.version });
+      await tx.insert(profileFacts).values({ userId, documentId: b.id, kind: "employment", origin: "upload", status: "extracted", data: { company: "B Co", title: "Lead", start: "2022-01", bullets: ["B line."] } });
+      const result = await replaceWithDocument(tx, userId, b.id, await seenOf(tx, userId, b.id));
+      // Two confirmed seed resume facts retired, one waiting fact of the older upload withdrawn.
+      expect(result).toEqual({ confirmed: 1, retired: 2, withdrawn: 1 });
+      // The older page confirms the fact it still shows: nothing moves, and it is named as skipped.
+      const late = await decideFacts(tx, userId, { confirm: [{ id: aFact.id, version: aFact.version }] });
+      expect(late).toEqual({ confirmed: 0, rejected: 0, asked: { confirm: 1, reject: 0 }, skipped: [aFact.id] });
+      const facts = (await resumeFacts(tx, userId))!;
+      expect(facts.employment.map((e) => e.company)).toEqual(["B Co"]);
+      const view = await profileView(tx, userId);
+      expect(view.documents.find((d) => d.id === a.id)?.state).toBe("rejected");
+    });
+  });
+
+  it("a document whose extraction left issues replaces the profile only once they are acknowledged, and the refusal counts them (review four, finding 9)", async () => {
+    await withUser(async (tx, userId) => {
+      await tx.insert(profileFacts).values(seedFacts(userId));
+      const [doc] = await tx
+        .insert(profileDocuments)
+        .values({ userId, filename: "partial.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready", issues: ["Head of Strategy at Arvento: start Invalid", "Consultant at Deloitte: end Invalid"] })
+        .returning({ id: profileDocuments.id });
+      await tx.insert(profileFacts).values({ userId, documentId: doc.id, kind: "contact", origin: "upload", status: "extracted", data: { name: "Jack Miller" } });
+      const seen = await seenOf(tx, userId, doc.id);
+      await expect(replaceWithDocument(tx, userId, doc.id, seen)).rejects.toMatchObject({ reason: "issues", message: expect.stringContaining("2 lines") });
+      // Nothing was retired by the refusal.
+      expect((await resumeFacts(tx, userId))!.employment.map((e) => e.company)).toEqual(["Old Co"]);
+      expect((await profileView(tx, userId)).documents.find((d) => d.id === doc.id)?.issues).toHaveLength(2);
+      const result = await replaceWithDocument(tx, userId, doc.id, seen, { acknowledgeIssues: true });
+      expect(result).toEqual({ confirmed: 1, retired: 2, withdrawn: 0 });
     });
   });
 
@@ -333,7 +378,7 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       const status = await tx.select({ status: profileFacts.status }).from(profileFacts).where(and(eq(profileFacts.userId, userId), eq(profileFacts.documentId, doc.id)));
       expect(status).toEqual([{ status: "extracted" }]);
       // The transaction is still usable: the replacement runs clean afterwards.
-      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 1, retired: 2 });
+      expect(await replaceWithDocument(tx, userId, doc.id, await seenOf(tx, userId, doc.id))).toEqual({ confirmed: 1, retired: 2, withdrawn: 0 });
     });
   });
 
@@ -368,22 +413,27 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
         { userId: user.id, documentId: b.id, kind: "contact", origin: "upload", status: "extracted", evidence: "x", data: { name: "Jack" } },
       ]);
       const [seenA, seenB] = await Promise.all([seenOf(db, user.id, a.id), seenOf(db, user.id, b.id)]);
-      const [ra, rb] = await Promise.all([replaceWithDocument(db, user.id, a.id, seenA), replaceWithDocument(db, user.id, b.id, seenB)]);
-      // Each confirmed its own facts; the one that ran second also retired the first's.
-      expect(ra.confirmed).toBe(2);
-      expect(rb.confirmed).toBe(3);
+      const [ra, rb] = await Promise.allSettled([replaceWithDocument(db, user.id, a.id, seenA), replaceWithDocument(db, user.id, b.id, seenB)]);
+      // b is the newer upload, so it is confirmed whichever ran first: after a, it retires a's facts; before a, it withdraws a's waiting
+      // facts and a's replacement is refused with nothing left to confirm (review four, finding 8). Either way the profile is b alone.
+      expect(rb.status).toBe("fulfilled");
+      if (rb.status !== "fulfilled") return;
+      expect(rb.value.confirmed).toBe(3);
+      if (ra.status === "fulfilled") {
+        expect(ra.value).toEqual({ confirmed: 2, retired: 2, withdrawn: 0 });
+        expect(rb.value).toEqual({ confirmed: 3, retired: 2, withdrawn: 0 });
+      } else {
+        expect(ra.reason).toMatchObject({ reason: "nothing_to_confirm" });
+        expect(rb.value).toEqual({ confirmed: 3, retired: 2, withdrawn: 2 });
+      }
       const rows = await db
         .select({ documentId: profileFacts.documentId, status: profileFacts.status, origin: profileFacts.origin })
         .from(profileFacts)
         .where(eq(profileFacts.userId, user.id));
       const confirmedDocs = new Set(rows.filter((r) => r.status === "confirmed" && r.origin === "upload").map((r) => r.documentId));
-      expect(confirmedDocs.size).toBe(1);
-      const winner = [...confirmedDocs][0];
-      const loser = winner === a.id ? b.id : a.id;
-      // The first retired the 2 seeded resume facts; the second retired the first's own, 2 for a or 3 for b.
-      expect(ra.retired + rb.retired).toBe(2 + (winner === b.id ? 2 : 3));
-      expect(rows.filter((r) => r.documentId === winner).every((r) => r.status === "confirmed")).toBe(true);
-      expect(rows.filter((r) => r.documentId === loser).every((r) => r.status === "rejected")).toBe(true);
+      expect([...confirmedDocs]).toEqual([b.id]);
+      expect(rows.filter((r) => r.documentId === b.id).every((r) => r.status === "confirmed")).toBe(true);
+      expect(rows.filter((r) => r.documentId === a.id).every((r) => r.status === "rejected")).toBe(true);
       // The user's own resume facts are retired, the preference is untouched.
       expect(rows.filter((r) => r.origin === "user").map((r) => r.status).sort()).toEqual(["confirmed", "rejected", "rejected"]);
       expect((await filterFacts(user.id, db))?.prefs.targetCountries).toEqual(["US"]);

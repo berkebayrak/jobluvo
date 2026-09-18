@@ -204,6 +204,7 @@ interface Doc {
   status: "processing" | "ready" | "failed";
   state: "processing" | "failed" | "check" | "verified" | "rejected" | "empty";
   error: string | null;
+  issues: string[];
   extracted: number;
   confirmed: number;
   rejected: number;
@@ -266,6 +267,8 @@ export default function ProfilePage() {
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  /** Documents whose extraction issues the user has read, by id: Confirm all on a document with issues waits for this. */
+  const [acknowledged, setAcknowledged] = useState<Record<string, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -357,6 +360,19 @@ export default function ProfilePage() {
   const answers = confirmed.filter((f) => f.kind === "answer");
   const confirmedDoc = docs.find((d) => confirmed.some((f) => f.documentId === d.id));
   const factsFrom = confirmedDoc ? `from ${confirmedDoc.filename}, ${day(confirmedDoc.uploadedAt)}` : "entered by you";
+  /** What a replacement removes, by kind, so the click says what it takes away before it is made. */
+  const removals = (documentId: string) => {
+    const gone = confirmed.filter((f) => f.documentId !== documentId);
+    const n = (kind: string) => gone.filter((f) => f.kind === kind).length;
+    const parts = [
+      [n("employment"), "role", "roles"],
+      [n("education"), "degree", "degrees"],
+      [n("skill"), "skill", "skills"],
+      [n("answer"), "answer", "answers"],
+      [gone.length - n("employment") - n("education") - n("skill") - n("answer"), "other fact", "other facts"],
+    ] as [number, string, string][];
+    return { count: gone.length, text: parts.filter(([c]) => c > 0).map(([c, one, many]) => `${c} ${c === 1 ? one : many}`).join(", ") };
+  };
 
   return (
     <>
@@ -510,12 +526,37 @@ export default function ProfilePage() {
                           Uploaded {day(doc.uploadedAt)}. {group.length} waiting for you.
                           {doc.state === "processing" ? " Still being read; decide when it is done." : doc.state === "failed" ? " Could not be read; these facts cannot be confirmed." : ""}
                         </div>
+                        {removals(doc.id).count > 0 ? (
+                          <div className="sub">
+                            Confirm all replaces the {removals(doc.id).count} confirmed facts you have now, {removals(doc.id).text}, and withdraws anything else still waiting. Confirming one at a time adds
+                            the fact beside them instead.
+                          </div>
+                        ) : null}
+                        {doc.issues.length > 0 ? (
+                          <div className="sub" style={{ marginTop: 6 }}>
+                            {doc.issues.length} {doc.issues.length === 1 ? "line" : "lines"} could not be read as facts, so {doc.issues.length === 1 ? "it is" : "they are"} not below:
+                            <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                              {doc.issues.map((issue, i) => (
+                                <li key={i}>{issue}</li>
+                              ))}
+                            </ul>
+                            <label className="row" style={{ gap: 6, marginTop: 6, cursor: "pointer" }}>
+                              <input type="checkbox" checked={acknowledged[doc.id] ?? false} onChange={(e) => setAcknowledged({ ...acknowledged, [doc.id]: e.target.checked })} />
+                              <span>I have read these. Confirm all may replace my profile without them.</span>
+                            </label>
+                          </div>
+                        ) : null}
                       </span>
                       <Button
                         size="sm"
                         variant="primary"
-                        disabled={busy === "decide" || editing !== null || doc.state !== "check"}
-                        onClick={() => void decide({ replaceWith: doc.id, seen: group.map((f) => ({ id: f.id, version: f.version })) }, "Confirmed. Your profile is this resume now.")}
+                        disabled={busy === "decide" || editing !== null || doc.state !== "check" || (doc.issues.length > 0 && !acknowledged[doc.id])}
+                        onClick={() =>
+                          void decide(
+                            { replaceWith: doc.id, seen: group.map((f) => ({ id: f.id, version: f.version })), ...(doc.issues.length ? { acknowledgeIssues: true } : {}) },
+                            "Confirmed. Your profile is this resume now.",
+                          )
+                        }
                       >
                         Confirm all {group.length}
                       </Button>

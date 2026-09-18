@@ -47,14 +47,19 @@ wording said it was. Nothing has been restored: reading a file is not a recovery
 
 | Evaluation set | Flagged | Rejected | Held | Passes |
 |---|---|---|---|---|
-| 28 false lines, written by the rules' author | 8 | 4 | 4 | 20 |
+| 30 false lines, written by the rules' author | 8 | 4 | 4 | 22 |
 | 14 false lines, written by a second author | 0 | 0 | 0 | 14 |
-| 26 truthful case 1 lines, which must pass | 0 | 0 | 0 | 26 |
+| 24 truthful case 1 lines, which must pass | 0 | 0 | 0 | 24 |
 
-**Eight of forty two are flagged, four of them rejected.** Earlier wording said "four of forty
+**Eight of forty four are flagged, four of them rejected.** Earlier wording said "four of forty
 two", which counted only the rejections and understated what the check does; and a held packet
 is not a caught fabrication either, because nobody has yet decided any of them. Both halves of
 that sentence matter and neither is the number to quote alone.
+
+The set moved from 28 false and 26 truthful to 30 and 24 on 19 September 2026 (D-044): two lines
+that were counted as truthful case 1 controls are case 3 false lines, and case 3 went from 1 of
+the rules author's lines to 3. Neither new false line is caught, which is the ordinary state of a
+case 3 line here.
 
 `src/server/packet/pairs.test.ts` **no longer asserts that 28 of 28 are caught**, and has not
 since 18 September 2026 (D-034). It asserts three things: every truthful line passes, the
@@ -160,7 +165,7 @@ This is the one place the held rate is stated. Every earlier figure in the decis
 
 That was true only while every remaining finding was hard. D-036 demoted the name, posting word and qualification findings to review the next day, so the same 80 answers now read **74 ready, 6 held, 0 invalid**: the same six answers, the same two findings, a hold instead of a rejection. The two findings are a word taken from the posting that no fact carries (5) and a name that no fact carries (2). There is a held rate; the current state section at the top of this page states it.
 
-Read that 7.5 percent for what it is. It is not a quality measure and it is not an improvement on 33.8 percent. The same answers are being read by a check that asks far less. Against the 28 known false lines of `pairs.test.ts` the code rejects 4 and holds 4, where it flagged all 28 before; of a second author's 14 it flags none. **Eight of forty two are flagged, four of them rejected** (corrected 19 September 2026: this said "four of forty two", which counted the rejections only). A held line is not a caught fabrication either, because nobody has decided any of them yet. What the packets say about themselves changed; the packets did not.
+Read that 7.5 percent for what it is. It is not a quality measure and it is not an improvement on 33.8 percent. The same answers are being read by a check that asks far less. Against the 30 known false lines of `pairs.test.ts` the code rejects 4 and holds 4, where it flagged all 28 of the 28 it then held before; of a second author's 14 it flags none. **Eight of forty four are flagged, four of them rejected** (corrected 19 September 2026: this said "four of forty two", which counted the rejections only, over a set that was itself two lines short). A held line is not a caught fabrication either, because nobody has decided any of them yet. What the packets say about themselves changed; the packets did not.
 
 **The check is a placeholder, not the design (D-036).** The permanent answer is a separate model call that reads the confirmed facts and the tailored lines and judges whether each claim is supported, and it is not built because it does not fit the budget: about USD 0.0004 to 0.0008 per application against roughly USD 0.00017 of room at eight jobs scored per application.
 
@@ -281,9 +286,9 @@ An earlier entry, D-031, read the same two rates as "39 percent of that fall is 
 
 **What the validator lets past, which is the measurement that matters and the one this page got wrong.** Two numbers, and the order they are read in is the point.
 
-`src/server/packet/pairs.test.ts` is a paired evaluation set: 28 deliberately false lines, each an invention the validator is supposed to catch, and 26 truthful lines built from the same facts, each one it must let through.
+`src/server/packet/pairs.test.ts` is a paired evaluation set: 30 deliberately false lines the validator is supposed to catch, and 24 truthful lines built from the same facts, each one it must let through. It was 28 and 26 until 19 September 2026, when two lines counted as truthful were found to be case 3 and moved (D-044).
 
-**Superseded on 18 September 2026 by D-034, and this paragraph still described it as current until 19 September.** It read: "It catches 28 of 28 and passes 26 of 26, asserted on every run of `npm test`. That result is not wrong and is not withdrawn." The first half stopped being true when the meaning comparison was removed. The file asserts 26 of 26 truthful and names the lines the invention check still rejects; it asserts nothing about the other 34, on purpose, under a header saying it is not evidence that fabrication is caught. The regression floor it provides is now a floor under the truthful controls and the few rejections, not under 54 lines.
+**Superseded on 18 September 2026 by D-034, and this paragraph still described it as current until 19 September.** It read: "It catches 28 of 28 and passes 26 of 26, asserted on every run of `npm test`. That result is not wrong and is not withdrawn." The first half stopped being true when the meaning comparison was removed. The file asserts 24 of 24 truthful and names the lines the invention check still rejects; it asserts nothing about the other 36, on purpose, under a header saying it is not evidence that fabrication is caught. The regression floor it provides is now a floor under the truthful controls and the few rejections, not under the whole set.
 
 The 28 of 28 was a real result on 17 and 18 September 2026, under the claim validator that D-034 removed. Population: one author's fixtures, that author being the author of the rules.
 
@@ -292,7 +297,7 @@ On 18 September 2026 a second author, reading the implementation and writing aga
 | Evaluation set | False lines caught |
 |---|---|
 | Written by the rules' author, under the rules of 18 September 2026, now removed | 28 of 28 |
-| Written by the rules' author, under the rules as they stand | 8 of 28 flagged, 4 of them rejected |
+| Written by the rules' author, under the rules as they stand | 8 of 30 flagged, 4 of them rejected |
 | Written by a second author, independently | **0 of 14** |
 
 So this page previously said the miss rate was 0. It was 0 on one author's fixtures and the page did not say the second half loudly enough, because the second half did not exist yet. **The only miss rate measured against someone who did not write the rules is 14 of 14 missed**, from the one independent attempt anyone has made. The paired set demonstrates coverage of its own fixtures and says nothing about the general rate. Neither number is an accuracy claim about real resumes, and the diverse labelled set review four asked for still does not exist.

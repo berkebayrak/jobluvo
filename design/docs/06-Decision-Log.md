@@ -132,6 +132,42 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-044. Two truthful controls were case 3 false lines, and the set is 30 and 24
+
+The user's call on the two named in D-041. Both are the same work at a higher level of
+authority, which is case 3 by the principle's own definition, and running a study is not using
+one.
+
+| The fact says | The line that was a truthful control | Now |
+|---|---|---|
+| "Used Salesforce for the sales pipeline." | "Used Salesforce to run the sales pipeline." | a case 3 false line of that pair |
+| "Delivered 9 growth projects for banks, using a conjoint study of 2,000 customers that lifted ARPU 6 percent." | "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent." | a case 3 false line of that pair |
+
+**Why it mattered more than two lines.** A truthful control is a line a future rule must not
+block, asserted on every run of `npm test`. A control that is itself case 3 would have vetoed
+any rule built to catch case 3, which is the thinnest column in the set. The set would have
+been enforcing that the thing it is thinnest on must be allowed.
+
+**What it does to the counts**, and the direction is unfavourable, which is why it is worth
+doing:
+
+| | Before | After |
+|---|---|---|
+| False lines, the rules' author | 28 | 30 |
+| Truthful case 1 controls | 26 | 24 |
+| Case 3, the rules' author | 1 | 3 |
+| Flagged, of all 42 then 44 | 8 | 8 |
+| Rejected | 4 | 4 |
+
+**Neither new false line is caught**, so the flagged count does not move and the denominator
+does. Case 3 now stands at 0 of 6 rejected and 0 held, counting both authors. That is the
+ordinary state of a case 3 line here: no rule reads what a line means, so nothing can see a
+promotion, and the tailoring prompt's third prohibition is the whole of what stands against it.
+
+**Neither line is removed.** The file's rule is that a pair is never removed, only added to,
+and both lines are still in the file, in their own pairs, with a comment saying what they were
+and why they moved.
+
 ### D-043. The four rows whose document exists are repaired, through a path in the code rather than a one off script
 
 The user's call, and his reason in his words: leaving four rows that say invalid with no

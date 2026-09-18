@@ -138,6 +138,15 @@ Lines put back in all: 145 across 42 packets. A dropped line the validator had o
 
 Packets whose status moves: 0.
 
+## Lines not supported by what they cite, first attempt against retained
+
+Answers with both a first and a retained attempt parsed: 80 of 80. Counted in cited bullet edits, the same unit on both rows; a line failing in two ways counts once in "any" and once in each kind.
+
+| Attempt | Cited edits | numeric support | unsupported responsibility | missing citation | wrong role | Any kind | Per 100 | Unrecognised |
+|---|---|---|---|---|---|---|---|---|
+| First attempt | 394 | 25 | 22 | 0 | 0 | 39 | 9.90 | 0 |
+| Retained attempt | 240 | 4 | 2 | 0 | 0 | 5 | 2.08 | 0 |
+
 ## Spend, every cost row tied to an attempt
 
 Cost rows 128, USD 0.0610 in all; 128 rows tie one to one to an attempt of a packet in the run; 0 rows belong to no packet of the run. Rows recorded by our own client from the provider's usage field; the provider's bill is not in the snapshot and completeness against it is not established here.

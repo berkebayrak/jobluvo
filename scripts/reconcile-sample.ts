@@ -4,6 +4,7 @@ import type { Packet, PacketFinding } from "@/db/schema";
 import { parseFlags } from "@/lib/cli";
 import type { ResumeFacts } from "@/server/match/profile";
 import { applyChanges, baseResume, factEntries, resumeHash, shapedResume, type ChangeSet } from "@/server/packet/resume";
+import { CITATION_KIND, CITATION_KINDS, codeOf, type CitationKind } from "@/server/packet/codes";
 import { classifyRetry, mergeRetry } from "@/server/packet/retry";
 import { factSet, isHard, needsReview, validateChangeSet } from "@/server/packet/validate";
 
@@ -282,6 +283,55 @@ function main() {
     for (const m of moved) out(`| ${m.id.slice(0, 8)} | ${m.clean} | ${m.before} | ${m.after} |`);
   }
   out();
+
+  // Lines not supported by what they cite, on the first attempt against the attempt the run kept (finding 17).
+  // The stored packets can only answer this for the retained attempt; the saved answers hold every attempt, so
+  // this is the one place the two can be compared, and it says whether the retry fixes citations or moves them.
+  out("## Lines not supported by what they cite, first attempt against retained");
+  out();
+  const citeCount = (cs: ChangeSet, o: SavedOutcome) => {
+    const fs = validateChangeSet(cs, base, set, posting(o)).filter((f) => f.bullet && f.bullet !== "summary");
+    const lines = (pick: (k: CitationKind | null | undefined) => boolean) => new Set(fs.filter((f) => pick(CITATION_KIND[codeOf(f)!])).map((f) => f.bullet)).size;
+    const cited = new Set(cs.changes.filter((c) => c.facts.length).map((c) => c.bullet)).size;
+    return {
+      cited,
+      byKind: Object.fromEntries(CITATION_KINDS.map((k) => [k, lines((x) => x === k)])) as Record<CitationKind, number>,
+      any: lines((x) => !!x),
+      unrecognised: new Set(fs.filter((f) => codeOf(f) === null).map((f) => f.bullet)).size,
+    };
+  };
+  const totals = { first: { cited: 0, any: 0, unrecognised: 0, byKind: Object.fromEntries(CITATION_KINDS.map((k) => [k, 0])) as Record<CitationKind, number> }, retained: { cited: 0, any: 0, unrecognised: 0, byKind: Object.fromEntries(CITATION_KINDS.map((k) => [k, 0])) as Record<CitationKind, number> } };
+  let comparable = 0;
+  for (const o of saved) {
+    const firstCs = o.changeSets[0];
+    const retainedCs = o.changeSets[retainedIndex(o.attemptLog.map(outcomeOf))];
+    if (!firstCs || !retainedCs) continue;
+    comparable += 1;
+    for (const [which, cs] of [["first", firstCs] as const, ["retained", retainedCs] as const]) {
+      const c = citeCount(cs, o);
+      totals[which].cited += c.cited;
+      totals[which].any += c.any;
+      totals[which].unrecognised += c.unrecognised;
+      for (const k of CITATION_KINDS) totals[which].byKind[k] += c.byKind[k];
+    }
+  }
+  out(`Answers with both a first and a retained attempt parsed: ${comparable} of ${saved.length}. Counted in cited bullet edits, the same unit on both rows; a line failing in two ways counts once in "any" and once in each kind.`);
+  out();
+  out(`| Attempt | Cited edits | ${CITATION_KINDS.join(" | ")} | Any kind | Per 100 | Unrecognised |`);
+  out(`|---|---|${CITATION_KINDS.map(() => "---|").join("")}---|---|---|`);
+  for (const which of ["first", "retained"] as const) {
+    const t = totals[which];
+    out(`| ${which === "first" ? "First attempt" : "Retained attempt"} | ${t.cited} | ${CITATION_KINDS.map((k) => t.byKind[k]).join(" | ")} | ${t.any} | ${t.cited ? ((100 * t.any) / t.cited).toFixed(2) : "0"} | ${t.unrecognised} |`);
+  }
+  out();
+  // The rate falls, and most of the fall is the denominator. Said here so the table is not read as the retry fixing citations.
+  const lost = totals.first.cited - totals.retained.cited;
+  if (lost > 0) {
+    out(
+      `The retained attempt has ${lost} fewer cited lines than the first, ${((100 * lost) / totals.first.cited).toFixed(0)} percent of them, because a retry that drops a line drops its citation problem with it (finding 14). Read the two rates against that: a line deleted is not a line corrected. The merge rule of finding 14 puts back the lines the validator had not objected to, so a run under it does not lose the denominator this way.`,
+    );
+    out();
+  }
 
   out("## Spend, every cost row tied to an attempt");
   out();

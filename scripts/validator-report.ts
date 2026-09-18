@@ -3,6 +3,7 @@ import { dbPool } from "@/db/client";
 import { jobs, packets, profileFacts, type PacketFinding } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
 import { lemmasOf } from "@/server/packet/entities";
+import { codeOf, type FindingCode } from "@/server/packet/codes";
 import { applyReplay, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
@@ -182,33 +183,34 @@ async function main() {
   const soft = replayed.flatMap((p) => by(p, "soft"));
 
   console.log("\nhard findings by reason, edits");
-  console.table(count(hard.map((f) => f.message.replace(/: .*$/, ""))));
+  console.table(count(hard.map((f) => codeOf(f) ?? `unclassified: ${f.message}`)));
   console.log("hard findings, the contradictions named");
   console.table(count(hard.filter((f) => f.message.startsWith("value does not mean")).map((f) => f.message.replace(/^.*?: /, ""))));
 
   console.log("\nreview findings by reason, edits");
-  // Every review message the validator can write, named. The last branch used to be a
-  // fallback, so each reason added since (the three entity rules, the coverage finding)
-  // was counted as "metric unreadable" and no bucket ever read wrong enough to notice.
-  // An unnamed message now says so and carries its own text (review four, finding 2).
-  const REVIEW_KINDS = new Map<string, string>([
-    ["word from the posting", "posting word"],
-    ["responsibility", "responsibility"],
-    ["tool is not in the cited facts", "tool"],
-    ["entity is on the profile but not", "entity not in the cited facts"],
-    ["qualification appears in no confirmed fact", "qualification"],
-    ["the fact and the line", "metric words differ"],
-    ["value matched on kind, unit and role only", "metric unreadable"],
-    ["a number phrase", "number phrase unreadable, line"],
-    ["value could not be checked", "number phrase unreadable, cited fact"],
-    ["cited fact does not exist", "cited fact does not exist"],
-    ["no fact cited", "no fact cited"],
-    [SUMMARY_NOT_REVALIDATED, "summary not revalidated"],
+  // Named by stable code, never by message (finding 17). This table used to match message
+  // prefixes and ended in a fallback branch, so each reason added since it was written was
+  // counted as "metric unreadable". A code this build does not know says so and carries
+  // itself, rather than joining a real bucket.
+  const REVIEW_LABELS = new Map<FindingCode, string>([
+    ["posting-word-unknown", "posting word"],
+    ["responsibility-not-in-cited", "responsibility"],
+    ["tool-not-in-cited", "tool"],
+    ["entity-not-in-cited", "entity not in the cited facts"],
+    ["qualification-unsupported", "qualification"],
+    ["metric-differs", "metric words differ"],
+    ["metric-unreadable", "metric unreadable"],
+    ["number-unreadable", "number phrase unreadable, line"],
+    ["value-uncheckable", "number phrase unreadable, cited fact"],
+    ["cited-fact-missing", "cited fact does not exist"],
+    ["no-fact-cited", "no fact cited"],
+    ["summary-not-revalidated", "summary not revalidated"],
   ]);
   const reviewKind = (f: PacketFinding) => {
-    if (f.message.startsWith("name")) return `name, ${f.detail ?? ""}`;
-    for (const [prefix, kind] of REVIEW_KINDS) if (f.message.startsWith(prefix)) return kind;
-    return `unclassified: ${f.message}`;
+    const code = codeOf(f);
+    if (code === "name-unknown") return `name, ${f.detail ?? ""}`;
+    const label = code ? REVIEW_LABELS.get(code) : undefined;
+    return label ?? `unclassified: ${code ?? f.message}`;
   };
   console.table(count(review.map(reviewKind)));
   console.log("packets held for review by the reasons that hold them");

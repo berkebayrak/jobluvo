@@ -13,6 +13,7 @@ import { factsBlock } from "@/server/packet/tailor";
 import { filterFacts } from "@/server/profile/viewer";
 import { currentUserId } from "@/server/user";
 import { oneOf, parseFlags, positiveInteger } from "@/lib/cli";
+import { CITATION_KIND, CITATION_KINDS, codeOf, type FindingCode } from "@/server/packet/codes";
 
 /*
  * The tailoring half of the phase 0 instrument (D-003): the same 100 jobs
@@ -154,13 +155,16 @@ function summarise(run: string, outcomes: TailorOutcome[]) {
   };
   console.log("  hard findings on the stored attempt:", JSON.stringify(count(hard)));
   console.log("  soft findings on the stored attempt:", JSON.stringify(count(soft)));
-  // The wrong citation rate, tracked across samples: edits whose cited facts do not carry a value the edit uses.
-  // Matched on the message across every level, never on a level: the message moved from soft to hard when the
-  // cited value rule shipped, and a level filter printed "0" for two samples because it found nothing, not
-  // because nothing was wrong (review finding 16). Counted by packet and edit, so R1.1 in two jobs is two.
+  // Lines not supported by what they cite, split by kind and counted by stable code, never by message (finding 17).
+  // The message used to be matched here because it had moved between levels; a code moves nowhere, and a finding
+  // whose code this build does not know is counted as unrecognised rather than as none of the kinds.
   const edits = outcomes.reduce((a, o) => a + o.changes, 0);
-  const wrong = new Set(outcomes.flatMap((o) => o.findings.filter((f) => f.message.includes("not in the cited facts")).map((f) => `${o.jobId}:${f.bullet}`))).size;
-  console.log(`  wrong citations: ${wrong} of ${edits} edits, ${edits ? ((100 * wrong) / edits).toFixed(2) : "0"} per 100`);
+  const lines = (pick: (c: FindingCode | null) => boolean) =>
+    new Set(outcomes.flatMap((o) => o.findings.filter((f) => f.bullet && pick(codeOf(f))).map((f) => `${o.jobId}:${f.bullet}`))).size;
+  const byKind = CITATION_KINDS.map((k) => `${k} ${lines((c) => !!c && CITATION_KIND[c] === k)}`).join(", ");
+  const any = lines((c) => !!c && !!CITATION_KIND[c]);
+  const unrecognised = lines((c) => c === null);
+  console.log(`  lines not supported by what they cite: ${any} of ${edits} edits, ${edits ? ((100 * any) / edits).toFixed(2) : "0"} per 100; by kind ${byKind}; unrecognised ${unrecognised}`);
   for (const o of outcomes.filter((x) => x.status !== "ready").slice(0, 8)) {
     console.log(`  ${o.status} ${o.jobId}: ${o.error ?? o.findings.filter((f) => f.level === "hard").map((f) => `${f.bullet}: ${f.message} ${f.value ?? ""}`).join("; ")}`);
   }

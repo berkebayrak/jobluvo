@@ -13,7 +13,7 @@ export { normaliseNumbers } from "./normalise";
  * `npm run validator-report` restamps the stored packets under the new
  * one (D-017).
  */
-export const VALIDATOR_REVISION = "2026-09-18.r4";
+export const VALIDATOR_REVISION = "2026-09-18.r5";
 
 /*
  * The guarantee behind "nothing is added that is not on your profile".
@@ -106,9 +106,9 @@ export function roleOfLine(bullet: string | null): string | null {
 export function checkLine(line: string, bullet: string | null, cited: string[], facts: FactSet, posting: Set<string> = new Set(), scope: PostingScope = "claim"): PacketFinding[] {
   const out: PacketFinding[] = [];
   // A citation that names nothing supports nothing: the line's values are checked against the facts that do exist, and a person reads the rest.
-  for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "review", bullet, message: "cited fact does not exist", value: id });
+  for (const id of cited) if (!facts.byId.has(id)) out.push({ level: "review", bullet, code: "cited-fact-missing", message: "cited fact does not exist", value: id });
   // A line that cites nothing asserts on its own authority, whatever it says.
-  if (!cited.length) out.push({ level: "review", bullet, message: "no fact cited for this line" });
+  if (!cited.length) out.push({ level: "review", bullet, code: "no-fact-cited", message: "no fact cited for this line" });
 
   // A line under one employer may cite that employer's employment facts only.
   const role = roleOfLine(bullet);
@@ -116,7 +116,7 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
     for (const id of cited) {
       const e = facts.entryById.get(id);
       if (e && e.kind === "employment" && e.role !== role) {
-        out.push({ level: "hard", bullet, message: "cites a fact from another role", value: id, detail: `${id} belongs to ${e.role}; this line is under ${role}` });
+        out.push({ level: "hard", bullet, code: "wrong-role", message: "cites a fact from another role", value: id, detail: `${id} belongs to ${e.role}; this line is under ${role}` });
       }
     }
   }
@@ -127,7 +127,7 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
   for (const p of claimsOf(line)) {
     const same = citedClaims.filter((c) => sameValue(c, p));
     if (!same.length && citedUnreadable.length) {
-      out.push({ level: "review", bullet, message: "value could not be checked; a cited fact has a number phrase that could not be read", value: p.key, detail: citedUnreadable.join("; ") });
+      out.push({ level: "review", bullet, code: "value-uncheckable", message: "value could not be checked; a cited fact has a number phrase that could not be read", value: p.key, detail: citedUnreadable.join("; ") });
       continue;
     }
     if (!same.length) {
@@ -135,28 +135,29 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
       // profile. "Six" once passed because six was on another line; that is the
       // gap this closes. Measured before it shipped over the 520 edits of the
       // first sample: 5 rejected, all the same invention, 0 legitimate edits.
-      if (!facts.all.some((c) => sameValue(c, p))) out.push({ level: "hard", bullet, message: "value appears in no confirmed fact", value: p.key });
-      else if (!cited.length) out.push({ level: "hard", bullet, message: "value with no fact cited for it", value: p.key });
-      else out.push({ level: "hard", bullet, message: "value is on the profile but not in the cited facts", value: p.key });
+      if (!facts.all.some((c) => sameValue(c, p))) out.push({ level: "hard", bullet, code: "value-unknown", message: "value appears in no confirmed fact", value: p.key });
+      else if (!cited.length) out.push({ level: "hard", bullet, code: "value-uncited", message: "value with no fact cited for it", value: p.key });
+      else out.push({ level: "hard", bullet, code: "value-not-in-cited", message: "value is on the profile but not in the cited facts", value: p.key });
       continue;
     }
     const supports = same.filter((c) => contradiction(c, p) === null);
     if (!supports.length) {
       const why = contradiction(same[0], p)!;
-      out.push({ level: "hard", bullet, message: `value does not mean what the fact means: ${why}`, value: p.key, detail: `fact: ${same[0].clause} / line: ${p.clause}` });
+      out.push({ level: "hard", bullet, code: "value-contradicts", message: `value does not mean what the fact means: ${why}`, value: p.key, detail: `fact: ${same[0].clause} / line: ${p.clause}` });
       continue;
     }
     const agreement = supports.map((c) => metricsAgree(c, p));
     const at = (k: "yes" | "unreadable" | "differ") => supports[agreement.indexOf(k)];
     if (agreement.includes("yes")) {
       const c = at("yes");
-      if (c.source.origin === "edit") out.push({ level: "soft", bullet, message: "value is from a line you typed, not the resume's words", value: p.key, origin: "edit", detail: c.clause });
+      if (c.source.origin === "edit") out.push({ level: "soft", bullet, code: "value-from-edit", message: "value is from a line you typed, not the resume's words", value: p.key, origin: "edit", detail: c.clause });
       continue;
     }
     const c = agreement.includes("unreadable") ? at("unreadable") : at("differ");
     out.push({
       level: "review",
       bullet,
+      code: agreement.includes("unreadable") ? "metric-unreadable" : "metric-differs",
       message: agreement.includes("unreadable") ? "value matched on kind, unit and role only; the metric could not be read" : "the fact and the line measure different things",
       value: p.key,
       detail: `fact: ${c.clause} / line: ${p.clause}`,
@@ -165,7 +166,7 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
   }
 
   // A number phrase the normaliser could not read is a value the validator never saw. Held, never passed.
-  for (const phrase of readNumbers(line).unreadable) out.push({ level: "review", bullet, message: "a number phrase could not be read", value: phrase });
+  for (const phrase of readNumbers(line).unreadable) out.push({ level: "review", bullet, code: "number-unreadable", message: "a number phrase could not be read", value: phrase });
 
   // The non numeric check (entities.ts): a new entity, qualification or responsibility is held; a rewording is not.
   const citedFacts = cited.flatMap((id) => (facts.entryById.has(id) ? [{ id, text: facts.entryById.get(id)!.text }] : []));
@@ -199,17 +200,17 @@ export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: Fa
   const seen = new Set<string>();
   for (const c of cs.changes) {
     if (!bullets.has(c.bullet)) {
-      out.push({ level: "soft", bullet: c.bullet, message: "no such line on the resume; edit dropped" });
+      out.push({ level: "soft", bullet: c.bullet, code: "line-missing", message: "no such line on the resume; edit dropped" });
       continue;
     }
-    if (seen.has(c.bullet)) out.push({ level: "soft", bullet: c.bullet, message: "line edited twice; the last edit stands" });
+    if (seen.has(c.bullet)) out.push({ level: "soft", bullet: c.bullet, code: "line-edited-twice", message: "line edited twice; the last edit stands" });
     seen.add(c.bullet);
-    if (!c.text.trim()) out.push({ level: "hard", bullet: c.bullet, message: "empty line" });
+    if (!c.text.trim()) out.push({ level: "hard", bullet: c.bullet, code: "empty-line", message: "empty line" });
     out.push(...checkLine(c.text, c.bullet, c.facts, facts, posting, scope));
   }
   if (cs.summary) out.push(...checkLine(cs.summary, "summary", cs.summaryFacts, facts, posting, scope));
   const skillIds = new Set(base.skills.map((s) => s.id));
-  for (const id of cs.skills) if (!skillIds.has(id)) out.push({ level: "soft", bullet: null, message: "no such skill; ignored", value: id });
+  for (const id of cs.skills) if (!skillIds.has(id)) out.push({ level: "soft", bullet: null, code: "skill-missing", message: "no such skill; ignored", value: id });
   return out;
 }
 

@@ -147,6 +147,8 @@ export interface EntityToken {
   verb?: string;
   /** The token stands in a claim position: inside the object of a responsibility verb, or the instrument after it. */
   claim: boolean;
+  /** The claim position is the instrument after the verb, strong or weak, so a finding's hint is the cited fact's instrument. */
+  instrument: boolean;
 }
 
 const isForm = (raw: string) => /^[A-Za-z][a-z]*[A-Z]/.test(raw) || (/^[A-Z]{2,6}$/.test(raw) && raw.length <= 6) || /[+#]|\.[a-z]/i.test(raw) || (/\d/.test(raw) && /[a-z]/i.test(raw));
@@ -270,7 +272,7 @@ export function entityTokens(line: string, posting: Set<string>, profile: Set<st
     }
   });
   const byKey = new Map<string, EntityToken>();
-  const add = (signal: EntitySignal, token: string, inClaim: boolean, verb?: string) => {
+  const add = (signal: EntitySignal, token: string, inClaim: boolean, verb?: string, inInstrument = false) => {
     const key = lemma(token.toLowerCase().replace(/[^a-z0-9+#.-]/g, ""));
     if (!key) return;
     const had = byKey.get(key);
@@ -278,9 +280,10 @@ export function entityTokens(line: string, posting: Set<string>, profile: Set<st
       if (!had.signals.includes(signal)) had.signals.push(signal);
       if (verb && !had.verb) had.verb = verb;
       had.claim ||= inClaim;
+      had.instrument ||= inInstrument;
       return;
     }
-    byKey.set(key, { token, key, signals: [signal], claim: inClaim, ...(verb ? { verb } : {}) });
+    byKey.set(key, { token, key, signals: [signal], claim: inClaim, instrument: inInstrument, ...(verb ? { verb } : {}) });
   };
   toks.forEach((t, i) => {
     const { raw, low } = t;
@@ -289,22 +292,23 @@ export function entityTokens(line: string, posting: Set<string>, profile: Set<st
     const inClaim = claim.has(i);
     const entitySignalled = isForm(raw) || (/^[A-Z]/.test(raw) && raw !== "I" && (!t.sentenceStart || (!RESPONSIBILITY_VERBS.has(low) && !/(ed|ing)$/.test(low))));
     const position = inClaim || (weakClaim.has(i) && entitySignalled);
+    const inInstrument = instrumentTokens.has(i) || weakClaim.has(i);
     // A posting noun fires in a claim position: "set up feedback loops" claims loops and feedback, "implemented salesforce workflows" claims
     // salesforce, "built dashboards using salesforce data" claims salesforce. Outside one, "with attention to detail", it is the posting's
     // vocabulary in a rewording. The light words keep "complex analysis" out.
-    if (nounShaped(low) && posting.has(key) && !profile.has(key) && (scope === "anywhere" || position)) add("posting", raw, position);
-    if (isForm(raw)) add("form", raw, position);
-    else if (/^[A-Z]/.test(raw) && !t.sentenceStart && raw !== "I") add("proper", raw, position);
-    else if (/^[A-Z]/.test(raw) && t.sentenceStart && raw !== "I" && !RESPONSIBILITY_VERBS.has(low) && !/(ed|ing)$/.test(low)) add("sentence start", raw, position);
-    if (qualificationStem(low)) add("qualification", raw, position);
+    if (nounShaped(low) && posting.has(key) && !profile.has(key) && (scope === "anywhere" || position)) add("posting", raw, position, undefined, inInstrument);
+    if (isForm(raw)) add("form", raw, position, undefined, inInstrument);
+    else if (/^[A-Z]/.test(raw) && !t.sentenceStart && raw !== "I") add("proper", raw, position, undefined, inInstrument);
+    else if (/^[A-Z]/.test(raw) && t.sentenceStart && raw !== "I" && !RESPONSIBILITY_VERBS.has(low) && !/(ed|ing)$/.test(low)) add("sentence start", raw, position, undefined, inInstrument);
+    if (qualificationStem(low)) add("qualification", raw, position, undefined, inInstrument);
     // A lower case tool in a strong instrument run, "using salesforce data", carries no entity signal; when the profile has it elsewhere it is
     // still a claim about this fact, so it enters as an instrument token and the cited facts decide (review four, 5A and 6).
-    if (instrumentTokens.has(i) && !entitySignalled && profile.has(key) && nounShaped(low) && !NOT_INSTRUMENT.has(low)) add("instrument", raw, true);
+    if (instrumentTokens.has(i) && !entitySignalled && profile.has(key) && nounShaped(low) && !NOT_INSTRUMENT.has(low)) add("instrument", raw, true, undefined, true);
     if (RESPONSIBILITY_VERBS.has(low)) {
       // A generic or light head, "present progress", "translating client needs", asserts nothing a fact could contradict.
       for (const head of objectHeads(toks, i)) if (!GENERIC_OBJECTS.has(head.toLowerCase()) && !LIGHT_WORDS.has(head.toLowerCase())) add("object", head, true, lemma(low));
       const tool = instrumentHead(toks, i);
-      if (tool) add("instrument", tool, true, lemma(low));
+      if (tool) add("instrument", tool, true, lemma(low), true);
     }
   });
   return [...byKey.values()];
@@ -349,8 +353,10 @@ export function entityFindings(line: string, bullet: string | null, cited: Cited
     }
     // Second question, asked of every token in a claim position whatever the first answered: do the cited facts support the relationship.
     if (!t.claim || citedLemmas.has(t.key)) continue;
+    // The hint is the cited fact's word in the same place: its instrument for an instrument, its object under the same verb otherwise.
     const same = citedObjects.find((o) => o.verb === t.verb);
-    const hint = same ?? citedObjects[0];
+    const tool = t.instrument ? citedObjects.find((o) => o.verb === "with") : undefined;
+    const hint = tool ?? same ?? citedObjects[0];
     const says = hint ? `the cited fact says ${hint.head}` : "the cited facts name no object for it";
     if (t.signals.includes("object")) out.push({ level: "review", bullet, message: "responsibility is not in the cited facts", value: t.token, detail: says });
     else if (t.signals.includes("instrument")) out.push({ level: "review", bullet, message: "tool is not in the cited facts", value: t.token, detail: says });

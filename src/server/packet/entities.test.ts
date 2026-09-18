@@ -148,8 +148,8 @@ describe("findings", () => {
     expect(found("Built dashboards using salesforce data", excel, salesforcePosting).map((f) => f[0])).toEqual(["salesforce"]);
     expect(found("Built dashboards using Tableau", excel)).toEqual([["Tableau", "name appears in no confirmed fact", "capitalised"]]);
     expect(found("Built dashboards using Power BI", excel)).toEqual([
-      ["BI", "tool is not in the cited facts", "the cited fact says dashboards"],
-      ["Power", "entity is on the profile but not in the cited facts", "the cited fact says dashboards"],
+      ["BI", "tool is not in the cited facts", "the cited fact says Excel"],
+      ["Power", "entity is on the profile but not in the cited facts", "the cited fact says Excel"],
     ]);
     // 5B: every conjunct of a coordinated object is a claim.
     expect(found("Built dashboards and recruitment systems", excel, salesforcePosting).map((f) => [f[0], f[1]]).sort()).toEqual([
@@ -162,12 +162,15 @@ describe("findings", () => {
     expect(found("Certified in Excel", excel)).toEqual([["Certified", "qualification appears in no confirmed fact", "a certification or licence is a claim wherever it stands"]]);
     expect(found("Used Excel", excel)).toEqual([]);
     // 6: an entity the profile has, in a claim position under a fact that does not name it, is held; capitalisation changes nothing.
-    expect(found("Built dashboards in Salesforce", excel)).toEqual([["Salesforce", "tool is not in the cited facts", "the cited fact says Excel"]]);
+    const knowsSalesforce = new Set([...profile, ...lemmasOf("Used Salesforce for the sales pipeline. Led recruitment of analysts.")]);
+    const foundKnowing = (line: string) => entityFindings(line, "R1.1", cited(excel), knowsSalesforce, none).map((f) => [f.value, f.message, f.detail]);
+    expect(foundKnowing("Built dashboards in Salesforce")).toEqual([["Salesforce", "tool is not in the cited facts", "the cited fact says Excel"]]);
+    expect(foundKnowing("Built dashboards using salesforce data")).toEqual([["salesforce", "tool is not in the cited facts", "the cited fact says Excel"]]);
     expect(found("Built dashboards in Excel", excel)).toEqual([]);
-    expect(found("Led recruitment", excel).map((f) => [f[0], f[1]])).toEqual([["recruitment", "responsibility is not in the cited facts"]]);
-    expect(found("Led RECRUITMENT", excel).map((f) => [f[0], f[1]])).toEqual([["RECRUITMENT", "responsibility is not in the cited facts"]]);
+    expect(foundKnowing("Led recruitment").map((f) => [f[0], f[1]])).toEqual([["recruitment", "responsibility is not in the cited facts"]]);
+    expect(foundKnowing("Led RECRUITMENT").map((f) => [f[0], f[1]])).toEqual([["RECRUITMENT", "responsibility is not in the cited facts"]]);
     // "with" opens an instrument for an entity only: a rewording after it passes, a named tool the fact lacks does not.
     expect(found("Built dashboards with attention to detail", excel)).toEqual([]);
-    expect(found("Built dashboards with Salesforce", excel)).toEqual([["Salesforce", "entity is on the profile but not in the cited facts", "the cited fact says Excel"]]);
+    expect(foundKnowing("Built dashboards with Salesforce")).toEqual([["Salesforce", "entity is on the profile but not in the cited facts", "the cited fact says Excel"]]);
   });
 });

@@ -154,6 +154,11 @@ added that is not on your profile."
   and `npm run build`. Do not push a red build. Run them with `npm run check`, which
   refuses a tree that is not clean, so the result describes the commit and not something
   half saved, and stops at the first non zero exit instead of reading past it.
+- Prove a fix by breaking it: disable the fix, show the test fails, restore it. Commit
+  before you break it. On top of a commit the break is a diff and `git checkout` restores
+  the file; on top of uncommitted work the break sits beside the only copy and `git
+  checkout` destroys it. That has eaten work twice. A backup file is a workaround, not
+  the procedure.
 - A restamp (`npm run validator-report -- --apply`) is applied only from merged code, never
   from a branch. Report the table before and after and name the rows that moved. Applying
   one from an unmerged branch leaves production in a state no committed code can explain.
@@ -162,12 +167,23 @@ added that is not on your profile."
   it in `.claude/skills/jobluvo-design/tokens/` too so the design system and the code
   agree.
 - Verify UI changes in the browser, not only in tests.
-- The validator has one principle, at the top of `design/docs/06-Decision-Log.md`: a
-  tailored line may change how something is said, it may not change what is being
-  claimed. Every rule says which of its cases it serves and what it would wrongly block
-  in case 1, stronger wording with the same claim. A rule that cannot say what it costs
-  in case 1 is not ready. Breaking the principle is a product decision and goes back to
-  the user.
+- The principle is at the top of `design/docs/06-Decision-Log.md`: a tailored line may
+  change how something is said, it may not change what is being claimed. Its cases are
+  case 0 something in no confirmed fact, case 1 stronger wording with the same claim
+  which is allowed, case 2 a number moved to a different subject, case 3 the same work at
+  a higher level of authority, case 4 polarity, a denial reversed or a loss published as
+  a gain.
+- **The prompt carries that principle now, the validator does not (D-034).** The four
+  prohibitions in `RULES` in `src/server/packet/tailor.ts` are cases 2, 3, 4 and 0 in
+  plain language, and they are the main line of defence. The code checks one thing: a
+  value or a name that appears nowhere in the user's confirmed facts is a hard finding,
+  profile wide. Do not add a rule that reads what a line means and compares it with what
+  a fact means; that was removed on the user's decision and putting it back is a product
+  decision that goes back to the user.
+- Never say or imply that Jobluvo verifies a tailored resume is truthful. It does not.
+  Measured: 19 of 28 known false lines are not caught, 10 of them plain inventions,
+  because a word that appears anywhere on the profile satisfies the check. `npm run
+  probe-cheap-check` reproduces that, and `pairs.test.ts` records it.
 - Never remove, merge, simplify or replace a page, section, animation or interaction that exists in the delivered design (.claude/skills/jobluvo-design/uploads/05-Website.html and the app screens) on your own. If you think something should change, ask first and wait for an answer. Never describe an unapproved change as a deliberate deviation after the fact.
 
 ## Commands
@@ -190,6 +206,7 @@ npm run boilerplate-report  # what the boilerplate rule strips per board, and wh
 npm run freshness    # jobs arriving per day and how many pass the filter, by board date and by first seen
 npm run dedupe-report  # what a dedupe rule change releases and what it withholds, before it ships
 npm run validator-report  # what the claim validator says about every stored packet; -- --apply restamps them under the rules as they stand
+npm run probe-cheap-check  # what the validator catches and what it does not, over the saved answers and the known false lines, read only
 npm run cost-report  # cost per call by run, wrong citations, and calls of unknown cost
 npm run snapshot-packets -- --out <dir>  # freeze packets, cost rows, facts, jobs and the profiles behind them to files, read only
 npm run reconcile-sample -- --dir <dir>  # a stored sample against its saved answers, attempt by attempt, from the snapshot alone

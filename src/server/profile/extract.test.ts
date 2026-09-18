@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type Tx } from "@/db/client";
 import { costEvents, profileDocuments, profileFacts, users } from "@/db/schema";
 import * as client from "@/server/llm/client";
 import { COST_NOT_RECORDED } from "@/server/cost";
@@ -153,8 +153,7 @@ function costInsertFails(tx: Tx): Tx {
 }
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 afterEach(() => call().mockReset());

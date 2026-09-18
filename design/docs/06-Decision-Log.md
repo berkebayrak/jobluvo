@@ -10,10 +10,20 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 > **A tailored line may change how something is said. It may not change what is being claimed.**
 
-This is the user's decision, not an engineering one, and it governs every rule in
-`src/server/packet/`. It is at the top of this log rather than in date order because
-every validator entry below is answerable to it, including the ones written before it
-existed.
+This is the user's decision, not an engineering one. It is still the right statement of
+what is and is not allowed, and it is still at the top of this log because every entry
+below is answerable to it.
+
+**What carries it changed on 18 September 2026 (D-034). The prompt carries this, the code
+does not enforce it.** The meaning comparison was removed: no rule in
+`src/server/packet/` now reads what a tailored line means and compares it with what a fact
+means. The four prohibitions in `RULES` in `src/server/packet/tailor.ts` are cases 2, 3, 4
+and 0 below, written out in plain language with one example each, and they are the whole of
+what stands between a model that wants to sound impressive and a submitted resume. The code
+checks one thing: that every value and every name appears somewhere in the confirmed facts.
+
+Read the cases below as the standard the prompt is held to, not as a description of
+anything the validator verifies. D-034 records what that costs in measured numbers.
 
 Why it is here at all. The validator was built as a pile of individual rules, each one
 added to catch an example somebody found. There was never a written statement of what it
@@ -78,23 +88,147 @@ is why the case is recorded per line and not per pair. "Hired 6 analysts" from "
 6 take another employer's work rather than promoting this employer's. Left as case 3
 they would have made the thinnest column look four times healthier than it is.
 
-### Two things the three cases do not cover, recorded rather than force fitted
+### Case 0 and case 4, named by the user after labelling turned them up
 
-Labelling the existing set against the principle turned up two kinds that fit the
-sentence at the top and none of the three named cases. They are written down here
-instead of being filed under the nearest case, because quietly widening a case is how a
-principle stops meaning anything.
+Labelling the existing set against the principle turned up two kinds that fit the sentence
+at the top and none of the three named cases. Neither was forced into an existing case,
+because quietly widening a case is how a principle stops meaning anything. Both were put to
+the user and both were named.
 
-- **Plain invention**: a value, entity, tool or qualification that is in no cited fact at
-  all. This was never in dispute and is what the validator was built for, so it is not a
-  boundary the user needed to draw. Labelled `invention`.
-- **Polarity**: "Did not manage 6 analysts" becoming "Managed 6 analysts", and a loss
-  published as a gain when a leading en dash is dropped. Nothing moved and nothing was
-  invented; the claim is negated. It plainly changes what is claimed, and it is not case
-  2 or case 3. Labelled `polarity`, and whether it becomes a named case 4 is the user's
-  call, not one to settle here.
+**Case 0. Something in no confirmed fact at all. Not allowed.** A value, entity, tool or
+qualification the user never claimed anywhere. It is numbered 0 rather than 4 because it is
+the one case where there is nothing to compare against: the others ask whether a claim
+survived a rewording, and this one asks whether there was a claim at all. Cases 1, 2 and 3
+keep the numbers they already had here and in CLAUDE.md; nothing was renumbered.
+
+**Case 4. Polarity. Not allowed.** A denial reversed, or a loss published as a gain. "Did
+not manage 6 analysts" becoming "Managed 6 analysts"; "-11 percent revenue growth" becoming
+"11 percent revenue growth" when a leading en dash is dropped. Nothing is invented, no
+number moves, the claim is negated. It fails the principle's test plainly and it is not
+case 2 or case 3.
+
+Naming both mattered for a plain reason: most of `pairs.test.ts` is case 0, and counting it
+beside case 3 is what produced the misleading "28 of 28".
+
+Two labels were wrong on the first pass, both in the direction that flattered case 3, and
+correcting them is why the case is recorded per line and not per pair. "Hired 6 analysts"
+from "Trained 6 analysts" is a different activity, not a promotion, and the three lines
+under finding 6 take another employer's work rather than promoting this employer's. Left as
+case 3 they would have made the thinnest column look four times healthier than it is. That
+is recorded here on the user's instruction: getting two labels wrong and saying so is worth
+more than getting them right quietly.
 
 ## 18 September 2026
+
+### D-034. The meaning comparison comes out of the validator and the truthfulness instruction moves into the prompt
+
+**The user's decision.** It reverses an architectural choice made in phase 0 and it is not
+an engineering trade made in a pull request.
+
+The reason, in the user's words: a prompt telling the model not to invent things is the
+guarantee he wants. He does not want the system writing a line and then reading it back to
+argue with itself.
+
+**What stays.** A value or an entity that appears nowhere in the user's confirmed facts is
+a hard finding. Profile wide, not against the facts the line cites. One lookup, fast, and
+it almost never fires wrongly.
+
+**What goes.** Every comparison that establishes what a line means against what a fact
+means: the predicate binding and the segment model, the metric subset test, the period and
+frequency comparison, `contradiction` over kind, unit, role, direction, relation and
+negation, the entity relationship question, and the employer rule. The code is deleted, not
+disabled; nothing sits behind a flag. `claims.ts` goes from 453 lines to 190.
+
+**What it buys.** No hold rate and no queue. A simpler system with one rule in it that can
+be explained in a sentence. And truthfulness stated where the user wants it stated, in the
+instruction to the model, rather than inferred afterwards by code arguing with its own
+output.
+
+**What it costs, in the measured numbers rather than in words.** Measured on the code as it
+now stands, `npm run probe-cheap-check` against
+`design/snapshots/2026-09-18-packets`:
+
+| What | Before | After |
+|---|---|---|
+| The 80 saved answers: ready / held / invalid | 53 / 25 / 2 | 74 / 0 / 6 |
+| Held or invalid | 33.8 percent | 7.5 percent |
+| The 28 known false lines of `pairs.test.ts`, rejected | 28 | 8 |
+| The reviewer's 14, rejected | 1 | 0 |
+| Truthful case 1 lines that pass | 26 of 26 | 26 of 26 |
+
+By case, of the 28: invention 7 of 17 still rejected, case 2 one of 8, case 3 none of 1,
+case 4 none of 2.
+
+**Nineteen of twenty eight known false lines stop being caught, and ten of those are plain
+inventions.** That last part is the sentence nobody should have to discover for themselves
+in six months. A word that appears anywhere on the profile satisfies the remaining check,
+so "Built dashboards in Salesforce" on the Excel role passes as long as the user knows
+Salesforce somewhere, and "Led recruitment" passes as long as recruitment appears under any
+role. Case 0 as a label is not case 0 as a check. The check catches fabrication only when
+the fabricated thing appears nowhere on the profile at all, and against a full profile that
+is a narrow net.
+
+**There is no evidence that any particular resume is clean.** The validator never provided
+much and now provides less. `pairs.test.ts` says so in its own header, and it no longer
+asserts that fabrication is caught.
+
+**The findings that remain are hard, not review**, which is the user's rule as written. The
+hold rate is therefore zero and the rejection rate is 7.5 percent: six of the 80 answers
+carry no tailored resume and the user gets the original. That is a different shape from a
+queue of 25 held packets, and it is the shape the user asked for.
+
+**Three judgement calls inside the decision, made rather than asked, each flagged here.**
+The claim position scope on the posting rule is kept, because it decides which tokens are
+looked up rather than what any of them means, and without it the rule fires on ordinary
+rewording (D-023 measured that at eight in ten against one in four). `number-unreadable` is
+kept as a held finding, because it says the lookup did not run on a value rather than that
+the value is wrong; it fired zero times on the 80. The two citation findings are kept as
+held findings for the same reason, and they also fired zero times.
+
+**Raising the findings to hard exposed three false positives** that were harmless while
+they were holds. All three are fixed in the code: a month name read as a capitalised word
+in no fact, an amount written "$1.1B" read as a name by its form, and verbs whose past
+tense ends in neither "ed" nor "ing", of which "Cut" is the one that matters. A fourth is
+recorded and not fixed because no list closes it: "Oversight of four managers" is rejected
+where "Oversaw four managers" passes.
+
+**What follows from this, decided with it.** `needs_review` stays as a status and DOC-03
+stays a gate before submission, because a person should still see what goes out in their
+name. It stops being a queue: at 7.5 percent rejected and nothing held, DOC-03 is a normal
+review step, not a primary flow staffed as such. The cost summary's held packets section,
+its DOC-03 primary flow paragraph and its conversion paragraph move together with this.
+
+**The validator work of the last two days is withdrawn, not deleted quietly.** It is
+findable in the history, and it is named here so that nobody in six months wonders where it
+went: #36 the normaliser and the unreadable phrase rule, #38 rule 2 and the metric subset
+test, #39 and #40 rule 1 and `entities.ts`, #57 the claim model, #58 the entity rules, #64
+the retry restoration (kept: it is not a meaning comparison), #66 stable codes (kept), #77
+the principle (kept, and re-marked above). D-020, D-021, D-022 and D-023 describe rules
+that no longer exist; they are left in place, in date order, as the record of what was
+built and why, and this entry is what supersedes them.
+
+### D-035. The rest of review five is placed in phase 1, not done
+
+Seven findings from the fifth review are left undone on purpose, the way D-019 placed the
+second review's remainder. None of them is a defect a user meets: every one is about the
+measurement apparatus, and the measurement work belongs with phase 1.
+
+- **The snapshot is overwritable and is not a consistent read.** It is a set of files
+  anything can replace and its tables are read one after another, not in one transaction.
+  It has not been wrong yet, and nothing reads it but a report.
+- **The saved answers are not self contained.** A replay needs the snapshot beside them.
+  They are only read next to it, so nothing is broken today.
+- **The backfill's "exact match" claim overstates what it verified.** A wording defect in a
+  report nobody acts on without reading the rows.
+- **The citation reports use different populations.** Partly addressed by #66; the
+  remainder is that two numbers in the same report still count over different denominators,
+  which matters when the numbers are quoted and not otherwise.
+- **A repeated replay appends duplicate findings.** Coverage findings stack on a row that
+  is replayed twice. The status does not change, so the effect is a longer list.
+- **Partial extraction loses data without raising an issue.** Real, and it needs the
+  extraction work of phase 1 to fix properly rather than a patch here.
+- **The cost attribution labels overclaim.** A label says a cost belongs to a thing it can
+  only be associated with. Fix it when the cost function is restated with users in it.
 
 ### D-033. The pool hands out live connections, and the wake time is on the record with what it was measured against
 

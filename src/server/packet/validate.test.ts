@@ -53,7 +53,6 @@ const set = factSet(factEntries(FACTS));
 const ALL = ["R1", "R1.1", "R1.2", "R1.3", "R1.4", "E1", "S1", "S2"];
 /** Hard findings for an R1 line that cites every fact it may (R2's facts belong to another role), so only values that are nowhere on the profile fail. */
 const hard = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "hard");
-const soft = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "soft");
 const review = (line: string, cited: string[] = ALL) => checkLine(line, "R1.1", cited, set).filter((f) => f.level === "review");
 
 describe("normaliser", () => {
@@ -120,95 +119,87 @@ describe("normaliser", () => {
 
 describe("hard rejections: a value in no confirmed fact", () => {
   it("passes the fact's own words and their plain restatements", () => {
-    expect(hard("Cut operating cost 11% (USD 9.2 million a year) across four business units in a three year program")).toEqual([]);
+    expect(hard("Reduced operating cost 11% (USD 9.2 million a year) across four business units in a three year program")).toEqual([]);
     expect(hard("Reduced cost by eleven percent against a twelve percent target")).toEqual([]);
-    expect(hard("Four managers and two analysts, at a USD 140 million telematics company")).toEqual([]);
+    // "Four" opens the line and reads as a name, the false positive recorded below; written the way a tailored line would be, it passes.
+    expect(hard("Led four managers and two analysts, at a USD 140 million telematics company")).toEqual([]);
     expect(hard("Built an OKR system used by 38 teams since 2023")).toEqual([]);
-    expect(hard("Closed a USD 18M acquisition in 2024 after screening 14 targets")).toEqual([]);
-    // The market size is Deloitte's fact: cited under its own role it passes; under R1 it would cite another role.
+    expect(hard("Prepared the USD 18M acquisition case in 2024 after screening 14 targets")).toEqual([]);
     expect(checkLine("Sized a $1.1B market for SME lending", "R2.1", ["R2.1"], set).filter((f) => f.level === "hard")).toEqual([]);
     expect(hard("Head of Strategy since March 2022")).toEqual([]);
   });
   it("rejects a number, amount, percentage or date that is not on the profile", () => {
     expect(hard("Reduced operating cost by 13 percent")).toEqual([expect.objectContaining({ level: "hard", value: "pct:13" })]);
-    expect(hard("Saved USD 9.4M a year")).toEqual([expect.objectContaining({ value: "money:usd:9400000" })]);
-    expect(hard("Saved EUR 9.2M a year")).toEqual([expect.objectContaining({ value: "money:eur:9200000" })]);
-    expect(hard("Program across five business units")).toEqual([expect.objectContaining({ value: "num:5" })]);
-    expect(hard("Built the OKR system in January 2023")).toEqual([expect.objectContaining({ value: "date:2023-01" })]);
-    expect(hard("Joined Arvento in 2021")).toEqual([expect.objectContaining({ value: "year:2021" })]);
-    expect(hard("Team of seventeen")).toEqual([expect.objectContaining({ value: "num:17" })]);
+    expect(hard("Saved USD 9.4M a year").map((f) => f.value)).toEqual(["money:usd:9400000"]);
+    expect(hard("Saved EUR 9.2M a year").map((f) => f.value)).toEqual(["money:eur:9200000"]);
+    expect(hard("Ran a program across five business units").map((f) => f.value)).toEqual(["num:5"]);
+    expect(hard("Built the OKR system in January 2023").map((f) => f.value)).toEqual(["date:2023-01"]);
+    expect(hard("Joined Arvento in 2021").map((f) => f.value)).toEqual(["year:2021"]);
+    expect(hard("Managed a team of seventeen").map((f) => f.value)).toEqual(["num:17"]);
     // Arithmetic over facts is a new claim: four managers and two analysts is not "a team of 6" on the profile.
-    expect(hard("Team of 6 across strategy and analysis")).toEqual([expect.objectContaining({ value: "num:6" })]);
-    expect(hard("Managed a USD 250M budget")).toEqual([expect.objectContaining({ value: "money:usd:250000000" })]);
+    expect(hard("Managed a team of 6 across strategy and analysis").map((f) => f.value)).toEqual(["num:6"]);
+    expect(hard("Managed a USD 250M budget").map((f) => f.value)).toEqual(["money:usd:250000000"]);
     // The salary expectation is an answer, not resume content: its figure is not on the resume's fact set at all.
-    expect(hard("Expects USD 150,000 base")).toEqual([expect.objectContaining({ value: "money:usd:150000" })]);
+    // "Expects" also reads as a name, the false positive below; the figure is what this asserts.
+    expect(hard("Expects USD 150,000 base").map((f) => f.value)).toContain("money:usd:150000");
   });
   it("rejects a rounded or rescaled figure, because it is a different claim", () => {
-    expect(hard("USD 9M in savings")).toHaveLength(1);
-    expect(hard("about 10 percent lower cost")).toEqual([expect.objectContaining({ value: "pct:10" })]);
-    expect(hard("nearly 40 teams")).toEqual([expect.objectContaining({ value: "num:40" })]);
+    expect(hard("Delivered USD 9M in savings").map((f) => f.value)).toEqual(["money:usd:9000000"]);
+    expect(hard("Delivered about 10 percent lower cost").map((f) => f.value)).toEqual(["pct:10"]);
+    expect(hard("Built a system used by nearly 40 teams").map((f) => f.value)).toEqual(["num:40"]);
   });
 });
 
-describe("a value must be in a cited fact", () => {
-  it("passes a value the cited fact carries, rejects one that is only elsewhere on the profile, and one with nothing cited", () => {
+/*
+ * The cited fact comparison is gone (D-034), and with it every test that
+ * asked whether a value belonged to the fact the line pointed at. What
+ * follows is the lookup that replaced it, profile wide, and the two things
+ * kept beside it that are not comparisons.
+ */
+describe("the lookup is profile wide, not against the cited facts", () => {
+  it("passes a value that is anywhere on the profile, whatever the line cites or fails to cite", () => {
+    // 11 percent is R1.2's. Citing R1.1 instead was hard before; a citation is no longer what a value is checked against.
+    expect(hard("Reduced cost 11 percent", ["R1.1"])).toEqual([]);
     expect(hard("Reduced cost 11 percent", ["R1.2"])).toEqual([]);
-    // 11 percent is on the profile, in R1.2, but the edit cites R1.1: rejected.
-    expect(hard("Reduced cost 11 percent", ["R1.1"])).toEqual([expect.objectContaining({ level: "hard", message: "value is on the profile but not in the cited facts", value: "pct:11" })]);
-    // Four managers and two analysts are in R1.1; "six" is on the profile only as coached 6 analysts, elsewhere.
-    expect(hard("Managing six strategy professionals", ["R1.1"])).toEqual([expect.objectContaining({ level: "hard", value: "num:6" })]);
-    expect(hard("Reduced cost 11 percent", [])).toEqual([expect.objectContaining({ level: "hard", message: "value with no fact cited for it", value: "pct:11" })]);
-    // A line with no value needs no citation.
-    expect(hard("Led the planning cycle with finance", [])).toEqual([]);
+    expect(hard("Reduced cost 11 percent", [])).toEqual([]);
+    // R2's USD 1.1B on an R1 line: the employer rule held this, and nothing does now.
+    expect(hard("Sized a USD 1.1B market", ["R1.1"])).toEqual([]);
   });
-  it("holds a line with a number phrase it could not read, and a value checked against a fact with one", () => {
+
+  it("a citation that names nothing, or names a fact that does not exist, is held and never rejected", () => {
+    expect(review("Led the OKR system", ["R9.9"]).map((f) => [f.message, f.value])).toEqual([["cited fact does not exist", "R9.9"]]);
+    expect(hard("Led the OKR system", ["R9.9"])).toEqual([]);
+    expect(review("Led the OKR system", []).map((f) => f.message)).toEqual(["no fact cited for this line"]);
+    expect(review("Led the OKR system", ["R1.3"])).toEqual([]);
+  });
+
+  it("holds a line with a number phrase it could not read, because the lookup did not run on it", () => {
     const entry = (id: string, text: string): FactEntry => ({ id, text, kind: "employment", role: "R1", source: FROM_RESUME });
     const odd = factSet([entry("R1", "Head of Strategy, Arvento"), entry("R1.1", "Raised five thousand two million dollars for the fund."), entry("R1.2", "Managed three and five teams.")]);
-    // The fact's own phrase is unreadable: a value on the line is held, not rejected, because the fact may hold it.
-    expect(checkLine("Raised 2 billion dollars for the fund.", "R1.1", ["R1.1"], odd).map((f) => [f.level, f.message])).toEqual([
-      ["review", "value could not be checked; a cited fact has a number phrase that could not be read"],
-    ]);
-    // Against a readable fact the same value is hard as before.
-    expect(checkLine("Raised 2 billion dollars for the fund.", "R1.1", ["R1.2"], odd).map((f) => f.level)).toEqual(["hard"]);
+    expect(checkLine("Raised five thousand two million dollars.", "R1.1", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["review", "five thousand two million"]]);
     // "three and five" is 3 and 5: 8 is an invention and is rejected, not a sum.
     expect(checkLine("Managed 8 teams.", "R1.2", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["hard", "num:8"]]);
     expect(checkLine("Managed 3 and 5 teams.", "R1.2", ["R1.2"], odd)).toEqual([]);
-    // The line's own phrase is unreadable: held.
-    expect(checkLine("Raised five thousand two million dollars.", "R1.1", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["review", "five thousand two million"]]);
     // A word the tables do not know but Object.prototype does is a word.
     expect(checkLine("Used constructor injection across the teams.", "R1.2", ["R1.2"], odd).filter((f) => f.level !== "soft")).toEqual([]);
   });
 
-  it("a citation that does not exist holds the line, and so does a line that cites nothing", () => {
-    // With nothing real cited, the object "system" has no fact to be in either: two holds, both named.
-    expect(review("Led the OKR system", ["R9.9"])).toEqual([
-      expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" }),
-      expect.objectContaining({ message: "responsibility is not in the cited facts", value: "system", detail: "the cited facts name no object for it" }),
-      // OKR is on the profile; in a claim position with no real fact cited, the relationship is unsupported (review four, finding 6).
-      expect.objectContaining({ message: "entity is on the profile but not in the cited facts", value: "OKR" }),
-    ]);
-    expect(hard("Led the OKR system", ["R9.9"])).toEqual([]);
-    expect(review("Led the OKR system", []).map((f) => f.message)).toEqual(["no fact cited for this line", "responsibility is not in the cited facts", "entity is on the profile but not in the cited facts"]);
-    expect(review("Led the OKR system", ["R1.3"])).toEqual([]);
+  it("rejects a name in no confirmed fact, and passes one the profile has under any role", () => {
+    expect(hard("Led migration to Salesforce for the Deloitte team").map((f) => [f.message, f.value])).toEqual([["name appears in no confirmed fact", "Salesforce"]]);
+    expect(hard("Owned the KPI framework").map((f) => f.value)).toEqual(["KPI"]);
+    // Every name on the profile, wherever it sits: nothing fires.
+    expect(checkLine("Reported to the CEO at Arvento using Power BI", "R1.1", ALL, set)).toEqual([]);
+    expect(hard("Built reporting in Excel, Power BI for the PMOs")).toEqual([]);
+    expect(hard("Built reporting in Power Excel")).toEqual([]);
   });
-  it("holds a new entity or responsibility for review, passes a rewording, and no longer reads a capitalised verb as a name", () => {
-    // Every name in the line is on the profile, and the verb that opens it is a verb, not a name: nothing held, nothing soft (D-022 supersedes the D-017 soft class).
-    expect(review("Reported to the CEO at Arvento using Power BI")).toEqual([]);
-    expect(soft("Reported to the CEO at Arvento using Power BI")).toEqual([]);
-    // A tool in no fact is held; so is a responsibility the cited facts do not name, with the word the cited fact uses in its place.
-    expect(review("Led migration to Salesforce for the Deloitte team")).toEqual([
-      expect.objectContaining({ message: "responsibility is not in the cited facts", value: "migration", detail: "the cited fact says strategy" }),
-      expect.objectContaining({ message: "name appears in no confirmed fact", value: "Salesforce", detail: "capitalised" }),
-    ]);
-    expect(review("Built reporting in Excel, Power BI for the PMOs")).toEqual([]);
-    // Words are looked up one at a time: two known words side by side pass. The old run rule held "Power Excel"; the entity rule does not.
-    expect(review("Built reporting in Power Excel")).toEqual([]);
-    // An acronym in no fact is held by its form; the verb that opens the line is not a name.
-    expect(review("Owned the KPI framework").map((f) => [f.value, f.detail])).toEqual([
-      ["framework", "the cited fact says strategy"],
-      ["KPI", "by its form"],
-    ]);
-    expect(soft("Owned the KPI framework")).toEqual([]);
+
+  it("a capitalised word at the start that is not in the verb list reads as a name, which is this check's false positive", () => {
+    // "Oversight" opens the line, is not a verb, and the profile has "oversaw" rather than the noun, so a lemma lookup
+    // does not find it. At review level this was a hold; at hard level, the rule the user chose, it rejects a truthful
+    // rewording. Recorded rather than tuned away: it is what a word lookup costs, and no list closes it (D-034).
+    expect(hard("Oversight of four managers and two analysts").map((f) => f.value)).toEqual(["Oversight"]);
+    // The same claim opened by a verb the list knows passes.
+    expect(hard("Oversaw four managers and two analysts")).toEqual([]);
   });
 });
 
@@ -225,7 +216,8 @@ describe("change set validation", () => {
       base,
       set,
     );
-    expect(good.filter((f) => f.level === "hard")).toEqual([]);
+    // "M&A" is capitalised and on no fact, so it is rejected now where it was held before.
+    expect(good.filter((f) => f.level === "hard").map((f) => [f.code, f.value])).toEqual([["name-unknown", "M&A"]]);
     const bad = validateChangeSet(
       { summary: null, summaryFacts: [], changes: [{ bullet: "R1.2", text: "Cut operating cost 15 percent in an 18 month program.", facts: ["R1.2"] }], skills: [] },
       base,
@@ -234,11 +226,11 @@ describe("change set validation", () => {
     expect(bad.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:18", "pct:15"]);
     // A summary with a value and no citation is rejected like any line.
     const unc = validateChangeSet({ summary: "Leader with 10 years of experience.", summaryFacts: [], changes: [], skills: [] }, base, set);
-    // "Leader" opens the sentence, is not a verb and is on no fact: held (D-022). Citing nothing is itself held.
+    // Citing nothing is held. "10 years" is on the profile, so the value passes wherever it was cited from.
+    // "Leader" opens the sentence, is not a verb and is on no fact: rejected now, held before.
     expect(unc.map((f) => [f.level, f.bullet, f.message])).toEqual([
       ["review", "summary", "no fact cited for this line"],
-      ["hard", "summary", "value with no fact cited for it"],
-      ["review", "summary", "name appears in no confirmed fact"],
+      ["hard", "summary", "name appears in no confirmed fact"],
     ]);
   });
   it("reports an edit to a line that does not exist and a skill that does not exist as soft, never as a pass", () => {

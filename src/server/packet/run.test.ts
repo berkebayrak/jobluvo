@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type Tx } from "@/db/client";
 import { costEvents, jobs, packets, profileFacts, sources, users } from "@/db/schema";
 import { COST_NOT_RECORDED } from "@/server/cost";
 import type { ScoringJob } from "@/server/match/score";
@@ -133,8 +133,7 @@ async function withFixture(fn: (tx: Tx, userId: string, job: ScoringJob) => Prom
 }
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 afterEach(() => {
@@ -274,7 +273,9 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
   it("stores the retained attempt's complete change set, its number and the validator revision; a held answer kept over a rejected retry is attempt 1", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
-      const held = { bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] };
+      // Held, not rejected: every value is on the profile and the only complaint is the citation, which no longer
+      // decides anything but still says the answer is confused. A name in no fact rejects the packet now (D-034).
+      const held = { bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R9.9"] };
       call()
         .mockResolvedValueOnce(answer([held], "Strategy lead who cuts cost.", ["R1.1"]))
         .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Cut cost 14 percent.", facts: ["R1.1"] }]));
@@ -300,41 +301,56 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       const out = await tailorJob(tx, facts, job);
       expect(out.status).toBe("invalid");
       expect(out.attempts).toBe(2);
-      expect(out.findings.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["num:7", "year:2019"]);
+      expect(out.findings.filter((f) => f.level === "hard").map((f) => f.value).sort()).toEqual(["Leader", "num:7", "year:2019"]);
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("invalid");
       expect(p.resume).toBeNull();
-      expect(p.findings.filter((f) => f.level === "hard")).toHaveLength(2);
-      // "Leader" opens the summary, is not a verb and is on no fact: held (D-022); the packet is invalid on its hard findings regardless.
-      expect(p.findings.filter((f) => f.level === "review").map((f) => f.value)).toEqual(["Leader"]);
+      expect(p.findings.filter((f) => f.level === "hard")).toHaveLength(3);
+      // "Leader" opens the summary, is not a verb and is on no fact. It was held before and rejects the packet now (D-034).
+      expect(p.findings.filter((f) => f.level === "review")).toEqual([]);
     });
   });
 
-  it("a name in no fact holds the packet for review with its resume stored, one retry that names the word, and nothing downstream can consume it", async () => {
+  it("a name in no fact rejects the packet, earns one retry, and leaves no resume to consume", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
       const line = { bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] };
       call().mockResolvedValueOnce(answer([line])).mockResolvedValueOnce(answer([line]));
-      const held = await tailorJob(tx, facts, job);
-      expect(held.status).toBe("needs_review");
-      // The findings name what to replace, so the model gets one retry carrying them (D-022); the same answer again is stored held.
-      expect(held.attempts).toBe(2);
+      const out = await tailorJob(tx, facts, job);
+      // "KPI" is on no fact. This was a hold before the meaning comparison came out; the user's rule makes it hard (D-034).
+      // "with KPI reporting" attaching words the fact does not have was the other finding here, and that rule is gone.
+      expect(out.status).toBe("invalid");
+      expect(out.attempts).toBe(2);
       expect(call()).toHaveBeenCalledTimes(2);
       const retry = call().mock.calls[1][2];
-      expect(retry.retryOf?.map((f) => f.value)).toEqual(["num:3", "KPI"]);
-      // "with KPI reporting" attaches words to the 3 year program that its fact does not have, and "KPI" is on no fact: two holds, one packet.
-      expect(holding(held.findings).map((f) => [f.level, f.value])).toEqual([
-        ["review", "num:3"],
-        ["review", "KPI"],
-      ]);
+      expect(retry.retryOf?.map((f) => f.value)).toEqual(["KPI"]);
+      expect(holding(out.findings).map((f) => [f.level, f.value])).toEqual([["hard", "KPI"]]);
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.status).toBe("invalid");
+      expect(p.resume).toBeNull();
+      // The one door downstream: a rejected packet has no resume, a ready one's leaves through it.
+      expect(consumableResume(p)).toBeNull();
+      expect(consumableResume({ ...p, status: "ready", resume: facts ? p.resume : null })).toBeNull();
+    });
+  });
+
+  it("a held packet keeps its resume for the review screen, and it does not leave through the door downstream", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      // Held: every value is on the profile, and the only complaint is that the cited fact does not exist.
+      const line = { bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R9.9"] };
+      call().mockResolvedValueOnce(answer([line])).mockResolvedValueOnce(answer([line]));
+      const held = await tailorJob(tx, facts, job);
+      expect(held.status).toBe("needs_review");
+      expect(held.attempts).toBe(2);
+      expect(holding(held.findings).map((f) => [f.level, f.value])).toEqual([["review", "R9.9"]]);
       // The retry returned the same answer, so nothing was dropped and nothing was put back; the packet still says it is a retry.
       expect(held.findings.find((f) => f.message === "this answer is a retry")?.detail).toBe("the retry kept every edited line, substituted");
-      expect(held.resume?.experience[0].bullets[0].text).toBe("Ran a 3 year program with KPI reporting, cutting cost 11 percent.");
+      expect(held.resume?.experience[0].bullets[0].text).toBe(line.text);
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("needs_review");
       expect(p.resume).not.toBeNull();
       expect(p.resumeHash).not.toBeNull();
-      // The one door downstream: a held packet's resume does not leave through it, a ready one's does.
       expect(consumableResume(p)).toBeNull();
       expect(consumableResume({ ...p, status: "ready" })).toEqual(p.resume);
       expect(consumableResume({ ...p, status: "invalid", resume: null })).toBeNull();
@@ -344,7 +360,7 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
   it("a retry that substitutes the fact's word clears the hold; one that comes back rejected does not replace the held answer", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
-      const heldLine = { bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] };
+      const heldLine = { bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R9.9"] };
       call().mockResolvedValueOnce(answer([heldLine])).mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
       const cleared = await tailorJob(tx, facts, job);
       expect(cleared.status).toBe("ready");
@@ -362,7 +378,7 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       expect(kept.attemptLog.map((a) => a.outcome)).toEqual(["needs_review", "invalid"]);
       // The held answer was validated; the rejected retry does not take its place.
       expect(kept.resume?.experience[0].bullets[0].text).toBe(heldLine.text);
-      expect(kept.findings.map((f) => f.value)).toEqual(["num:3", "KPI"]);
+      expect(kept.findings.map((f) => f.value)).toEqual(["R9.9"]);
       const [row] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(row.status).toBe("needs_review");
       expect(row.attempts).toBe(2);

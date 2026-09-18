@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type Tx } from "@/db/client";
 import { jobs, matches, sources, swipeDecisions, users, type JobLocation } from "@/db/schema";
 import type { PreferenceFact } from "@/server/profile/facts";
 import { claimMatches, MAX_ATTEMPTS, type ClaimKeys } from "./claim";
@@ -92,8 +92,7 @@ const setStatus = (tx: Tx, id: string, status: "scored" | "failed" | "pending") 
   tx.update(matches).set({ status, error: status === "failed" ? "boom" : null }).where(eq(matches.id, id));
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 describe.skipIf(!hasDb)("scoring claim over cycles", () => {

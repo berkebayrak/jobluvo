@@ -24,11 +24,40 @@ const ENTITIES = new Map(Object.entries({
   hellip: "…",
 }));
 
-/** Decodes HTML entities, including the double encoded content Greenhouse returns. */
+/**
+ * The largest code point Unicode has. `String.fromCodePoint` throws a
+ * RangeError above it, and on anything that is not an integer.
+ */
+const MAX_CODE_POINT = 0x10ffff;
+
+/**
+ * One numeric entity, or the text it was written as when it names no
+ * character.
+ *
+ * A posting that contains "&#1114112;" used to take down the poll that read
+ * it: `String.fromCodePoint` threw a RangeError, the throw escaped
+ * `decodeEntities` into `htmlToText`, and from there out of the source's
+ * transaction, so one malformed entity in one posting aborted the whole
+ * board's ingest. A board can write whatever it likes in a job description
+ * and none of it is Jobluvo's to trust (review five, finding 16).
+ *
+ * Out of range, a surrogate half, or not a number: the entity is left exactly
+ * as the posting wrote it. That is what a browser does with it too, and it
+ * keeps the text readable rather than replacing it with a question mark.
+ */
+function codePoint(raw: string, radix: number, original: string): string {
+  const n = parseInt(raw, radix);
+  if (!Number.isInteger(n) || n < 0 || n > MAX_CODE_POINT) return original;
+  // A lone surrogate is a valid code point to fromCodePoint but not a character; it corrupts the string it lands in.
+  if (n >= 0xd800 && n <= 0xdfff) return original;
+  return String.fromCodePoint(n);
+}
+
+/** Decodes HTML entities, including the double encoded content Greenhouse returns. Never throws on a malformed one. */
 export function decodeEntities(s: string): string {
   return s
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (m, n) => codePoint(n, 10, m))
+    .replace(/&#x([0-9a-f]+);/gi, (m, h) => codePoint(h, 16, m))
     .replace(/&([a-z]+);/gi, (m, name) => ENTITIES.get(name.toLowerCase()) ?? m);
 }
 

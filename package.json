@@ -33,6 +33,7 @@
     "extract-sample": "node --env-file=.env.local --import tsx scripts/extract-sample.ts",
     "snapshot-packets": "node --env-file=.env.local --import tsx scripts/snapshot-packets.ts",
     "reconcile-sample": "node --env-file=.env.local --import tsx scripts/reconcile-sample.ts",
+    "probe-cheap-check": "node --env-file=.env.local --import tsx scripts/probe-cheap-check.ts",
     "backfill-change-sets": "node --env-file=.env.local --import tsx scripts/backfill-change-sets.ts"
   },
   "dependencies": {

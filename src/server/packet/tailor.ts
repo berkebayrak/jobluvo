@@ -36,12 +36,38 @@ export const TIMEOUT_MS = 20_000;
 export const REASONING: ReasoningEffort = "none";
 export const DEFAULT_MODEL = "gpt-5.6-luna";
 
-const RULES = `Every number, amount, percentage, date, employer, product and qualification in what you write must come from the candidate's facts, word for word or as a plain restatement. Never add a metric, duty, tool or skill that is not there. You may reorder, shorten, reword and choose which facts to lead with. Keep each line under 30 words. Plain language, no exclamation marks, no em dashes, write "resume" not "résumé".`;
+/*
+ * The truthfulness instruction, and it is now the main line of defence.
+ *
+ * The validator used to read a tailored line back and compare what it means
+ * with what the cited fact means. That comparison is removed (D-034): the code
+ * checks only that every value and every name appears somewhere in the
+ * confirmed facts. What is left is stated here, and the four prohibitions are
+ * the four cases of the principle at the top of design/docs/06-Decision-Log.md
+ * in plain language, in order: case 2 a number moved, case 3 the level raised,
+ * case 4 a meaning reversed, case 0 something added.
+ *
+ * Each prohibition carries one concrete example, which is the part a model
+ * acts on, and it is the expensive part in tokens. The user's call, and the
+ * cost is a few hundred input tokens on a call that already sends the facts
+ * and the posting.
+ */
+const RULES = `What you may do: reword a line, restructure it, shorten it, change which fact it leads with, and use the posting's vocabulary where the candidate's fact already supports the word. Stronger, clearer wording of the same claim is the point of this task.
+
+What you may not do, in any line or the summary:
+- Move a number. Every number, amount, percentage and date stays attached to the same subject and the same measure it has in the fact. If the fact says churn fell 11 percent and acquisition cost fell 5 percent, you may not write that acquisition cost fell 11 percent.
+- Raise the level. Keep the candidate's own role. Supported does not become led, trained does not become managed, contributed to does not become owned.
+- Reverse a meaning. A denial stays a denial and a fall stays a fall. If the fact says the candidate did not manage recruitment, no line may say they managed it. If a figure is negative, it stays negative.
+- Add anything. No metric, duty, tool, employer, product, qualification or skill that is not in the candidate's facts, however well it fits the posting.
+
+If a posting asks for something the candidate's facts do not show, leave it out. A line you cannot write truthfully is a line you do not write.
+
+Keep each line under 30 words. Plain language, no exclamation marks, no em dashes, write "resume" not "résumé".`;
 
 export const INSTRUCTIONS: Record<TailorMode, string> = {
   changes: `You tailor a candidate's resume to one job posting by editing a small number of lines. You are given the candidate's confirmed facts, each with an id, and the posting.
 
-Return at most ${MAX_CHANGES} changes. Each change names one existing bullet id (such as R1.2), gives the replacement text, and lists the ids of the facts that support the new text (the bullet itself and any other fact you drew on). Every number, date or amount in the new text must come from one of the facts you cite for it; a value from an uncited fact is rejected. Only rewrite a line when the posting gives a reason: to lead with what the posting asks for, to use its vocabulary where the fact allows it, or to shorten. Leave every other line alone. Optionally give a one sentence summary for the top of the resume, built only from the facts, or null, and in "summary_facts" the ids of the facts it draws on; every number, date or amount in it must come from one of those. Optionally list skill ids to show first, in order, or an empty list.
+Return at most ${MAX_CHANGES} changes. Each change names one existing bullet id (such as R1.2), gives the replacement text, and lists the ids of the facts that support the new text (the bullet itself and any other fact you drew on). List the ids of the facts the new text draws on, so a person reading the packet can see where each line came from. Only rewrite a line when the posting gives a reason: to lead with what the posting asks for, to use its vocabulary where the fact allows it, or to shorten. Leave every other line alone. Optionally give a one sentence summary for the top of the resume, built only from the facts, or null, and in "summary_facts" the ids of the facts it draws on. Optionally list skill ids to show first, in order, or an empty list.
 
 ${RULES}`,
   document: `You tailor a candidate's resume to one job posting. You are given the candidate's confirmed facts, each with an id, and the posting.
@@ -140,7 +166,7 @@ export function parseDocument(text: string): DocumentOutput {
  * produced the answers it is reading (review four, finding 18). p2 is the
  * retry being shown the answer it is correcting (finding 14).
  */
-export const PROMPT_REVISION = "2026-09-18.p2";
+export const PROMPT_REVISION = "2026-09-18.p3";
 
 export function factsBlock(entries: FactEntry[]): string {
   return ["CANDIDATE FACTS, each with its id", "", ...entries.map((e) => `${e.id}: ${e.text}`)].join("\n");

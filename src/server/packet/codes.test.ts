@@ -32,7 +32,8 @@ describe("every finding carries a stable code", () => {
     }
     expect(missing).toEqual([]);
     // A scan that matched nothing would report no omissions and mean nothing; this is the floor it must clear.
-    expect(scanned).toBeGreaterThanOrEqual(20);
+    // Lowered from 20 when the meaning comparison was removed and the findings that went with it stopped being written (D-034).
+    expect(scanned).toBeGreaterThanOrEqual(14);
   });
 
   it("uses only codes the list knows, and the list has no duplicates", () => {

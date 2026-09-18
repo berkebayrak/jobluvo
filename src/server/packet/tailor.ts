@@ -62,6 +62,8 @@ What you may not do, in any line or the summary:
 
 If a posting asks for something the candidate's facts do not show, leave it out. A line you cannot write truthfully is a line you do not write.
 
+Before you answer, read back every line you have written against the facts you cited for it, one line at a time, and confirm that each claim in the line is supported by those facts. Check the number against its subject, the level of responsibility, the direction of any change, and every name. If a line is not supported, rewrite it so that it is, or drop it. Do this before you return your answer, not as commentary in it.
+
 Keep each line under 30 words. Plain language, no exclamation marks, no em dashes, write "resume" not "résumé".`;
 
 export const INSTRUCTIONS: Record<TailorMode, string> = {
@@ -166,7 +168,7 @@ export function parseDocument(text: string): DocumentOutput {
  * produced the answers it is reading (review four, finding 18). p2 is the
  * retry being shown the answer it is correcting (finding 14).
  */
-export const PROMPT_REVISION = "2026-09-18.p3";
+export const PROMPT_REVISION = "2026-09-18.p4";
 
 export function factsBlock(entries: FactEntry[]): string {
   return ["CANDIDATE FACTS, each with its id", "", ...entries.map((e) => `${e.id}: ${e.text}`)].join("\n");

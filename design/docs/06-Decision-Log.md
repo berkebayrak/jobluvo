@@ -120,6 +120,87 @@ more than getting them right quietly.
 
 ## 18 September 2026
 
+### D-036. A guess never destroys work, the model checks its own lines in the same call, and the real checker is a model that is not built yet
+
+Three decisions taken together, all the user's, closing the phase.
+
+**1. A guess never destroys work.**
+
+`value-unknown` stays hard. A number or an amount that appears nowhere in the user's
+confirmed facts is fabrication and not a judgement call: the reader matched a figure, and
+a figure either appears on the profile or it does not. Rejecting it is correct, and it
+keeps the one retry.
+
+`name-unknown`, `posting-word-unknown` and `qualification-unsupported` become review. The
+tailored resume is kept, the finding names the word, and a person decides. The reason is
+what the previous day's work disclosed: raising these to hard immediately produced three
+families of false positive, all fixed in code (month names, an amount written "$1.1B",
+verbs whose past tense ends in neither "ed" nor "ing"), and a fourth that has no fix
+because no list of verbs closes it. "Oversight of four managers" is flagged where "Oversaw
+four managers" is not. A check built on a word's shape will always have that edge.
+
+**The general rule, now in CLAUDE.md beside the principle: a finding may reject a packet
+only when what it found is certain. A finding derived from a guess about a word's shape
+holds instead. A new check that cannot say which it is, holds.**
+
+A held finding earns no retry. `name-unknown` is not on the actionable list, so a guess
+never buys a second paid call either. That is a choice inside the decision and it is
+flagged as one: the alternative is to let the model substitute the fact's own word, which
+costs a call on every held packet and can end in the model dropping the line.
+
+What it does to the numbers on the 28 known false lines, and this is the honest form of
+the count because rejected and held are not the same thing:
+
+| | Rejected | Held | Neither |
+|---|---|---|---|
+| The 28 of `pairs.test.ts` | 4 | 4 | 20 |
+| A second author's 14 | 0 | 0 | 14 |
+
+Four of forty two. That is what the code catches.
+
+**2. The model checks its own work, in the same call.**
+
+`RULES` in `src/server/packet/tailor.ts` now ends with an instruction to read every written
+line back against the facts cited for it, confirm each claim is supported, and rewrite or
+drop the line before answering. Same call, no second request, `PROMPT_REVISION` p4.
+
+Measured on the input side exactly: the sentence is 423 characters, about 106 tokens at
+four characters each, and the changes instruction grows 18.7 percent. At USD 0.2 per
+million input tokens that is USD 0.0000212 a call, so at most two calls a packet, **USD
+0.0000424 per packet**, against a tailoring term of USD 0.00076. About 5.6 percent of the
+tailoring term and about 1.3 percent of the USD 0.00333 per application figure. It does
+not move the cost per packet meaningfully, which is what the user expected.
+
+The output side is not measured and is not guessed. The schema is closed and the
+instruction says not to write commentary, so output should not grow, but that is an
+expectation and a paid run is what would settle it. No paid run was made.
+
+**What this is worth, stated plainly: a model checking its own output is a soft test.** It
+is weaker than an independent check, because the same weights that wrote the line judge
+it, and a model that was willing to move a number is not obviously unwilling to approve
+having moved it. It is better than pattern matching over word shapes, because it reads
+meaning at all, which no rule here does. It is not verification and must never be
+described as verification.
+
+**3. The real checker is a model, not code. Recorded now, built later.**
+
+The user's call and his reasoning: code cannot audit a model. Five rewrites of hand
+written rules, five reviews, and a second author's fourteen false lines all passed
+regardless. The permanent answer is a separate model call that reads the confirmed facts
+and the tailored lines and judges whether each claim is supported.
+
+It is not built now, for cost. A second call adds roughly USD 0.0004 to 0.0008 per
+application. At eight jobs scored per application the current figure is USD 0.00333
+against a USD 0.0035 floor, which leaves about USD 0.00017 of room: not enough. It fits
+once the phase 1 pre rank brings scored per applied to about seven.
+
+**The sequencing is the decision: the pre rank pays for the checking call, so the pre rank
+comes first.** Nothing about the checking call is designed here beyond what it is for.
+
+**Until then the hand written check is a placeholder, not the design.** It rejects a
+fabricated figure and holds a suspicious word, and that is the whole of what it is meant
+to do. Every document that describes it says placeholder.
+
 ### D-034. The meaning comparison comes out of the validator and the truthfulness instruction moves into the prompt
 
 **The user's decision.** It reverses an architectural choice made in phase 0 and it is not

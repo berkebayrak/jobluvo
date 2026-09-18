@@ -14,6 +14,14 @@ import { normaliseNumbers } from "./normalise";
  * (D-034), along with the object heads, instrument heads and verb matching
  * that answered it. The prompt carries that duty now.
  *
+ * Everything here is a guess about a word's shape, and every finding it makes
+ * is review, never hard (D-036). A capital, an internal capital, a position in
+ * the sentence: none of that establishes that a word is a name, and three
+ * families of false positive were found the day these findings were briefly
+ * made hard. A fourth has no fix, because no list of verbs closes it:
+ * "Oversight of four managers" is flagged where "Oversaw four managers" is not.
+ * A guess may hold a packet for a person. It may not destroy the work.
+ *
  * The first question stays, profile wide, and a token is looked up when a
  * signal on it says it is a name rather than ordinary prose:
  *
@@ -79,8 +87,8 @@ export const RESPONSIBILITY_VERBS = new Set([
   "develops", "designs", "creates", "launches", "implements", "establishes", "sets", "recruits", "hires", "negotiates", "executes", "automates", "prepares", "presents",
   "screens", "sizes", "maintains", "redesigns", "coaches", "reports", "owns", "manages", "leads", "runs", "heads", "oversees", "drives", "handles", "directs", "coordinates", "supervises", "delivers", "builds",
   // Verbs whose past tense ends in neither "ed" nor "ing", so the sentence start rule cannot tell them from a name by their shape.
-  // While these findings were held this list being short cost a hold; now that they reject the packet it costs a truthful line,
-  // and "Cut operating cost 11 percent" is as ordinary as a resume line gets (D-034).
+  // Added when these findings were briefly hard and "Cut operating cost 11 percent" was being rejected. They are review again
+  // (D-036), so a word missing from this list now costs a hold rather than the work, which is the point of the level.
   "cut", "cuts", "cutting", "grew", "grow", "grows", "growing", "won", "win", "wins", "sold", "sell", "sells", "selling",
   "wrote", "write", "writes", "writing", "kept", "keep", "keeps", "met", "meet", "meets", "held", "hold", "holds", "holding",
   "took", "take", "takes", "taking", "made", "make", "makes", "making", "brought", "bring", "brings", "taught", "teach", "teaches",
@@ -266,8 +274,12 @@ export function entityTokens(line: string, posting: Set<string>, profile: Set<st
 /**
  * The findings on one line: a name, or a qualification, that appears nowhere
  * in the user's confirmed facts. `profile` is every confirmed fact's lemmas,
- * `posting` the job's. Hard: the user's rule is that a value or an entity in
- * no confirmed fact rejects the packet (D-034).
+ * `posting` the job's.
+ *
+ * Review, never hard. Each one rests on reading a word's shape, and a shape is
+ * a guess. The tailored resume is kept, the finding names the word, and a
+ * person decides (D-036). Only a value in no confirmed fact is certain enough
+ * to reject a packet, and that check lives in validate.ts.
  */
 export function entityFindings(line: string, bullet: string | null, profile: Set<string>, posting: Set<string>, scope: PostingScope = "claim"): PacketFinding[] {
   const out: PacketFinding[] = [];
@@ -277,7 +289,7 @@ export function entityFindings(line: string, bullet: string | null, profile: Set
     if (entity.length && !profile.has(t.key)) {
       const why = entity.includes("form") ? "by its form" : entity.includes("proper") ? "capitalised" : entity.includes("sentence start") ? "opens the sentence and is not a verb" : "the posting uses it";
       out.push({
-        level: "hard",
+        level: "review",
         code: entity.every((s) => s === "posting") ? "posting-word-unknown" : "name-unknown",
         bullet,
         message: entity.every((s) => s === "posting") ? "word from the posting appears in no confirmed fact" : "name appears in no confirmed fact",
@@ -289,7 +301,8 @@ export function entityFindings(line: string, bullet: string | null, profile: Set
     if (t.signals.includes("qualification")) {
       const stem = qualificationStem(t.key) ?? qualificationStem(t.token.toLowerCase());
       if (stem && !profileHasStem(stem)) {
-        out.push({ level: "hard", bullet, code: "qualification-unsupported", message: "qualification appears in no confirmed fact", value: t.token, detail: "a certification or licence is a claim wherever it stands" });
+        // Also a shape guess: a stem match against the profile's lemmas, which "qualified to lead the review" trips.
+        out.push({ level: "review", bullet, code: "qualification-unsupported", message: "qualification appears in no confirmed fact", value: t.token, detail: "a certification or licence is a claim wherever it stands" });
       }
     }
   }

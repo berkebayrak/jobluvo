@@ -326,10 +326,11 @@ const FOURTEEN: Counter[] = [
 ];
 
 /*
- * The false lines the invention check still rejects, named one by one. This is
- * the whole of what the code catches out of the 28, and it is asserted so the
- * check cannot quietly stop working. Every other false line in this file is
- * the prompt's responsibility.
+ * The false lines the code still catches at all, rejected or held, named one by
+ * one. This is the whole of what it catches out of the 28, and it is asserted
+ * so the check cannot quietly stop working. Most of these are held rather than
+ * rejected: only a value in no confirmed fact rejects a packet (D-036). Every
+ * other false line in this file is the prompt's responsibility.
  */
 const STILL_CAUGHT = new Set([
   "Presented reports quarterly.",
@@ -357,56 +358,51 @@ describe("paired evaluation set", () => {
     expect(held).toEqual([]);
   });
 
-  it("still rejects the false lines the invention check reaches, each named", () => {
+  it("still catches the false lines the check reaches, rejected or held, each named", () => {
     const missed: string[] = [];
     for (const p of PAIRS) {
       for (const entry of p.false) {
         const line = typeof entry === "string" ? entry : entry.line;
         if (!STILL_CAUGHT.has(line)) continue;
-        if (level(p.bullet, line, p.cited) === "ready") missed.push(`${p.finding}: "${line}" is no longer rejected`);
+        if (level(p.bullet, line, p.cited) === "ready") missed.push(`${p.finding}: "${line}" is no longer caught at all`);
       }
     }
     expect(missed).toEqual([]);
   });
 
   it("records what the prompt is responsible for, and asserts nothing about it", () => {
-    const blank = () => ({ falseLines: 0, caught: 0 });
+    const blank = () => ({ falseLines: 0, rejected: 0, held: 0 });
     const byAuthor: Record<Author, ReturnType<typeof blank>> = { rules: blank(), independent: blank() };
     const byCase: Record<Case, ReturnType<typeof blank>> = { "case 2": blank(), "case 3": blank(), invention: blank(), polarity: blank() };
     const passing: string[] = [];
+    const count = (tallies: ReturnType<typeof blank>[], l: string, label: string) => {
+      for (const a of tallies) a.falseLines += 1;
+      if (l === "invalid") for (const a of tallies) a.rejected += 1;
+      else if (l === "needs_review") for (const a of tallies) a.held += 1;
+      else passing.push(label);
+    };
     for (const p of PAIRS) {
       for (const entry of p.false) {
         const line = typeof entry === "string" ? entry : entry.line;
         const kind = typeof entry === "string" ? p.case : entry.case;
-        byAuthor[p.author].falseLines += 1;
-        byCase[kind].falseLines += 1;
-        if (level(p.bullet, line, p.cited) === "ready") passing.push(`${kind}: "${line}" (${p.finding})`);
-        else {
-          byAuthor[p.author].caught += 1;
-          byCase[kind].caught += 1;
-        }
+        count([byAuthor[p.author], byCase[kind]], level(p.bullet, line, p.cited), `${kind}: "${line}" (${p.finding})`);
       }
     }
     for (const c of FOURTEEN) {
-      byAuthor.independent.falseLines += 1;
-      byCase[c.case].falseLines += 1;
       const post = c.emptyPosting ? new Set<string>() : posting;
-      if (level(c.bullet, c.line, [c.bullet], fourteenSet, post) === "ready") passing.push(`${c.case}: "${c.line}" (reviewer ${c.id})`);
-      else {
-        byAuthor.independent.caught += 1;
-        byCase[c.case].caught += 1;
-      }
+      count([byAuthor.independent, byCase[c.case]], level(c.bullet, c.line, [c.bullet], fourteenSet, post), `${c.case}: "${c.line}" (reviewer ${c.id})`);
     }
-    // By author and by case, never summed into one figure: a total let one author's cases carry the other's.
+    // Rejected and held are counted apart, because they are not the same thing and D-036 turns on the difference:
+    // a rejected packet loses its tailored resume, a held one keeps it and waits for a person.
     for (const author of ["rules", "independent"] as const) {
       const a = byAuthor[author];
-      console.log(`by author, ${author}: ${a.caught} of ${a.falseLines} false lines rejected by the code`);
+      console.log(`by author, ${author}: ${a.rejected} of ${a.falseLines} false lines rejected, ${a.held} held for a person`);
     }
     for (const c of ["case 2", "case 3", "invention", "polarity"] as const) {
       const a = byCase[c];
-      console.log(`by case, ${c}: ${a.caught} of ${a.falseLines} false lines rejected by the code`);
+      console.log(`by case, ${c}: ${a.rejected} of ${a.falseLines} rejected, ${a.held} held`);
     }
-    console.log(`\n${passing.length} false lines are not rejected by any code. The tailoring prompt is what stands between these and a submitted resume:`);
+    console.log(`\n${passing.length} false lines are neither rejected nor held. The tailoring prompt is the only thing between these and a submitted resume:`);
     for (const s of passing) console.log(`  ${s}`);
     // Deliberately no expectation on `passing`. Asserting it would turn a record of what is
     // not checked into a claim that it is checked, which is the thing this file must not say.

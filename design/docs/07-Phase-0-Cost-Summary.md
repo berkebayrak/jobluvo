@@ -84,7 +84,11 @@ This is the one place the held rate is stated. Every earlier figure in the decis
 
 **There is no held rate any more. D-034 removed the meaning comparison, and the number this section exists to state is now a rejection rate of 7.5 percent with nothing held.** Re-reading the same 80 saved answers under the code as it stands: 74 ready, 0 held, 6 invalid. The six carry no tailored resume and the user gets their original. Two findings account for all of it, a word taken from the posting that no fact carries (5) and a name that no fact carries (2); every rule that compared what a line means with what a fact means is gone.
 
-Read that 7.5 percent for what it is. It is not a quality measure and it is not an improvement on 33.8 percent. The same answers are being read by a check that asks far less, and against the 28 known false lines of `pairs.test.ts` the code now rejects 8 where it rejected 28. What the packets say about themselves changed; the packets did not.
+Read that 7.5 percent for what it is. It is not a quality measure and it is not an improvement on 33.8 percent. The same answers are being read by a check that asks far less. Against the 28 known false lines of `pairs.test.ts` the code rejects 4 and holds 4, where it caught all 28 before; of a second author's 14 it catches none. Four of forty two. What the packets say about themselves changed; the packets did not.
+
+**The check is a placeholder, not the design (D-036).** The permanent answer is a separate model call that reads the confirmed facts and the tailored lines and judges whether each claim is supported, and it is not built because it does not fit the budget yet: about USD 0.0004 to 0.0008 per application against roughly USD 0.00017 of room at eight jobs scored per application. It fits once the phase 1 pre rank brings scored per applied to about seven, so **the pre rank comes first and pays for the checking call**. Until then the code rejects a fabricated figure and holds a suspicious word, and the tailoring prompt, including the self check the model runs on its own lines in the same call, is what stands in for the rest.
+
+**The self check added to the prompt costs USD 0.0000424 per packet on the input side**, measured exactly: 423 characters, about 106 tokens, at most two calls a packet, USD 0.2 per million input tokens. That is 5.6 percent of the tailoring term and 1.3 percent of the per application figure. The output side is not measured; the schema is closed so it should not grow, and a paid run is what would settle it.
 
 **The figure this section used to state, kept because it is what the stored rows carry until the restamp.** The held rate was about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024).
 
@@ -105,7 +109,8 @@ Nine rows went from held to rejected and their stored resumes were cleared, whic
 
 | Held rate, 18 September 2026 | Packets |
 |---|---|
-| Stored packets restamped under r7 from merged code (D-034) | 82 ready, 12 held, 13 invalid, of 107. The 12 are all the unrevalidatable summary |
+| Stored packets restamped under r8 from merged code (D-036), name findings held rather than rejected | see the r8 table below |
+| Stored packets restamped under r7 from merged code (D-034) | 82 ready, 12 held, 13 invalid, of 107. The 12 are all the unrevalidatable summary. Superseded by r8 the same day |
 | Fresh answers, 80 job cross family sample, the retained attempt as stored by the run, and re-read under the rules as they stand (D-029) | 54 ready, 24 held, 2 invalid, of 80 |
 | The same answers, last attempt only, what the scope table counted; the three that differ are held first answers kept over a rejected retry (D-029) | 54 ready, 21 held, 5 invalid, of 80 |
 | The same answers read under the rule before the narrowing | 21 ready, 54 held, 5 invalid, of 80 |

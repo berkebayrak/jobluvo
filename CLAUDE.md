@@ -180,10 +180,17 @@ added that is not on your profile."
   profile wide. Do not add a rule that reads what a line means and compares it with what
   a fact means; that was removed on the user's decision and putting it back is a product
   decision that goes back to the user.
+- **A finding may reject a packet only when what it found is certain (D-036).** A finding
+  derived from a guess about a word's shape holds the packet for a person instead: the
+  tailored resume is kept and the finding names the word. A new check that cannot say
+  which of the two it is, holds. Today exactly one finding is certain enough to reject,
+  `value-unknown`, because a figure either appears on the profile or it does not; every
+  name and posting word check holds.
 - Never say or imply that Jobluvo verifies a tailored resume is truthful. It does not.
-  Measured: 19 of 28 known false lines are not caught, 10 of them plain inventions,
-  because a word that appears anywhere on the profile satisfies the check. `npm run
-  probe-cheap-check` reproduces that, and `pairs.test.ts` records it.
+  Measured over 28 known false lines: 4 are rejected, 4 held, and 20 pass. Of a second
+  author's 14, none is caught at all. `npm run probe-cheap-check` reproduces that, and
+  `pairs.test.ts` records it. The hand written check is a placeholder until the checking
+  model call of D-036 is built; it is not the design.
 - Never remove, merge, simplify or replace a page, section, animation or interaction that exists in the delivered design (.claude/skills/jobluvo-design/uploads/05-Website.html and the app screens) on your own. If you think something should change, ask first and wait for an answer. Never describe an unapproved change as a deliberate deviation after the fact.
 
 ## Commands

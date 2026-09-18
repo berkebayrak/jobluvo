@@ -7,30 +7,31 @@ Packets 80, saved answers 80, cost rows 128. Profile c9f231127f13, 40 facts. Rul
 | Reading | Ready | Held | Invalid | None |
 |---|---|---|---|---|
 | Stored status, the retained attempt as the run wrote it | 54 | 24 | 2 | 0 |
-| Retained attempt re-read under the rules as they stand | 54 | 24 | 2 | 0 |
-| Last attempt re-read, what the scope table in tailor-sample counted | 54 | 21 | 5 | 0 |
+| Retained attempt re-read under the rules as they stand | 53 | 25 | 2 | 0 |
+| Last attempt re-read, what the scope table in tailor-sample counted | 53 | 22 | 5 | 0 |
 
 ## Where the readings differ, by packet
 
-- 77: same on every reading
+- 76: same on every reading
 - 3: retained attempt differs from the last attempt (finding 13)
+- 1: retained attempt re-reads as needs_review, stored ready: a rule or input difference, not attempt selection
 
 | Packet | Stored | Attempts as run | Retained | Re-read per attempt | Category |
 |---|---|---|---|---|---|
 | 67793c88 | needs_review | needs_review > invalid | 1 | needs_review > invalid | retained attempt differs from the last attempt (finding 13) |
 | 1e23eacd | needs_review | needs_review > invalid | 1 | needs_review > invalid | retained attempt differs from the last attempt (finding 13) |
 | 6c9f0179 | needs_review | needs_review > invalid | 1 | needs_review > invalid | retained attempt differs from the last attempt (finding 13) |
+| ea70de4d | ready | ready | 1 | needs_review | retained attempt re-reads as needs_review, stored ready: a rule or input difference, not attempt selection |
 
 ## Findings the rules as they stand add or remove on the retained attempts
 
 | Added, by finding | Edits | Packets |
 |---|---|---|
+| review: word from the posting appears in no confirmed fact | 2 | 1 |
+| review: responsibility is not in the cited facts | 1 | 1 |
 
 | Removed, by finding | Edits |
 |---|---|
-
-Examples of added findings, first 40:
-
 
 ## Unchanged packets, the whole document against the base
 

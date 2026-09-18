@@ -24,15 +24,24 @@ import { normaliseNumbers } from "./normalise";
  *                   creation verb: "Led recruitment of analysts" claims
  *                   recruitment
  *
- * The first four are checked against the whole profile: an entity the user
- * owns anywhere is theirs to place. The object is checked against the facts
- * the line cites, the same principle as the employer rule: a responsibility
- * is bound to the fact it claims to come from, and "managed analysts" with
- * the analysts borrowed from another role is the employer lie in another
- * shape. Objects that name no domain, "present progress", are exempt.
+ * Entity existence and relationship support are two questions (review four,
+ * finding 6). The first four signals ask whether the entity exists on the
+ * profile: an entity the user owns nowhere is held. A token in a claim
+ * position, the object of a responsibility verb or the instrument after it
+ * ("built dashboards in Excel", "using Salesforce"), then asks whether the
+ * cited facts support the relationship: an object head, an instrument head
+ * or an entity there must be in a fact the line cites, the same principle
+ * as the employer rule. A global match never answers the second question:
+ * "Built dashboards in Salesforce" under the Excel role is held however
+ * well the user knows Salesforce, and "Led RECRUITMENT" is held exactly as
+ * "Led recruitment" is. Objects that name no domain, "present progress",
+ * are exempt. A coordinated object is every conjunct, "dashboards and
+ * recruitment systems" claims systems as well (finding 5B), and a
+ * qualification word, "certified", "licensed", is a claim wherever it
+ * stands (5C).
  *
- * Every finding names the token that fired and, for an object, the word the
- * cited fact uses in its place, so a person clears it in a glance.
+ * Every finding names the token that fired and, for a claim position, the
+ * word the cited fact uses in its place, so a person clears it in a glance.
  */
 
 export interface Token {
@@ -87,6 +96,15 @@ export const RESPONSIBILITY_VERBS = new Set([
  */
 export const CLAIM_OPENERS = new Set(["experience", "experienced", "expertise", "skilled", "background", "proficient", "specialising", "specializing", "specialist", "track", "record"]);
 const PARTICLES = new Set(["up", "out", "off", "down", "over", "through"]);
+/** After an object, the instrument it was done with: "built dashboards in Excel", "using Salesforce", "on Jira". A claim position (finding 5A). */
+const INSTRUMENT_PREPOSITIONS = new Set(["using", "via", "in", "on", "through"]);
+/** "with" opens an instrument only for a token that carries an entity signal: "with Salesforce" is a claim, "with attention to detail" is a rewording. */
+const WEAK_INSTRUMENT = "with";
+/** Words an instrument head cannot be: time and place words after "in" are not tools. */
+const NOT_INSTRUMENT = new Set(["year", "years", "month", "months", "week", "weeks", "day", "days", "quarter", "quarters", "time", "line", "place", "parallel", "house", "person", "charge", "role", "roles", "order", "turn", "advance", "total", "full", "part", "particular", "practice", "scope", "detail", "response", "support", "partnership", "collaboration", "conjunction", "tandem", "front", "return", "data", "information", "input", "inputs", "way", "ways", "manner", "terms", "form", "format", "formats"]);
+/** Qualification words: a claim wherever they stand (finding 5C). Supported by a profile lemma that starts the same way. */
+const QUALIFICATION_STEMS = ["certif", "licens", "licenc", "accredit", "charter", "credential", "diploma", "fellow", "qualif"];
+export const qualificationStem = (low: string): string | null => QUALIFICATION_STEMS.find((q) => low.startsWith(q)) ?? null;
 
 export { GENERIC_OBJECTS };
 
@@ -115,7 +133,7 @@ export function lemmasOf(text: string): Set<string> {
   return out;
 }
 
-export type EntitySignal = "form" | "proper" | "sentence start" | "posting" | "object";
+export type EntitySignal = "form" | "proper" | "sentence start" | "posting" | "object" | "instrument" | "qualification";
 
 /** Where a posting noun counts: "claim", inside the object of a responsibility verb, the rule; "anywhere", the earlier rule, kept for the measurement. */
 export type PostingScope = "claim" | "anywhere";
@@ -127,40 +145,112 @@ export interface EntityToken {
   signals: EntitySignal[];
   /** For an object, the verb it is the object of. */
   verb?: string;
+  /** The token stands in a claim position: inside the object of a responsibility verb, or the instrument after it. */
+  claim: boolean;
+  /** The claim position is the instrument after the verb, strong or weak, so a finding's hint is the cited fact's instrument. */
+  instrument: boolean;
 }
 
 const isForm = (raw: string) => /^[A-Za-z][a-z]*[A-Z]/.test(raw) || (/^[A-Z]{2,6}$/.test(raw) && raw.length <= 6) || /[+#]|\.[a-z]/i.test(raw) || (/\d/.test(raw) && /[a-z]/i.test(raw));
 
-/** The object after the verb at `i`: the indices of its run of content words up to a function word, a value or punctuation, articles skipped. */
-export function objectRun(toks: Token[], i: number): number[] {
-  const run: number[] = [];
-  for (let j = i + 1; j < toks.length; j += 1) {
+const isContentToken = (t: Token) => !FUNCTION_WORDS.has(t.low) && !isValue(t.low) && !RESPONSIBILITY_VERBS.has(t.low) && !CURRENCIES.has(t.low) && /[a-z]/i.test(t.raw);
+
+/**
+ * The object after the verb at `i`, as conjunct runs: "dashboards and
+ * recruitment systems" is two runs, each with its own head. A run is the
+ * indices of its content words up to a function word, a value or
+ * punctuation, articles skipped; "and" or "or" followed by a content word
+ * starts the next conjunct. Then the instrument, when one follows: the run
+ * after "using", "via", "in", "on" or "through", and after "with" only as
+ * `weak`, where a token counts when it carries an entity signal.
+ */
+export interface ObjectRuns {
+  objects: number[][];
+  instrument: number[];
+  weak: boolean;
+}
+
+export function objectRuns(toks: Token[], i: number): ObjectRuns {
+  const objects: number[][] = [];
+  let run: number[] = [];
+  let j = i + 1;
+  let ended = false;
+  for (; j < toks.length; j += 1) {
     const w = toks[j].low;
     if (toks[j - 1].endsClause) break;
     // "set up", "rolled out", "experience in": the particle or preposition right after the opener is part of it.
     if (j === i + 1 && (PARTICLES.has(w) || ((w === "in" || w === "with" || w === "of") && CLAIM_OPENERS.has(toks[i].low)))) continue;
     if (w === "a" || w === "an" || w === "the") continue;
-    if (FUNCTION_WORDS.has(w) || isValue(w) || RESPONSIBILITY_VERBS.has(w) || CURRENCIES.has(w)) break;
+    // "and recruitment systems" is a second conjunct; "and partnered with" is a second predicate, its past tense says so.
+    if ((w === "and" || w === "or") && run.length && j + 1 < toks.length && isContentToken(toks[j + 1]) && !/ed$/.test(toks[j + 1].low) && !toks[j - 1].endsClause) {
+      objects.push(run);
+      run = [];
+      continue;
+    }
+    if (!isContentToken(toks[j])) {
+      ended = true;
+      break;
+    }
     run.push(j);
-    if (toks[j].endsClause) break;
+    if (toks[j].endsClause) {
+      j += 1;
+      ended = true;
+      break;
+    }
   }
-  return run;
+  if (run.length) objects.push(run);
+  const instrument: number[] = [];
+  let weak = false;
+  // The instrument follows the object directly: "built dashboards in Excel", never "in" three clauses later.
+  if (objects.length && ended && j < toks.length && !toks[j - 1].endsClause) {
+    const p = toks[j].low;
+    if (INSTRUMENT_PREPOSITIONS.has(p) || p === WEAK_INSTRUMENT) {
+      weak = p === WEAK_INSTRUMENT;
+      for (let k = j + 1; k < toks.length; k += 1) {
+        const w = toks[k].low;
+        if (w === "a" || w === "an" || w === "the") continue;
+        if (!isContentToken(toks[k])) break;
+        instrument.push(k);
+        if (toks[k].endsClause) break;
+      }
+    }
+  }
+  return { objects, instrument, weak };
 }
 
-/** The head of the object after the verb at `i`: the last word of its run. */
+/** The claim positions after the verb at `i`: every object conjunct and the instrument, flat. Kept for the posting scope and the measurements. */
+export function objectRun(toks: Token[], i: number): number[] {
+  const r = objectRuns(toks, i);
+  return [...r.objects.flat(), ...r.instrument];
+}
+
+/** The heads of the object after the verb at `i`: the last word of each conjunct run. */
+export function objectHeads(toks: Token[], i: number): string[] {
+  return objectRuns(toks, i).objects.map((run) => toks[run[run.length - 1]].raw);
+}
+
+/** The head of the first object after the verb at `i`. */
 export function objectHead(toks: Token[], i: number): string | null {
-  const run = objectRun(toks, i);
-  return run.length ? toks[run[run.length - 1]].raw : null;
+  return objectHeads(toks, i)[0] ?? null;
 }
 
-/** Every verb and object head in a text, for the hint a finding carries: "the cited fact says workstream". */
+/** The head of the instrument after the verb at `i`, when the instrument is a strong one and its head can be a tool: "Excel" in "built dashboards in Excel". */
+export function instrumentHead(toks: Token[], i: number): string | null {
+  const r = objectRuns(toks, i);
+  if (!r.instrument.length || r.weak) return null;
+  const head = toks[r.instrument[r.instrument.length - 1]];
+  return NOT_INSTRUMENT.has(head.low) || GENERIC_OBJECTS.has(head.low) ? null : head.raw;
+}
+
+/** Every verb and object head in a text, for the hint a finding carries: "the cited fact says workstream". Instrument heads too, as their own verb "with". */
 export function objectsOf(text: string): { verb: string; head: string }[] {
   const toks = tokensOf(text);
   const out: { verb: string; head: string }[] = [];
   toks.forEach((t, i) => {
     if (!RESPONSIBILITY_VERBS.has(t.low)) return;
-    const head = objectHead(toks, i);
-    if (head) out.push({ verb: lemma(t.low), head });
+    for (const head of objectHeads(toks, i)) out.push({ verb: lemma(t.low), head });
+    const tool = instrumentHead(toks, i);
+    if (tool) out.push({ verb: "with", head: tool });
   });
   return out;
 }
@@ -168,36 +258,57 @@ export function objectsOf(text: string): { verb: string; head: string }[] {
 /** The tokens of a line that assert something, each with the signals that say so. Pure; nothing is looked up. */
 export function entityTokens(line: string, posting: Set<string>, profile: Set<string>, scope: PostingScope = "claim"): EntityToken[] {
   const toks = tokensOf(line);
-  // Every index inside the object of a responsibility verb: the claim positions.
+  // Every index inside the object of a responsibility verb or the instrument after it: the claim positions. A weak instrument ("with ...")
+  // is a claim position for a token with an entity signal only.
   const claim = new Set<number>();
+  const weakClaim = new Set<number>();
+  const instrumentTokens = new Set<number>();
   toks.forEach((t, i) => {
-    if (RESPONSIBILITY_VERBS.has(t.low) || CLAIM_OPENERS.has(t.low)) for (const j of objectRun(toks, i)) claim.add(j);
+    if (RESPONSIBILITY_VERBS.has(t.low) || CLAIM_OPENERS.has(t.low)) {
+      const r = objectRuns(toks, i);
+      for (const j of r.objects.flat()) claim.add(j);
+      for (const j of r.instrument) (r.weak ? weakClaim : claim).add(j);
+      if (!r.weak) for (const j of r.instrument) instrumentTokens.add(j);
+    }
   });
   const byKey = new Map<string, EntityToken>();
-  const add = (signal: EntitySignal, token: string, verb?: string) => {
+  const add = (signal: EntitySignal, token: string, inClaim: boolean, verb?: string, inInstrument = false) => {
     const key = lemma(token.toLowerCase().replace(/[^a-z0-9+#.-]/g, ""));
     if (!key) return;
     const had = byKey.get(key);
     if (had) {
       if (!had.signals.includes(signal)) had.signals.push(signal);
       if (verb && !had.verb) had.verb = verb;
+      had.claim ||= inClaim;
+      had.instrument ||= inInstrument;
       return;
     }
-    byKey.set(key, { token, key, signals: [signal], ...(verb ? { verb } : {}) });
+    byKey.set(key, { token, key, signals: [signal], claim: inClaim, instrument: inInstrument, ...(verb ? { verb } : {}) });
   };
   toks.forEach((t, i) => {
     const { raw, low } = t;
     if (FUNCTION_WORDS.has(low) || CURRENCIES.has(low) || isValue(low) || !/[a-z]/i.test(raw)) return;
     const key = lemma(low.replace(/[^a-z0-9+#.-]/g, ""));
+    const inClaim = claim.has(i);
+    const entitySignalled = isForm(raw) || (/^[A-Z]/.test(raw) && raw !== "I" && (!t.sentenceStart || (!RESPONSIBILITY_VERBS.has(low) && !/(ed|ing)$/.test(low))));
+    const position = inClaim || (weakClaim.has(i) && entitySignalled);
+    const inInstrument = instrumentTokens.has(i) || weakClaim.has(i);
     // A posting noun fires in a claim position: "set up feedback loops" claims loops and feedback, "implemented salesforce workflows" claims
-    // salesforce. Outside one, "with attention to detail", it is the posting's vocabulary in a rewording. The light words keep "complex analysis" out.
-    if (nounShaped(low) && posting.has(key) && !profile.has(key) && (scope === "anywhere" || claim.has(i))) add("posting", raw);
-    if (isForm(raw)) add("form", raw);
-    else if (/^[A-Z]/.test(raw) && !t.sentenceStart && raw !== "I") add("proper", raw);
-    else if (/^[A-Z]/.test(raw) && t.sentenceStart && raw !== "I" && !RESPONSIBILITY_VERBS.has(low) && !/(ed|ing)$/.test(low)) add("sentence start", raw);
+    // salesforce, "built dashboards using salesforce data" claims salesforce. Outside one, "with attention to detail", it is the posting's
+    // vocabulary in a rewording. The light words keep "complex analysis" out.
+    if (nounShaped(low) && posting.has(key) && !profile.has(key) && (scope === "anywhere" || position)) add("posting", raw, position, undefined, inInstrument);
+    if (isForm(raw)) add("form", raw, position, undefined, inInstrument);
+    else if (/^[A-Z]/.test(raw) && !t.sentenceStart && raw !== "I") add("proper", raw, position, undefined, inInstrument);
+    else if (/^[A-Z]/.test(raw) && t.sentenceStart && raw !== "I" && !RESPONSIBILITY_VERBS.has(low) && !/(ed|ing)$/.test(low)) add("sentence start", raw, position, undefined, inInstrument);
+    if (qualificationStem(low)) add("qualification", raw, position, undefined, inInstrument);
+    // A lower case tool in a strong instrument run, "using salesforce data", carries no entity signal; when the profile has it elsewhere it is
+    // still a claim about this fact, so it enters as an instrument token and the cited facts decide (review four, 5A and 6).
+    if (instrumentTokens.has(i) && !entitySignalled && profile.has(key) && nounShaped(low) && !NOT_INSTRUMENT.has(low)) add("instrument", raw, true, undefined, true);
     if (RESPONSIBILITY_VERBS.has(low)) {
-      const head = objectHead(toks, i);
-      if (head && !GENERIC_OBJECTS.has(head.toLowerCase())) add("object", head, lemma(low));
+      // A generic or light head, "present progress", "translating client needs", asserts nothing a fact could contradict.
+      for (const head of objectHeads(toks, i)) if (!GENERIC_OBJECTS.has(head.toLowerCase()) && !LIGHT_WORDS.has(head.toLowerCase())) add("object", head, true, lemma(low));
+      const tool = instrumentHead(toks, i);
+      if (tool) add("instrument", tool, true, lemma(low), true);
     }
   });
   return [...byKey.values()];
@@ -218,11 +329,11 @@ export function entityFindings(line: string, bullet: string | null, cited: Cited
   const out: PacketFinding[] = [];
   const citedLemmas = lemmasOf(cited.map((c) => c.text).join("\n"));
   const citedObjects = cited.flatMap((c) => objectsOf(c.text));
+  const profileHasStem = (stem: string) => [...profile].some((l) => l.startsWith(stem));
   for (const t of entityTokens(line, posting, profile, scope)) {
-    const entity = t.signals.filter((s) => s !== "object");
-    // An entity is checked against the profile, and an entity the user owns anywhere is theirs to place, even as the object of a verb.
-    if (entity.length && profile.has(t.key)) continue;
-    if (entity.length) {
+    const entity = t.signals.filter((s) => s !== "object" && s !== "instrument" && s !== "qualification");
+    // First question: does the entity exist on the profile at all.
+    if (entity.length && !profile.has(t.key)) {
       const why = entity.includes("form") ? "by its form" : entity.includes("proper") ? "capitalised" : entity.includes("sentence start") ? "opens the sentence and is not a verb" : "the posting uses it";
       out.push({
         level: "review",
@@ -233,17 +344,23 @@ export function entityFindings(line: string, bullet: string | null, cited: Cited
       });
       continue;
     }
-    if (t.signals.includes("object") && !citedLemmas.has(t.key)) {
-      const same = citedObjects.find((o) => o.verb === t.verb);
-      const hint = same ?? citedObjects[0];
-      out.push({
-        level: "review",
-        bullet,
-        message: "responsibility is not in the cited facts",
-        value: t.token,
-        detail: hint ? `the cited fact says ${hint.head}` : "the cited facts name no object for it",
-      });
+    if (t.signals.includes("qualification")) {
+      const stem = qualificationStem(t.key) ?? qualificationStem(t.token.toLowerCase());
+      if (stem && !profileHasStem(stem)) {
+        out.push({ level: "review", bullet, message: "qualification appears in no confirmed fact", value: t.token, detail: "a certification or licence is a claim wherever it stands" });
+        continue;
+      }
     }
+    // Second question, asked of every token in a claim position whatever the first answered: do the cited facts support the relationship.
+    if (!t.claim || citedLemmas.has(t.key)) continue;
+    // The hint is the cited fact's word in the same place: its instrument for an instrument, its object under the same verb otherwise.
+    const same = citedObjects.find((o) => o.verb === t.verb);
+    const tool = t.instrument ? citedObjects.find((o) => o.verb === "with") : undefined;
+    const hint = tool ?? same ?? citedObjects[0];
+    const says = hint ? `the cited fact says ${hint.head}` : "the cited facts name no object for it";
+    if (t.signals.includes("object")) out.push({ level: "review", bullet, message: "responsibility is not in the cited facts", value: t.token, detail: says });
+    else if (t.signals.includes("instrument")) out.push({ level: "review", bullet, message: "tool is not in the cited facts", value: t.token, detail: says });
+    else if (entity.length) out.push({ level: "review", bullet, message: "entity is on the profile but not in the cited facts", value: t.token, detail: says });
   }
   return out;
 }

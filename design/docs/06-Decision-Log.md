@@ -219,6 +219,21 @@ All four come back **held**, none ready:
 The two that stay invalid stay invalid because no document exists for them, which is honest and
 is the point: the repair restores what is there and invents nothing.
 
+**Applied 19 September 2026 from merged code (98b610c).** Before: 83 ready, 18 held, 6 invalid.
+After: **83 ready, 22 held, 2 invalid.** 105 rows written, 4 changed status, 4 repaired, 2 left
+as they are, 0 revoked, 0 stale. The four moved from invalid to needs_review and each carries
+the source and hash on the row:
+
+| Packet | Source hash recorded | Held by |
+|---|---|---|
+| 01b8f46b | dbdfc737... | posting word, "roadmap" |
+| b40e9ede | 968dda58... | posting word, "members", and a summary nothing revalidated |
+| 96e3b4bf | 1ad14acd... | posting word, "relationships" |
+| 433b326a | 1b66028e... | name, "KPI", and a summary nothing revalidated |
+
+Every row in the packets table now carries a document except the two that never had one, which
+is the first time that has been true since 18 September.
+
 **One judgement call, flagged.** A repair whose document validates to invalid still attaches
 that document. It follows D-038: a rejection blocks a document and does not decide whether one
 exists, and an invalid row with a document is not a promotion. None of the four is in that
@@ -304,9 +319,36 @@ where the phase 1 work is. They join the seven D-035 placed.
    transactions against the same database, so a failure can leave a test reading rows it did
    not write.
 
+Three more were added on 19 September 2026, after the entries above were written:
+
+9. **The suite fails intermittently and the cause is not established.** Added on the user's
+   instruction, and it is the one on this list most likely to cost real time. What is known:
+   it hits a different test each run, always a database timeout, never the same one twice, and
+   an immediate rerun passes. Neon's median round trip is 187 ms with p90 spikes of 590 to 790
+   ms. A real pool defect was found and fixed on 18 September, `endPool` now ending the pool
+   and clearing the module global with eight test files calling it, and **that did not close
+   it**: it bit twice more on 19 September, both times on a file the branch had not touched.
+   The ten run before and after baseline that would have said whether the pool fix helped was
+   never taken, cancelled as not worth the hour. **It is worth the hour now.** Phase 1 has far
+   more branches than this week did, and a failure on one run in two costs more there than
+   here, both in time and in the habit it teaches of rerunning a red check instead of reading
+   it.
+10. **`probe-cheap-check`'s drift guard cannot see the drift it is named for.** The script
+    holds its own copy of `pairs.test.ts` and compares that copy with a hardcoded count rather
+    than with the file, so D-044 moved two lines in the file and the guard passed unchanged.
+    The copy and the constants were corrected by hand; the guard that was supposed to make that
+    unnecessary was not.
+11. **`RULES` has no case 1 example**, four prohibitions and nothing showing what a permitted
+    rewrite looks like. One is added and measured with the first paid run, because every change
+    to `RULES` is paid on every call (D-041).
+
 **The first phase 1 item is still the pre rank**, because it is the lever on the term that
 dominates the cost function, and because the checking model call of D-036 waits behind it.
 That order is unchanged by anything here.
+
+**Three things get measured by the first paid run and are listed together so one run does all
+of them**: the output side of the p4 self check, the output side of the p5 retry block, and a
+case 1 example in `RULES`.
 
 ### D-041. The case 1 examples contradicted case 3, and two truthful controls sit close to the same line
 
@@ -329,7 +371,16 @@ examples. It does not: they were only ever in this log, and `RULES` has no case 
 all, only the four prohibitions with one example each. So the contradiction was between this
 document and itself, and the prompt was never sent either line. The prompt is unchanged by
 this entry, deliberately: adding a positive example would change the input of every paid call
-and nobody asked for that. If it should be there, it is one more change and it is the user's.
+and nobody asked for that.
+
+**That is a scheduled decision and not an omission, confirmed by the user on 19 September
+2026.** `RULES` carries four prohibitions with one example each and nothing showing what a
+permitted rewrite looks like, which is a real asymmetry: the model is told four ways to be
+wrong and no way to be right. The reason not to fix it today is that every change to `RULES`
+is paid on every call and this one cannot be measured without a paid run. **So a case 1
+example is added and measured with the first paid run of phase 1**, in the same run that
+measures the output side of the p4 self check and the p5 retry block. It is on the phase 1
+list with them.
 
 **Found while doing this, recorded rather than fixed, because it is the user's to decide.**
 `pairs.test.ts` asserts that 26 truthful lines must pass, and they are case 1 by definition.
@@ -405,6 +456,21 @@ are genuine separators. Over the 80 saved answers of
 and no `value-unknown` fires at all. The stored packets read the same under r9 as under r8:
 83 ready, 18 held, 6 invalid, no row moving. So this is a correctness fix for profiles nobody
 has uploaded yet, and it should not be reported as an improvement to any number.
+
+**How often a plain thousands separator now lands as unreadable, measured on the user's
+question.** If that were common the demotion would become the normal case rather than the
+exception, and `value-unknown` would stop rejecting anything in practice. It is not:
+
+| Population | `digit,digit` sequences | Read as a separator | Marked unreadable |
+|---|---|---|---|
+| The 107 job postings behind the stored packets, 48 of which contain one | 109 | 109 | **0** |
+| The two live profiles' facts | 4 | 4 | **0** |
+
+Every well formed separator is stripped before the check runs, whatever the number of groups:
+"1,000", "9,200", "252,000", "1,234,567" and "USD 150,000 to 175,000" all read as numbers. What
+is marked is what is genuinely ambiguous or malformed: "9,2", "9,25", "10,00", "1,23456", and
+"1,000,00", which reads its first group as a separator and marks the leftover. So the demotion
+stays the exception, and a profile written in the ordinary way never triggers it.
 
 `VALIDATOR_REVISION` is `2026-09-19.r9`. The restamp that writes it is applied from merged
 code and its table is reported with the rest.

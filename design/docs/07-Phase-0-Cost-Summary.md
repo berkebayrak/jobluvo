@@ -20,13 +20,19 @@ what the sixth review found.
 | Status | Packets | Validator revision | Document on the row |
 |---|---|---|---|
 | ready | 83 | 2026-09-19.r9 | 83 |
-| needs_review | 18 | 2026-09-19.r9 | 18 |
-| invalid | 6 | 2026-09-18.r6 on 2, .r7 on 4 | 0 |
+| needs_review | 22 | 2026-09-19.r9 | 22 |
+| invalid | 2 | 2026-09-18.r6 | 0 |
 
-Applied 19 September 2026 from merged code (D-040): 101 rows written at r9, **0 changed
-status**, 0 revoked, 0 held by an unreadable input, 0 rebuilt, 0 stale, 6 left as they are
-because they carry no candidate to restamp. The table is unchanged from the r8 reading of the
-same rows.
+Two restamps produced this, both applied 19 September 2026 from merged code. The r9 restamp
+(D-040) wrote 101 rows and **changed no status**, which is what it was expected to do. The
+repair (D-043) then wrote 105 rows and changed four: the four rejected rows whose document
+exists in `design/snapshots/2026-09-18-packets` had it restored, verified against their own
+stored changes, revalidated, and stamped **needs_review** on what the validator said. None was
+promoted to ready. Each of the four carries a soft `resume-repaired` finding naming the file and
+the hash that source recorded.
+
+**Every row in the table now has a document except the two that never had one.** That is the
+first time that has been true since 18 September.
 
 **These 107 rows are two profiles and are not one comparable population.** 80 are on
 `c9f231127f13`, the uploaded resume confirmed now; 27 are on `c70bf9c31851`, the seeded facts
@@ -34,14 +40,16 @@ retired when that upload was confirmed. They were tailored under different promp
 validator revisions and different fact sets. A rate taken over all 107 divides outcomes of one
 population by the size of two, and no rate on this page is computed that way.
 
-**None of the 18 held is the validator objecting to a claim it read.** 11 are rows whose
-summary cannot be revalidated because they were stored before change sets were kept, 6 are
-rows rebuilt into a hold by D-037, and 1 is a row whose posting text has moved since it was
-written.
+**None of the 22 held is the validator objecting to a claim it read on a value.** 11 are rows
+whose summary cannot be revalidated because they were stored before change sets were kept, 6
+are rows rebuilt into a hold by D-037, 4 are the rows repaired by D-043, held by the posting
+word or name finding that had rejected them plus, on two of them, a summary nothing could
+revalidate, and 1 is a row whose posting text has moved since it was written.
 
-**The 6 invalid carry no document on the row, and four of them have one in the frozen
-snapshot** with its hash (D-038). "No change set" is not "no artifact", and the earlier
-wording said it was. Nothing has been restored: reading a file is not a recovery.
+**The 2 invalid have no document anywhere.** Not on the row, not in the snapshot, and no change
+set to rebuild one from. They are the honest remainder of the thirteen: everything that could be
+reconstructed or restored has been, and these two cannot be. Neither is invalid for a fabricated
+value; both carry `value-not-in-cited` on `num:6`, from a rule D-034 deleted.
 
 ### What the check catches
 
@@ -216,7 +224,7 @@ The retry prompt of D-039 is on the same footing: 622 characters added, **measur
 
 **The figure this section used to state, kept because it is what the stored rows carry until the restamp.** The held rate was about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024).
 
-**The seven rebuilt, applied 19 September 2026 from merged code (D-037).** Before: 82 ready, 12 held, 13 invalid. After: **83 ready, 18 held, 6 invalid.** Seven rows whose resumes a withdrawn rule cleared were rebuilt from their own stored change sets and read again by the validator as it stands: one came back ready, six came back held by the same findings that had rejected them, now review rather than hard. The six with no stored change set cannot be reconstructed and stay invalid; none of them is invalid for a fabricated value either, only for the absence of a document.
+**The seven rebuilt, applied 19 September 2026 from merged code (D-037).** Before: 82 ready, 12 held, 13 invalid. After: **83 ready, 18 held, 6 invalid.** Seven rows whose resumes a withdrawn rule cleared were rebuilt from their own stored change sets and read again by the validator as it stands: one came back ready, six came back held by the same findings that had rejected them, now review rather than hard. The six with no stored change set cannot be reconstructed and stay invalid; none of them is invalid for a fabricated value either, only for the absence of a document. **Superseded the same day by D-043**: four of those six have their document in the frozen snapshot and were repaired, so the six became two. The sentence was right that nothing could reconstruct them from the row and wrong to read that as no document existing.
 
 The held count of 18 is now 12 rows with an unrevalidatable summary plus the 6 just rebuilt into a hold. As before, none of it is the validator objecting to a claim it read.
 
@@ -255,7 +263,9 @@ Nine rows went from held to rejected and their stored resumes were cleared, whic
 
 | Held rate, 18 September 2026 | Packets |
 |---|---|
-| Stored packets after the D-037 rebuild, 19 September 2026 | 83 ready, 18 held, 6 invalid, of 107. Seven rebuilt from their stored change sets: 1 ready, 6 held. The 6 left have no change set to rebuild from |
+| Stored packets after the D-043 repair, 19 September 2026, current | **83 ready, 22 held, 2 invalid**, of 107, all at r9. Four rows whose document exists in the frozen snapshot had it restored, verified against their own stored changes and revalidated: all four came back held, none ready. The 2 left have no document anywhere |
+| Stored packets after the r9 restamp, 19 September 2026 | 83 ready, 18 held, 6 invalid, of 107. 101 rows written, no row moved. Superseded by the repair the same day |
+| Stored packets after the D-037 rebuild, 19 September 2026 | 83 ready, 18 held, 6 invalid, of 107. Seven rebuilt from their stored change sets: 1 ready, 6 held. The 6 left have no change set to rebuild from | Superseded by the repair the same day |
 | Stored packets restamped under r8 from merged code (D-036) | 82 ready, 12 held, 13 invalid, of 107. No row moved; the 13 all passed under r8 and none could be promoted, because r7 cleared their resumes. Superseded by the rebuild |
 | Stored packets restamped under r7 from merged code (D-034) | 82 ready, 12 held, 13 invalid, of 107. The 12 are all the unrevalidatable summary. Superseded by r8 the next day |
 | Fresh answers, 80 job cross family sample, the retained attempt as stored by the run, and re-read under the rules as they stand (D-029) | 54 ready, 24 held, 2 invalid, of 80 |

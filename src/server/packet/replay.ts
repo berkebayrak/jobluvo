@@ -84,7 +84,28 @@ export type ReplayDecision =
   | { kind: "no_candidate" }
   /** A rejected row whose resume was cleared, rebuilt from the base plus its own stored change set and stamped on what the validator says now (D-037). */
   | { kind: "rebuild"; status: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument; coverage: "full" }
+  /** A rejected row with no change set to rebuild from, whose document is offered from outside and reproduced by the row's own stored changes (D-043). */
+  | { kind: "repair"; status: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument; coverage: ReplayCoverage; source: string }
   | { kind: "no_resume"; would: ReplayStatus; findings: PacketFinding[]; coverage: ReplayCoverage };
+
+/**
+ * A document offered from outside the row, for a row that has none and stores
+ * no change set to rebuild one from.
+ *
+ * It is never trusted for being where it is. It is accepted only when the
+ * row's own stored changes, plus this document's own summary, reproduce it
+ * exactly, which is the same test a legacy row's stored resume has to pass to
+ * be restamped at all. What the outside document supplies that the row cannot
+ * is the summary text, and that summary is then not revalidated, so the row is
+ * held on it exactly as any other legacy row with a summary is.
+ */
+export interface RepairSource {
+  document: ResumeDocument;
+  /** Where it came from, written onto the row: a path under version control, not a description. */
+  source: string;
+  /** The hash that source recorded for it, written onto the row beside the source. */
+  hash: string;
+}
 
 /** The review finding a legacy row with a summary carries: the replay read its bullets and could not read its summary again. */
 export const SUMMARY_NOT_REVALIDATED = "summary not revalidated: the packet stores no change set";
@@ -97,6 +118,22 @@ export const profileNotReproducible = (): PacketFinding => ({ level: "review", b
 /** The review finding a row carries when the job's text has moved since the packet was written. */
 export const POSTING_MOVED = "posting moved: the job's text has changed since this packet was written, so the words the model was given cannot be read again";
 export const postingMoved = (): PacketFinding => ({ level: "review", bullet: null, code: "posting-moved", message: POSTING_MOVED });
+
+/**
+ * The provenance a repaired row carries: where its document came from and what
+ * hash that source recorded. Soft, like the retry's, because it says how the
+ * row was reached and not that anything is wrong with it. A repaired row's
+ * status is whatever the validator gives the document, the same as any other.
+ */
+export const REPAIRED_FROM = "resume restored from outside the row and reproduced by the row's own stored changes";
+export const repairedFrom = (source: string, hash: string): PacketFinding => ({
+  level: "soft",
+  bullet: null,
+  code: "resume-repaired",
+  message: REPAIRED_FROM,
+  value: source,
+  detail: `the source recorded hash ${hash}`,
+});
 
 /** The hard finding a revoked row carries: nothing can verify the document it stored. The document itself is kept; the status is what stops it (D-038). */
 export const UNVERIFIABLE_RESUME = "stored resume is not the base plus the stored changes";
@@ -131,17 +168,39 @@ export function unreplayable(row: ReplayRow, finding: PacketFinding): ReplayDeci
 
 /**
  * @param extra findings that hold the row whatever the replay finds, for an input the replay could not read the way the run did
+ * @param repair a document offered from outside for a row that has none, accepted only if the row's own stored changes reproduce it (D-043)
  */
-export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candidate: ResumeDocument | null, extra: PacketFinding[] = []): ReplayDecision {
+export function replayDecision(
+  row: ReplayRow,
+  replayed: PacketFinding[],
+  candidate: ResumeDocument | null,
+  extra: PacketFinding[] = [],
+  repair?: RepairSource,
+): ReplayDecision {
   if (row.status === "failed") return { kind: "no_candidate" };
   const coverage: ReplayCoverage = row.changeSet ? "full" : "bullets";
+  // A repair is verified before any of this: the offered document counts for nothing unless the row's own stored
+  // changes, plus that document's own summary, reproduce it. Nothing here trusts a file for being in the repository.
+  const verified = !row.resume && repair && candidate && sameDocument(repair.document, candidate) ? repair : null;
   // Full coverage retains nothing; bullets only keeps the summary's old findings and, when there is a summary, holds the row on it.
-  const legacySummary = coverage === "bullets" && !!row.resume?.summary;
+  // A repaired row is read the same way, on the summary the offered document carries, so a restored summary is never
+  // stamped as revalidated when nothing revalidated it.
+  const legacySummary = coverage === "bullets" && !!(row.resume?.summary ?? verified?.document.summary);
   const findings = [...(coverage === "full" ? replayed : [...replayed, ...retainedFindings(row.findings), ...(legacySummary ? [summaryNotRevalidated()] : [])]), ...extra];
   const status = statusOf(findings);
+  const repaired = (): ReplayDecision => ({
+    kind: "repair",
+    status,
+    findings: [...findings, repairedFrom(verified!.source, verified!.hash)],
+    resume: verified!.document,
+    coverage,
+    source: verified!.source,
+  });
   // A restamp that rejects keeps the document it rejected. Clearing it here is what destroyed ten tailored resumes on
   // 18 September, a day before the findings that did it were demoted, and left nothing for the demotion to promote (D-038).
-  if (status === "invalid") return { kind: "restamp", status, findings, resume: row.resume, coverage };
+  // A verified repair attaches its document even here, for the same reason: a rejection blocks a document, it does not
+  // decide whether one exists, and a row with a document and an invalid status is not a promotion.
+  if (status === "invalid") return verified ? repaired() : { kind: "restamp", status, findings, resume: row.resume, coverage };
   if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) {
     // A row that is consumable or reviewable today on a document nothing can verify is revoked.
     if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: row.resume, coverage };
@@ -151,6 +210,12 @@ export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candid
     // a stored change set is deterministic and both are on the row, so the candidate is verifiable in the only
     // sense that matters. A bullets only row stores no change set, cannot be rebuilt, and stays as it is.
     if (!row.resume && candidate && coverage === "full") return { kind: "rebuild", status, findings, resume: candidate, coverage };
+    // A row with no change set cannot be rebuilt from itself, and D-037 left six of them invalid with no document. Four
+    // of those six have their document in a frozen snapshot that is in version control, so the document exists and the
+    // row said it did not, which is the kind of untruth this week has been spent removing. It is restored only through
+    // the test above: the row's own stored changes reproduce the offered document, the validator then reads it under the
+    // rules as they stand, and whatever that says is the status. Nothing is promoted by hand (D-043).
+    if (verified) return repaired();
     return { kind: "no_resume", would: status, findings, coverage };
   }
   return { kind: "restamp", status, findings, resume: row.resume, coverage };
@@ -171,13 +236,15 @@ export interface ApplyResult {
   untouched: number;
   /** Of those written, rows whose cleared resume was rebuilt from their own stored change set (D-037). */
   rebuilt: number;
+  /** Of those written, rows whose document was restored from outside and verified against their own stored changes (D-043). */
+  repaired: number;
 }
 
 /** Writes each restamp, guarded by the `updated_at` the row was read with, so a packet replaced under the report is never stamped with findings from its predecessor. */
 export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; decision: ReplayDecision }[]): Promise<ApplyResult> {
-  const out: ApplyResult = { restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 0, rebuilt: 0 };
+  const out: ApplyResult = { restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 0, rebuilt: 0, repaired: 0 };
   for (const { row, decision } of decisions) {
-    if (decision.kind !== "restamp" && decision.kind !== "revoke" && decision.kind !== "hold" && decision.kind !== "rebuild") {
+    if (decision.kind !== "restamp" && decision.kind !== "revoke" && decision.kind !== "hold" && decision.kind !== "rebuild" && decision.kind !== "repair") {
       out.untouched += 1;
       continue;
     }
@@ -203,6 +270,7 @@ export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; 
     if (decision.kind === "revoke") out.revoked += 1;
     if (decision.kind === "hold") out.held += 1;
     if (decision.kind === "rebuild") out.rebuilt += 1;
+    if (decision.kind === "repair") out.repaired += 1;
   }
   return out;
 }

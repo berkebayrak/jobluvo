@@ -132,6 +132,69 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-043. The four rows whose document exists are repaired, through a path in the code rather than a one off script
+
+The user's call, and his reason in his words: leaving four rows that say invalid with no
+document, when the document exists in a verified snapshot that is in version control, is the
+same kind of untruth this week has been spent removing.
+
+**What was true before this.** D-037 rebuilt seven of thirteen rejected rows from their own
+stored change sets and left six invalid, because those six store no change set and nothing
+could reconstruct them. That was right about reconstruction and wrong about existence: four of
+the six have their document in `design/snapshots/2026-09-18-packets`, frozen at 12:00 UTC on 18
+September, before the r7 restamp cleared the database copies. Two never had one.
+
+**It is a repair path, not a write.** The review asked for an explicit recorded repair and each
+of its four conditions is met by construction rather than by care:
+
+| The condition | How |
+|---|---|
+| the source is named on the row | a soft `resume-repaired` finding carrying the file path and the hash that source recorded. Soft, like the retry's provenance: it says how the row was reached, not that something is wrong with it |
+| the document is validated under today's rules before any status is decided | the repair branch runs after the validator has read the change set, and the status is `statusOf` over those findings like every other row |
+| nothing is promoted by hand | no branch here can produce `ready` that the validator did not produce. A repaired row that holds, holds; one that is rejected stays rejected and keeps its document |
+| the repair is a branch in the code | `kind: "repair"` in `replayDecision`, reached by `npm run validator-report -- --repair-from <dir>`, with tests. No script was written and none is needed again |
+
+**The offered document is not trusted for being in the repository.** It is accepted only when
+the row's own stored changes, plus that document's own summary, reproduce it exactly. That is
+the same test a legacy row's stored resume has to pass to be restamped at all, and it is review
+five's finding 6 unchanged: the inputs are on the row, the function is deterministic, and the
+result is validated again before anything is stamped. A document that fails it is refused
+however good the source, and the tests assert that with a document from the right file and the
+wrong row.
+
+**What the outside file supplies that the row cannot is the summary text**, which is why these
+four could not be rebuilt from themselves. Nothing supplies the facts that summary cited, so
+the summary is not revalidated and the row is held on `summary-not-revalidated`, exactly as
+every other row with no change set. A restored summary is never stamped as read when nothing
+read it.
+
+**What it does, read only before applying.** All four verify against their own stored changes.
+All four come back **held**, none ready:
+
+| Packet | Finding that had rejected it | After the repair |
+|---|---|---|
+| 01b8f46b | posting word, "roadmap" | needs_review, document restored |
+| b40e9ede | posting word, "members" | needs_review, document restored |
+| 96e3b4bf | posting word, "relationships" | needs_review, document restored |
+| 433b326a | name, "KPI" | needs_review, document restored |
+| d5684230 | `value-not-in-cited`, `num:6` | unchanged, no document exists |
+| 2e4fdc00 | `value-not-in-cited`, `num:6` | unchanged, no document exists |
+
+The two that stay invalid stay invalid because no document exists for them, which is honest and
+is the point: the repair restores what is there and invents nothing.
+
+**One judgement call, flagged.** A repair whose document validates to invalid still attaches
+that document. It follows D-038: a rejection blocks a document and does not decide whether one
+exists, and an invalid row with a document is not a promotion. None of the four is in that
+state, so nothing turns on it today.
+
+**Why this is worth a branch in the code rather than a script.** The user's reason, recorded
+because it is the general point and the four packets are not: this is the repair path that
+matters when the rows belong to real users rather than to a demo profile. A user whose tailored
+document was destroyed by a rule that was later withdrawn should be repaired by something that
+names its source, checks the document against the row, revalidates it, and can be run again and
+audited. A script run once by whoever noticed is none of those things.
+
 ### D-042. The documents are made to agree, the rest of the sixth review is placed in phase 1, and the claim about code auditing a model is softened
 
 The sixth review's last three items and its deferral list. No code changes with this entry.

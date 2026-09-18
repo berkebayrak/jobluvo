@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { dbPool } from "@/db/client";
-import { jobs, packets, profileFacts, type PacketFinding } from "@/db/schema";
+import { parseFlags } from "@/lib/cli";
+import { jobs, packets, profileFacts, type PacketFinding, type ResumeDocument } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
 import { lemmasOf } from "@/server/packet/entities";
 import { codeOf, type FindingCode } from "@/server/packet/codes";
-import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, unreplayable, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
+import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, unreplayable, type RepairSource, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
 
@@ -19,9 +21,16 @@ import { factSet, validateChangeSet } from "@/server/packet/validate";
  *
  *   npm run validator-report            the measurement, nothing written
  *   npm run validator-report -- --apply the same, then every replayed packet
- *                                       restamped: status, findings and,
- *                                       for a packet that fails today, no
- *                                       resume
+ *                                       restamped: status and findings, with
+ *                                       the document kept whatever the
+ *                                       status says (D-038)
+ *   --repair-from <snapshot dir>        offer a document to each row that has
+ *                                       none and stores no change set to
+ *                                       rebuild one from. Accepted only where
+ *                                       the row's own stored changes reproduce
+ *                                       the offered document, then validated
+ *                                       under the rules as they stand like any
+ *                                       other row (D-043)
  *
  * The status column means "passes the rules as they stand" (D-017). When a
  * rule changes, this runs first as the measurement and then with --apply,
@@ -61,6 +70,18 @@ async function candidateProfiles(db: ReturnType<typeof dbPool>, userId: string):
   return out;
 }
 
+/** Every packet row in a frozen snapshot that carries a document, by id. */
+function repairSource(dir: string): Map<string, { document: ResumeDocument; hash: string; source: string }> {
+  const file = `${dir.replace(/[\\/]+$/, "")}/packets.json`;
+  const rows = JSON.parse(readFileSync(file, "utf8")) as { id: string; resume: ResumeDocument | null; resume_hash?: string | null; resumeHash?: string | null }[];
+  const out = new Map<string, { document: ResumeDocument; hash: string; source: string }>();
+  for (const r of rows) {
+    if (!r.resume) continue;
+    out.set(r.id, { document: r.resume, hash: r.resume_hash ?? r.resumeHash ?? "", source: file });
+  }
+  return out;
+}
+
 /** The column a packet lands in: the status it would be stamped with, or why it is not stamped. */
 function outcomeOf(d: ReplayDecision): string {
   if (d.kind === "restamp") return d.coverage === "full" ? d.status : `${d.status}, bullets only`;
@@ -68,6 +89,7 @@ function outcomeOf(d: ReplayDecision): string {
   if (d.kind === "no_candidate") return "not replayed, failed, no candidate";
   if (d.kind === "revoke") return `revoked, would pass as ${d.would} but the stored resume is not the base plus the stored changes`;
   if (d.kind === "rebuild") return `${d.status}, resume rebuilt from the stored change set`;
+  if (d.kind === "repair") return `${d.status}, resume restored from ${d.source} and reproduced by the stored changes`;
   return `not promoted, passes as ${d.would} but no resume stored`;
 }
 
@@ -100,7 +122,11 @@ async function main() {
   const byUser = new Map<string, typeof rows>();
   for (const p of rows) byUser.set(p.userId, [...(byUser.get(p.userId) ?? []), p]);
 
-  const apply = process.argv.includes("--apply");
+  const flags = parseFlags(process.argv.slice(2), { booleans: ["apply"] as const, values: ["repair-from"] as const });
+  console.log("flags:", JSON.stringify({ ...flags.booleans, ...flags.values }));
+  const apply = flags.booleans.apply;
+  const repairs = flags.values["repair-from"] ? repairSource(flags.values["repair-from"]) : null;
+  if (repairs) console.log(`repair source: ${repairs.size} packet rows carry a document`);
   const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null; rebuilds: boolean | null; excluded: boolean; postingMoved: boolean }[] = [];
   const profilesUsed: Record<string, number> = {};
   for (const [userId, ps] of byUser) {
@@ -127,8 +153,17 @@ async function main() {
       // summary carried as the stored resume has it, and the decision names that coverage (review four, finding 2).
       const posting = lemmasOf(`${p.title}\n${p.posting ?? ""}`);
       const replayed = p.changeSet ? validateChangeSet(p.changeSet, base, set, posting) : validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set, posting);
-      const candidate = p.changeSet ? applyChanges(base, p.changeSet).resume : p.resume ? applyChanges(base, { summary: p.resume.summary, summaryFacts: [], changes: p.changes, skills: [] }).resume : null;
-      const decision = replayDecision(row, replayed, candidate, moved ? [postingMoved()] : []);
+      // A row with no document of its own may be offered one: the candidate is then built from the row's own stored
+      // changes and that document's summary, which is the test the offered document has to pass in replayDecision.
+      const offered = !p.resume && !p.changeSet ? (repairs?.get(p.id) ?? null) : null;
+      const summaryOf = p.resume?.summary ?? offered?.document.summary ?? null;
+      const candidate = p.changeSet
+        ? applyChanges(base, p.changeSet).resume
+        : p.resume || offered
+          ? applyChanges(base, { summary: summaryOf, summaryFacts: [], changes: p.changes, skills: [] }).resume
+          : null;
+      const repair: RepairSource | undefined = offered ? { document: offered.document, source: offered.source, hash: offered.hash } : undefined;
+      const decision = replayDecision(row, replayed, candidate, moved ? [postingMoved()] : [], repair);
       const findings = decision.kind === "no_candidate" ? p.findings : decision.findings;
       const hashHolds = p.resume ? resumeHash(p.resume) === p.resumeHash : null;
       const rebuilds = p.resume && candidate ? sameDocument(p.resume, candidate) : null;
@@ -153,7 +188,7 @@ async function main() {
       perPacket.map((p) => ({ row: p.row, decision: p.decision })),
     );
     console.log(
-      `\napplied: ${result.restamped} packets written under the rules as they stand, ${result.changedStatus} changed status, ${result.revoked} of them revoked because their stored resume could not be verified, ${result.held} held because nothing could revalidate them, ${result.rebuilt} rebuilt from their own stored change set after a rejection cleared the resume (D-037), ${result.untouched} left as they are (failed, or invalid with no change set to rebuild from), ${result.stale} refused because the row moved since it was read`,
+      `\napplied: ${result.restamped} packets written under the rules as they stand, ${result.changedStatus} changed status, ${result.revoked} of them revoked because their stored resume could not be verified, ${result.held} held because nothing could revalidate them, ${result.rebuilt} rebuilt from their own stored change set after a rejection cleared the resume (D-037), ${result.repaired} repaired from a document offered outside the row and reproduced by the row's own stored changes (D-043), ${result.untouched} left as they are (failed, or with no document and nothing offered that the row reproduces), ${result.stale} refused because the row moved since it was read`,
     );
   }
 

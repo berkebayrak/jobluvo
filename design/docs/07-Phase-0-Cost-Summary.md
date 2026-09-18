@@ -88,8 +88,24 @@ Read that 7.5 percent for what it is. It is not a quality measure and it is not 
 
 **The figure this section used to state, kept because it is what the stored rows carry until the restamp.** The held rate was about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024).
 
+**The stored packets were restamped under r7 on 18 September 2026, from merged code (D-034).** Before: 61 ready, 42 held, 4 invalid, of 107, all at r6, and the r6 replay reproduced that table exactly. After: 82 ready, 12 held, 13 invalid. 104 rows were written at `2026-09-18.r7`; 3 stayed at r6 because they are invalid with no resume to promote and there is nothing to restamp.
+
+The rows that moved, named:
+
+| From | Packets | To | Why |
+|---|---|---|---|
+| ready | 61 | 61 ready | None moved. Removing rules cannot hold a row that already passed |
+| needs_review | 21 | ready | Held only by a rule that compared the line with its cited fact. That comparison is gone |
+| needs_review | 12 | needs_review | Still held, and all of it is the summary that cannot be revalidated on a row stored before change sets were kept. Not a validator finding about the text |
+| needs_review | 9 | invalid | A name or a posting word in no confirmed fact. The finding did not change; its level did, from review to hard (D-034) |
+| invalid | 1 | invalid | Restamped, still rejected |
+| invalid | 3 | unchanged, r6 | Invalid with no resume to promote; nothing to restamp |
+
+Nine rows went from held to rejected and their stored resumes were cleared, which is why the stored resume count falls from 103 to 94. The twelve that remain held are held by a gap in the record, not by anything the validator read in a line, so the held rate of record under r7 is better read as zero.
+
 | Held rate, 18 September 2026 | Packets |
 |---|---|
+| Stored packets restamped under r7 from merged code (D-034) | 82 ready, 12 held, 13 invalid, of 107. The 12 are all the unrevalidatable summary |
 | Fresh answers, 80 job cross family sample, the retained attempt as stored by the run, and re-read under the rules as they stand (D-029) | 54 ready, 24 held, 2 invalid, of 80 |
 | The same answers, last attempt only, what the scope table counted; the three that differ are held first answers kept over a rejected retry (D-029) | 54 ready, 21 held, 5 invalid, of 80 |
 | The same answers read under the rule before the narrowing | 21 ready, 54 held, 5 invalid, of 80 |

@@ -153,6 +153,26 @@ were kept, nothing can reconstruct them, and no rule here invents a document. Th
 cost of a check that deleted the evidence a day before it was demoted, and it is left
 visible rather than papered over.
 
+**Applied 19 September 2026 from merged code (f815211).** Before: 82 ready, 12 held, 13
+invalid. After: 83 ready, 18 held, 6 invalid. 101 rows written, 7 changed status, 7 rebuilt
+from their own stored change sets, 6 left alone.
+
+**Of the seven, one came back ready and six came back held.** The six are held by the very
+findings that had rejected them, `name-unknown` and `posting-word-unknown`, which D-036
+demoted to review: the same word, the same line, a hold instead of a deletion. The one that
+came back ready is an r6 row whose only finding was `value-not-in-cited`, a rule D-034
+deleted outright, so nothing was left to say about it.
+
+That is the shape of the whole episode in one line. Seven tailored resumes were destroyed
+by findings that, read again a day later, were worth a hold at most and in one case worth
+nothing at all.
+
+The six that stay invalid carry `value-not-in-cited` on `num:6` twice, and `name-unknown`
+on "KPI" and `posting-word-unknown` on "members", "relationships" and "roadmap" once each.
+Every one of those findings is stale, from a rule that is gone or demoted. **None of the
+six is invalid for a fabricated value either.** They are invalid because nothing can
+rebuild the document, not because anything is wrong with it.
+
 ## 18 September 2026
 
 ### D-036. A guess never destroys work, the model checks its own lines in the same call, and the real checker is a model that is not built yet

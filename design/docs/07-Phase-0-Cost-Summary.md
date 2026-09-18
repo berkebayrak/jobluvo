@@ -92,6 +92,10 @@ Read that 7.5 percent for what it is. It is not a quality measure and it is not 
 
 **The figure this section used to state, kept because it is what the stored rows carry until the restamp.** The held rate was about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024).
 
+**The seven rebuilt, applied 19 September 2026 from merged code (D-037).** Before: 82 ready, 12 held, 13 invalid. After: **83 ready, 18 held, 6 invalid.** Seven rows whose resumes a withdrawn rule cleared were rebuilt from their own stored change sets and read again by the validator as it stands: one came back ready, six came back held by the same findings that had rejected them, now review rather than hard. The six with no stored change set cannot be reconstructed and stay invalid; none of them is invalid for a fabricated value either, only for the absence of a document.
+
+The held count of 18 is now 12 rows with an unrevalidatable summary plus the 6 just rebuilt into a hold. As before, none of it is the validator objecting to a claim it read.
+
 **The r8 restamp, applied 19 September 2026 from merged code (D-036), and what it could not undo.**
 
 Before, r7: 82 ready, 12 held, 13 invalid. After, r8: 82 ready, 12 held, 13 invalid. **No stored row moved.** 94 rows were rewritten at `2026-09-18.r8` with 0 status changes; the 13 invalid ones could not be restamped at all.
@@ -127,7 +131,8 @@ Nine rows went from held to rejected and their stored resumes were cleared, whic
 
 | Held rate, 18 September 2026 | Packets |
 |---|---|
-| Stored packets restamped under r8 from merged code (D-036) | 82 ready, 12 held, 13 invalid, of 107. No row moved; the 13 all pass under r8 and none can be promoted, because r7 cleared their resumes |
+| Stored packets after the D-037 rebuild, 19 September 2026 | 83 ready, 18 held, 6 invalid, of 107. Seven rebuilt from their stored change sets: 1 ready, 6 held. The 6 left have no change set to rebuild from |
+| Stored packets restamped under r8 from merged code (D-036) | 82 ready, 12 held, 13 invalid, of 107. No row moved; the 13 all passed under r8 and none could be promoted, because r7 cleared their resumes. Superseded by the rebuild |
 | Stored packets restamped under r7 from merged code (D-034) | 82 ready, 12 held, 13 invalid, of 107. The 12 are all the unrevalidatable summary. Superseded by r8 the next day |
 | Fresh answers, 80 job cross family sample, the retained attempt as stored by the run, and re-read under the rules as they stand (D-029) | 54 ready, 24 held, 2 invalid, of 80 |
 | The same answers, last attempt only, what the scope table counted; the three that differ are held first answers kept over a rejected retry (D-029) | 54 ready, 21 held, 5 invalid, of 80 |

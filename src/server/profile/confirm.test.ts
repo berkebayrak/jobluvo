@@ -216,37 +216,67 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
     });
   });
 
-  it("an edit of a waiting fact moves its version and keeps it waiting; a decision or a replacement bound to the old version is refused", async () => {
+  /*
+   * The six things below were one test making 27 sequential round trips to a remote
+   * database, which put it on the 30 second timeout by construction rather than by
+   * chance: it passed alone in 19.7 seconds and timed out in the full suite, and it
+   * failed more often than anything else in the suite. Split by what each covers, with
+   * every assertion kept. The shape was the problem, not the timeout (review five).
+   */
+
+  /** Seeded confirmed facts, a ready document, and an employment and a skill fact waiting on it. */
+  async function waiting(tx: Tx, userId: string) {
+    await tx.insert(profileFacts).values(seedFacts(userId));
+    const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
+    const [emp, skill] = await tx
+      .insert(profileFacts)
+      .values([
+        {
+          userId,
+          documentId: doc.id,
+          kind: "employment",
+          origin: "upload",
+          status: "extracted",
+          evidence: "Head of Strategy, New Co",
+          data: { company: "New Co", title: "Head of Strategy", start: "2022-03", bullets: ["Cut cost 11 percent.", "Ran the planning cycle."] },
+        },
+        { userId, documentId: doc.id, kind: "skill", origin: "upload", status: "extracted", evidence: "SQL", data: { name: "SQL" } },
+      ])
+      .returning({ id: profileFacts.id, version: profileFacts.version });
+    return { doc, emp, skill };
+  }
+
+  /** The edited employment line, which several of these start from. */
+  const editedEmployment = { company: "New Co", title: "Head of Strategy", start: "2022-03", bullets: ["Cut cost 11 percent.", "Ran the annual planning cycle."] };
+
+  it("editing a waiting fact moves its version, keeps it waiting, and keeps the evidence it did not mention", async () => {
     await withUser(async (tx, userId) => {
-      await tx.insert(profileFacts).values(seedFacts(userId));
-      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
-      const [emp, skill] = await tx
-        .insert(profileFacts)
-        .values([
-          {
-            userId,
-            documentId: doc.id,
-            kind: "employment",
-            origin: "upload",
-            status: "extracted",
-            evidence: "Head of Strategy, New Co",
-            data: { company: "New Co", title: "Head of Strategy", start: "2022-03", bullets: ["Cut cost 11 percent.", "Ran the planning cycle."] },
-          },
-          { userId, documentId: doc.id, kind: "skill", origin: "upload", status: "extracted", evidence: "SQL", data: { name: "SQL" } },
-        ])
-        .returning({ id: profileFacts.id, version: profileFacts.version });
+      const { emp, skill } = await waiting(tx, userId);
       expect([emp.version, skill.version]).toEqual([1, 1]);
       // The user fixes the second bullet, at the version the page showed.
-      const edited = await editFact(tx, userId, { id: emp.id, version: 1, data: { company: "New Co", title: "Head of Strategy", start: "2022-03", bullets: ["Cut cost 11 percent.", "Ran the annual planning cycle."] } });
+      const edited = await editFact(tx, userId, { id: emp.id, version: 1, data: editedEmployment });
       expect(edited.version).toBe(2);
       const [row] = await tx.select().from(profileFacts).where(eq(profileFacts.id, emp.id));
       expect(row).toMatchObject({ status: "extracted", origin: "edit", version: 2, evidence: "Head of Strategy, New Co" });
       expect((row.data as { bullets: string[] }).bullets[1]).toBe("Ran the annual planning cycle.");
-      // The same edit again, at the old version, is refused; so is one the schema refuses; so is one on a confirmed fact.
-      await expect(editFact(tx, userId, { id: emp.id, version: 1, data: row.data as Record<string, unknown> })).rejects.toMatchObject({ reason: "changed" });
+    });
+  });
+
+  it("an edit is refused at a stale version, on data the schema rejects, and on a fact that does not exist", async () => {
+    await withUser(async (tx, userId) => {
+      const { emp } = await waiting(tx, userId);
+      const edited = await editFact(tx, userId, { id: emp.id, version: 1, data: editedEmployment });
+      expect(edited.version).toBe(2);
+      // The same edit again, at the old version, is refused; so is one the schema refuses; so is one on a fact that is not there.
+      await expect(editFact(tx, userId, { id: emp.id, version: 1, data: editedEmployment })).rejects.toMatchObject({ reason: "changed" });
       await expect(editFact(tx, userId, { id: emp.id, version: 2, data: { company: "New Co", title: "Head", start: "March 2022", bullets: [] } })).rejects.toMatchObject({ reason: "invalid", message: expect.stringContaining("start") });
       await expect(editFact(tx, userId, { id: "00000000-0000-0000-0000-000000000000", version: 1, data: {} })).rejects.toMatchObject({ reason: "not_found" });
-      // A skill edit that does not mention the evidence keeps it; one that names it changes it; contact, link and project edits have a schema.
+    });
+  });
+
+  it("a skill edit that does not mention the evidence keeps it, and one that names it changes it", async () => {
+    await withUser(async (tx, userId) => {
+      const { skill } = await waiting(tx, userId);
       const [skillRow] = await tx
         .update(profileFacts)
         .set({ data: { name: "SQL", years: 6, evidence: "Pricing dashboards in SQL" } })
@@ -256,6 +286,12 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       expect(kept.data).toEqual({ name: "SQL", years: 7, evidence: "Pricing dashboards in SQL" });
       const changed = await editFact(tx, userId, { id: skill.id, version: kept.version, data: { name: "SQL", years: 7, evidence: "Weekly pricing dashboard in SQL" } });
       expect(changed.data).toEqual({ name: "SQL", years: 7, evidence: "Weekly pricing dashboard in SQL" });
+    });
+  });
+
+  it("contact, link and project each have a schema, so a valid edit lands and an empty one is refused", async () => {
+    await withUser(async (tx, userId) => {
+      const { doc } = await waiting(tx, userId);
       const [contact, link, project] = await tx
         .insert(profileFacts)
         .values([
@@ -269,11 +305,34 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
       expect((await editFact(tx, userId, { id: link.id, version: link.version, data: { url: "github.com/jack" } })).data).toEqual({ url: "github.com/jack" });
       await expect(editFact(tx, userId, { id: link.id, version: link.version + 1, data: { url: "" } })).rejects.toMatchObject({ reason: "invalid" });
       expect((await editFact(tx, userId, { id: project.id, version: project.version, data: { name: "OKR rollout", notes: ["38 teams"] } })).data).toEqual({ name: "OKR rollout", notes: ["38 teams"] });
+    });
+  });
+
+  it("a confirm bound to the version a stale page showed is skipped, and a confirmed fact can no longer be edited", async () => {
+    await withUser(async (tx, userId) => {
+      const { emp } = await waiting(tx, userId);
+      const edited = await editFact(tx, userId, { id: emp.id, version: 1, data: editedEmployment });
+      expect(edited.version).toBe(2);
       // A confirm bound to the version the stale page showed is skipped; at the current version it moves.
       expect(await decideFacts(tx, userId, { confirm: [{ id: emp.id, version: 1 }] })).toMatchObject({ confirmed: 0, skipped: [emp.id] });
       expect(await decideFacts(tx, userId, { confirm: [{ id: emp.id, version: 2 }] })).toMatchObject({ confirmed: 1, skipped: [] });
-      await expect(editFact(tx, userId, { id: emp.id, version: 2, data: row.data as Record<string, unknown> })).rejects.toMatchObject({ reason: "not_waiting" });
+      await expect(editFact(tx, userId, { id: emp.id, version: 2, data: editedEmployment })).rejects.toMatchObject({ reason: "not_waiting" });
       expect((await resumeFacts(tx, userId))!.employment.find((e) => e.company === "New Co")!.bullets[1]).toBe("Ran the annual planning cycle.");
+    });
+  });
+
+  it("a replacement is refused unless it names every waiting fact at its current version, and then it confirms them all", async () => {
+    await withUser(async (tx, userId) => {
+      const { doc, emp, skill } = await waiting(tx, userId);
+      // The state the earlier tests reach through the editor, set here directly: the employment fact edited and then
+      // confirmed, the skill edited once, and a contact, link and project waiting beside it.
+      await tx.update(profileFacts).set({ status: "confirmed", origin: "edit", version: 2, data: editedEmployment }).where(eq(profileFacts.id, emp.id));
+      await tx.update(profileFacts).set({ version: 2, data: { name: "SQL", years: 7, evidence: "Weekly pricing dashboard in SQL" } }).where(eq(profileFacts.id, skill.id));
+      await tx.insert(profileFacts).values([
+        { userId, documentId: doc.id, kind: "contact", origin: "upload", status: "extracted", evidence: "Jack Miller", data: { name: "Jack Miller", email: "jack@jobluvo.com", location: "Istanbul" } },
+        { userId, documentId: doc.id, kind: "link", origin: "upload", status: "extracted", evidence: "linkedin.com/in/jack", data: { url: "github.com/jack" } },
+        { userId, documentId: doc.id, kind: "project", origin: "upload", status: "extracted", evidence: "OKR rollout", data: { name: "OKR rollout", notes: ["38 teams"] } },
+      ]);
       // A replacement bound to what a stale page showed is refused when the waiting facts differ; bound to the current set it runs.
       await expect(replaceWithDocument(tx, userId, doc.id, [{ id: emp.id, version: 2 }, { id: skill.id, version: 1 }])).rejects.toMatchObject({ reason: "changed" });
       await expect(replaceWithDocument(tx, userId, doc.id, [{ id: skill.id, version: 2 }])).rejects.toMatchObject({ reason: "changed" });

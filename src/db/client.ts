@@ -55,15 +55,23 @@ const MAX_CLIENT_LIFETIME_SECONDS = 240;
  * cap, so the pool rotates its connections before the proxy closes them
  * underneath it.
  */
+export function createPool(connectionString: string): Pool {
+  const created = new Pool({ connectionString, maxLifetimeSeconds: MAX_CLIENT_LIFETIME_SECONDS });
+  created.on("error", (err: Error) => {
+    // The client is already out of the pool by the time this runs; this is the record that it happened.
+    console.error(`${POOL_CLIENT_EVICTED}: a pooled connection died and was removed before it could be reused: ${err.message}`);
+  });
+  return created;
+}
+
+/**
+ * The one pool the application uses. Construction is `createPool` above so a
+ * test can build an identical one of its own: proving eviction means killing
+ * connections, and killing connections in the pool every other test shares is
+ * how a fix for flakiness becomes a cause of it.
+ */
 function pool(): Pool {
-  if (!g.__jobluvoPool) {
-    const created = new Pool({ connectionString: env().DATABASE_URL, maxLifetimeSeconds: MAX_CLIENT_LIFETIME_SECONDS });
-    created.on("error", (err: Error) => {
-      // The client is already out of the pool by the time this runs; this is the record that it happened.
-      console.error(`${POOL_CLIENT_EVICTED}: a pooled connection died and was removed before it could be reused: ${err.message}`);
-    });
-    g.__jobluvoPool = created;
-  }
+  if (!g.__jobluvoPool) g.__jobluvoPool = createPool(env().DATABASE_URL);
   return g.__jobluvoPool;
 }
 

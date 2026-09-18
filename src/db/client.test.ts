@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from "@neondatabase/serverless";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { dbPool, POOL_CLIENT_EVICTED } from "./client";
+import { createPool, POOL_CLIENT_EVICTED } from "./client";
 
 /*
  * The pool hands out live connections, not dead ones (review five).
@@ -15,22 +15,27 @@ import { dbPool, POOL_CLIENT_EVICTED } from "./client";
  *
  * So the proof here is the one the check chain got: break a client on
  * purpose and show the pool does not give it to the next caller.
+ *
+ * On its own pool, built by the same function the application's is built by.
+ * Killing connections in the pool every other test file shares is how a fix
+ * for flakiness becomes a cause of it, which this test did before it owned
+ * its own.
  */
 
 const hasDb = !!process.env.DATABASE_URL;
 
-/** The pool the module made, reached the way the suite's teardown already reaches it. */
-const handle = () => (globalThis as unknown as { __jobluvoPool?: Pool }).__jobluvoPool!;
+let own: Pool | null = null;
+const handle = () => own!;
 
 describe.skipIf(!hasDb)("the pooled connection", () => {
   beforeAll(async () => {
-    // Touch the database so the module has built its pool before any of this reads it.
-    await dbPool().execute("select 1");
+    own = createPool(process.env.DATABASE_URL!);
+    await own.query("select 1");
   });
 
   afterAll(async () => {
-    const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-    await g.__jobluvoPool?.end();
+    await own?.end();
+    own = null;
   });
 
   it("evicts a connection that dies while idle, says so, and never hands it to the next caller", async () => {
@@ -74,8 +79,8 @@ describe.skipIf(!hasDb)("the pooled connection", () => {
     }
     expect(errors.mock.calls.flat().join(" ").match(/POOL_CLIENT_EVICTED/g)).toHaveLength(3);
     // Three connections died and the pool is still usable.
-    const r = await dbPool().execute("select 2 as two");
-    expect(Number((r.rows[0] as { two: number }).two)).toBe(2);
+    const r = await pool.query("select 2 as two");
+    expect(Number(r.rows[0].two)).toBe(2);
     errors.mockRestore();
   });
 

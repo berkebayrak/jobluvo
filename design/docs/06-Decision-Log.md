@@ -6,6 +6,67 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 18 September 2026
 
+### D-033. The pool hands out live connections, and the wake time is on the record with what it was measured against
+
+Two infrastructure facts from 18 September 2026, both found because the test suite kept
+going red and neither of them a test problem.
+
+**The pool kept dead connections and gave them to the next caller.** `src/db/client.ts`
+built one process global `Pool` with no error handler and no recycling. When Neon's proxy
+dropped a websocket, the client stayed in the pool and was handed to whatever asked next,
+which failed with "Client has encountered a connection error and is not queryable". It
+showed up as roughly one 30 second hang per test run, on a different file each time,
+which is why it read for a while as a defect in whatever had changed last. Three of five
+branches that day needed a second run because of it.
+
+The suite is only where it was noticed. That pool is a module global on purpose, so on
+Vercel it survives between invocations and a new request borrows a connection an earlier
+request opened. A dead client there is a 500 in front of a person, and the request that
+pays for it is not the one that broke the connection. A fault that forces a rerun also
+makes every measurement taken on that run unreliable, which is most of what this week has
+produced.
+
+Two lines, and neither changes how anything connects. An error handler on the pool,
+because without a listener an idle client whose socket dies emits "error" on an emitter
+nobody is listening to and Node turns that into an uncaught exception; with one, the
+client is removed before it can be handed out and the eviction prints
+POOL_CLIENT_EVICTED so it is searchable rather than silent. And a four minute client
+lifetime, so the pool retires a connection on release before the proxy closes it
+underneath us.
+
+Proved the way the check chain was proved, by breaking it on purpose: a client is killed
+while idle in the pool, and the pool evicts it, logs it, and gives the next caller a
+different connection that works; three consecutive deaths do not stop the pool serving.
+With the handler removed the same test fails with the raw error escaping, which is the
+production hazard in miniature.
+
+**The wake time, and what it was measured against.** A global test setup wakes the
+database once before any test and prints how long it took (#70). The numbers so far, all
+on this machine, one project, `npm run check` runs of the full suite:
+
+| Wake | Compute state | Run |
+|---|---|---|
+| 3024 ms | Free plan, scale to zero on | failed |
+| 3852 ms | Launch, minutes after the plan edit | failed |
+| 3985 ms | Launch, minutes after the plan edit | failed |
+| 742, 747, 724, 876 ms | Warm | passed |
+
+Every run that reported a multi second wake failed and every warm one passed but one.
+The 3024 ms on the free plan against 742 to 876 ms warm is a clean before and after, and
+that part is settled.
+
+**The multi second wakes after the upgrade are unexplained, and are recorded as
+unexplained.** One candidate is that editing a compute restarts it, and scale to zero and
+the autoscaling ceiling were changed in one edit, so a run in the following minutes would
+show a wake whatever the setting says. That is a plausible account and not a verified one.
+The monitoring graph is being read to see whether anything is still suspending the
+compute. Until it has been read, a multi second wake is an open question rather than a
+leftover from the edit, and writing it down as the restart would be the same move as
+calling the 74 versions unrecoverable before anyone looked at the retention window.
+
+The warm up stays either way. A green build should not depend on a billing setting, the
+plan can change, and a new environment can start on free.
+
 ### D-032. Review five: the deliverable is corrected where it was wrong in public, "addressed" stops meaning "closed", and a restamp is only ever applied from merged code
 
 Review five arrived on 18 September 2026 against the whole review four bundle. It

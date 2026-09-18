@@ -8,6 +8,80 @@ Superseded on 18 September 2026 (D-029): the headline that stood from D-024 to D
 
 **Every term on this page is a historical measurement, and the tailoring term was measured under a policy that no longer ships (review five, 18C).** Since USD 0.0610 over 80 was measured on 18 September, the retry has been given the previous answer to correct rather than the findings alone (prompt revision 2026-09-18.p2, #64), a retry's clean dropped lines are put back and the merged set revalidated (#64), and the validator has moved three revisions. Every one of those changes what the model is sent, what it sends back, or how many lines a second attempt has to write. Replaying stored answers offline cannot measure any of it: it re-reads answers the old prompt produced and cannot say what the new prompt would produce, how often a retry would be earned, or what either would cost in tokens. **The cost per attempted packet under the policy that ships today is unmeasured.** It becomes measured when an authorised paid run measures it, and not before. The figure below is kept because it is the last one that was measured, labelled with the revisions it was measured under.
 
+## Current state, 19 September 2026
+
+**Everything below this section is dated and is superseded unless this section repeats it.**
+Each superseded figure keeps its date and the population it was measured on. Several of them
+are true of different populations and were being read as though they described one, which is
+what the sixth review found.
+
+### The stored packets
+
+| Status | Packets | Validator revision | Document on the row |
+|---|---|---|---|
+| ready | 83 | 2026-09-19.r9 | 83 |
+| needs_review | 18 | 2026-09-19.r9 | 18 |
+| invalid | 6 | 2026-09-18.r6 on 2, .r7 on 4 | 0 |
+
+Applied 19 September 2026 from merged code (D-040): 101 rows written at r9, **0 changed
+status**, 0 revoked, 0 held by an unreadable input, 0 rebuilt, 0 stale, 6 left as they are
+because they carry no candidate to restamp. The table is unchanged from the r8 reading of the
+same rows.
+
+**These 107 rows are two profiles and are not one comparable population.** 80 are on
+`c9f231127f13`, the uploaded resume confirmed now; 27 are on `c70bf9c31851`, the seeded facts
+retired when that upload was confirmed. They were tailored under different prompts, different
+validator revisions and different fact sets. A rate taken over all 107 divides outcomes of one
+population by the size of two, and no rate on this page is computed that way.
+
+**None of the 18 held is the validator objecting to a claim it read.** 11 are rows whose
+summary cannot be revalidated because they were stored before change sets were kept, 6 are
+rows rebuilt into a hold by D-037, and 1 is a row whose posting text has moved since it was
+written.
+
+**The 6 invalid carry no document on the row, and four of them have one in the frozen
+snapshot** with its hash (D-038). "No change set" is not "no artifact", and the earlier
+wording said it was. Nothing has been restored: reading a file is not a recovery.
+
+### What the check catches
+
+| Evaluation set | Flagged | Rejected | Held | Passes |
+|---|---|---|---|---|
+| 28 false lines, written by the rules' author | 8 | 4 | 4 | 20 |
+| 14 false lines, written by a second author | 0 | 0 | 0 | 14 |
+| 26 truthful case 1 lines, which must pass | 0 | 0 | 0 | 26 |
+
+**Eight of forty two are flagged, four of them rejected.** Earlier wording said "four of forty
+two", which counted only the rejections and understated what the check does; and a held packet
+is not a caught fabrication either, because nobody has yet decided any of them. Both halves of
+that sentence matter and neither is the number to quote alone.
+
+`src/server/packet/pairs.test.ts` **no longer asserts that 28 of 28 are caught**, and has not
+since 18 September 2026 (D-034). It asserts three things: every truthful line passes, the
+lines the invention check does reject are still rejected by name, and the counts print by
+author and by case and are never summed. Its header says in as many words that it is not
+evidence that Jobluvo catches fabrication.
+
+### Is there a held rate
+
+Yes. It is 18 of 101 rows with a candidate, 17.8 percent, on two profiles counted separately.
+The sentence below that says there is no held rate any more was true for one day under D-034,
+when every remaining finding was hard, and D-036 demoted three of them back to review the next
+day. It is marked where it stands.
+
+The held rate counts how often the validator fired. It does not count how often it should have
+fired and did not, so it is not a quality measure in either direction.
+
+### What the code does, in one paragraph
+
+It checks that every value and every name in a tailored line appears somewhere in the user's
+confirmed facts. A value that matches nothing rejects the packet, but only while every number
+on the profile could be read (D-040); otherwise it holds. Every name and posting word check
+holds (D-036). A rejection no longer deletes the document it rejected; the status is what
+stops it being served (D-038). Nothing reads what a line means. **This is a placeholder and
+not the design**, and the permanent answer is the checking model call recorded in D-036 and
+not built.
+
 ## The function
 
     upstream model cost per application = scored per applied x 0.000311
@@ -82,13 +156,58 @@ This is the one place the held rate is stated. Every earlier figure in the decis
 
 **A note on dates, because one of them was wrong (review five, 17).** A run tag is named for the date in Istanbul and every timestamp on this page is UTC, and Istanbul is three hours ahead. So the runs tagged `18sep` have UTC timestamps on 17 September: `families-18sep-changes` wrote its 128 cost rows between 22:57:07 and 22:58:20 UTC on 17 September, which is 01:57 on 18 September in Istanbul. This row previously dated the restamp that preceded that write to 22:50 UTC on 18 September, which cannot be seven minutes before 22:57 UTC on 17 September. The snapshot settles it: the 27 surviving rows of that restamp carry `updated_at` of 22:49 and 22:50 UTC on 17 September. The restamp was 17 September and the date here is corrected.
 
-**There is no held rate any more. D-034 removed the meaning comparison, and the number this section exists to state is now a rejection rate of 7.5 percent with nothing held.** Re-reading the same 80 saved answers under the code as it stands: 74 ready, 0 held, 6 invalid. The six carry no tailored resume and the user gets their original. Two findings account for all of it, a word taken from the posting that no fact carries (5) and a name that no fact carries (2); every rule that compared what a line means with what a fact means is gone.
+**Superseded on 19 September 2026 after one day, and kept because it is quoted. Population: the 80 saved answers of the 18 September cross family sample, under D-034's levels.** It read: "There is no held rate any more. D-034 removed the meaning comparison, and the number this section exists to state is now a rejection rate of 7.5 percent with nothing held. Re-reading the same 80 saved answers under the code as it stands: 74 ready, 0 held, 6 invalid."
 
-Read that 7.5 percent for what it is. It is not a quality measure and it is not an improvement on 33.8 percent. The same answers are being read by a check that asks far less. Against the 28 known false lines of `pairs.test.ts` the code rejects 4 and holds 4, where it caught all 28 before; of a second author's 14 it catches none. Four of forty two. What the packets say about themselves changed; the packets did not.
+That was true only while every remaining finding was hard. D-036 demoted the name, posting word and qualification findings to review the next day, so the same 80 answers now read **74 ready, 6 held, 0 invalid**: the same six answers, the same two findings, a hold instead of a rejection. The two findings are a word taken from the posting that no fact carries (5) and a name that no fact carries (2). There is a held rate; the current state section at the top of this page states it.
 
-**The check is a placeholder, not the design (D-036).** The permanent answer is a separate model call that reads the confirmed facts and the tailored lines and judges whether each claim is supported, and it is not built because it does not fit the budget yet: about USD 0.0004 to 0.0008 per application against roughly USD 0.00017 of room at eight jobs scored per application. It fits once the phase 1 pre rank brings scored per applied to about seven, so **the pre rank comes first and pays for the checking call**. Until then the code rejects a fabricated figure and holds a suspicious word, and the tailoring prompt, including the self check the model runs on its own lines in the same call, is what stands in for the rest.
+Read that 7.5 percent for what it is. It is not a quality measure and it is not an improvement on 33.8 percent. The same answers are being read by a check that asks far less. Against the 28 known false lines of `pairs.test.ts` the code rejects 4 and holds 4, where it flagged all 28 before; of a second author's 14 it flags none. **Eight of forty two are flagged, four of them rejected** (corrected 19 September 2026: this said "four of forty two", which counted the rejections only). A held line is not a caught fabrication either, because nobody has decided any of them yet. What the packets say about themselves changed; the packets did not.
 
-**The self check added to the prompt costs USD 0.0000424 per packet on the input side**, measured exactly: 423 characters, about 106 tokens, at most two calls a packet, USD 0.2 per million input tokens. That is 5.6 percent of the tailoring term and 1.3 percent of the per application figure. The output side is not measured; the schema is closed so it should not grow, and a paid run is what would settle it.
+**The check is a placeholder, not the design (D-036).** The permanent answer is a separate model call that reads the confirmed facts and the tailored lines and judges whether each claim is supported, and it is not built because it does not fit the budget: about USD 0.0004 to 0.0008 per application against roughly USD 0.00017 of room at eight jobs scored per application.
+
+**Corrected 19 September 2026. This said "the pre rank comes first and pays for the checking call" as though it were settled. It is conditional, and the condition is two numbers that do not exist.** At 25 applications per user and one extraction, the arithmetic is:
+
+| Scored per applied | Base | Room to the low end | With a 0.0004 checker | With a 0.0008 checker |
+|---|---|---|---|---|
+| 8 | 0.003332 | 0.000168 | 0.003732, 107 percent | 0.004132, 118 percent |
+| 7 | 0.003021 | 0.000479 | 0.003421, **98 percent** | 0.003821, 109 percent |
+| 6 | 0.002710 | 0.000790 | 0.003110, 89 percent | 0.003510, 100 percent |
+
+So a pre rank that reaches seven pays for a checker at the cheap end of the range and does not
+pay for one at the expensive end. The break even is 7.25 scored per applied for a 0.0004
+checker and 5.97 for a 0.0008 one. **Whether the pre rank pays for the checking call depends
+on the measured pre rank saving and the measured checker cost, and neither has been
+measured.** The sequencing still holds, because the pre rank is the only lever on the term
+that dominates; the conclusion that it is sufficient does not.
+
+**And the pre rank has to be measured for the right thing.** Scored per applied is a ratio,
+and a pre rank that cuts the numerator by dropping jobs the user would have applied to cuts
+the denominator with it. Such a pre rank improves the ratio on paper and reduces applications,
+which is the product. Any pre rank measurement states what it did to applications, not only
+what it did to scores.
+
+Until then the code rejects a fabricated figure, holds a suspicious word, and holds a figure
+it could not have matched (D-040); the tailoring prompt, including the self check the model
+runs on its own lines in the same call, is what stands in for the rest.
+
+**The self check added to the prompt costs about USD 0.0000424 per packet on the input side. That is an estimate under stated assumptions, not a measurement, and it was labelled as measured until 19 September 2026.** What each part of it is:
+
+| Quantity | What it is |
+|---|---|
+| 423 characters | **measured**, the sentence itself |
+| about 106 tokens | **an estimate**, four characters to a token, no tokeniser was run |
+| two calls per packet | **an assumption**, and the ceiling rather than the average: it holds only when every packet earns its retry, and most do not |
+| USD 0.2 per million input tokens | the published input price |
+| the output side | **unmeasured** |
+
+So USD 0.0000424 is an upper bound on the input side under an estimated token count, and the
+figure on a packet that makes one call is half of it. The percentages that follow from it, 5.6
+percent of the tailoring term and 1.3 percent of the per application figure, carry the same
+labels. The output side should not grow, because the schema is closed and the instruction says
+not to write commentary, but that is an expectation and no paid run has tested it. Both sides
+get measured with the first paid run of phase 1.
+
+The retry prompt of D-039 is on the same footing: 622 characters added, **measured**; about
+156 tokens, **an estimate**; paid on the retry call only, never on a first call.
 
 **The figure this section used to state, kept because it is what the stored rows carry until the restamp.** The held rate was about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024).
 
@@ -162,13 +281,18 @@ An earlier entry, D-031, read the same two rates as "39 percent of that fall is 
 
 **What the validator lets past, which is the measurement that matters and the one this page got wrong.** Two numbers, and the order they are read in is the point.
 
-`src/server/packet/pairs.test.ts` is a paired evaluation set: 28 deliberately false lines, each an invention the validator is supposed to catch, and 26 truthful lines built from the same facts, each one it must let through. It catches 28 of 28 and passes 26 of 26, asserted on every run of `npm test`. **That result is not wrong and is not withdrawn. It measures what it measures**, which is that the rules do what their author meant on the cases their author thought of, and it is a real regression floor: a rule change that breaks one of those 54 lines is caught the same day.
+`src/server/packet/pairs.test.ts` is a paired evaluation set: 28 deliberately false lines, each an invention the validator is supposed to catch, and 26 truthful lines built from the same facts, each one it must let through.
+
+**Superseded on 18 September 2026 by D-034, and this paragraph still described it as current until 19 September.** It read: "It catches 28 of 28 and passes 26 of 26, asserted on every run of `npm test`. That result is not wrong and is not withdrawn." The first half stopped being true when the meaning comparison was removed. The file asserts 26 of 26 truthful and names the lines the invention check still rejects; it asserts nothing about the other 34, on purpose, under a header saying it is not evidence that fabrication is caught. The regression floor it provides is now a floor under the truthful controls and the few rejections, not under 54 lines.
+
+The 28 of 28 was a real result on 17 and 18 September 2026, under the claim validator that D-034 removed. Population: one author's fixtures, that author being the author of the rules.
 
 On 18 September 2026 a second author, reading the implementation and writing against it, produced 14 false lines of their own. **The validator missed all 14**, before any of the fixes that followed. Every one was reproduced against the real validator before anything was changed. `pairs.test.ts` marks each case with who wrote it and prints the two counts separately, never summed; the 14 join it as each rule change lands, so the independent count reads 0 of 0 until then and the file says so.
 
 | Evaluation set | False lines caught |
 |---|---|
-| Written by the rules' author | 28 of 28 |
+| Written by the rules' author, under the rules of 18 September 2026, now removed | 28 of 28 |
+| Written by the rules' author, under the rules as they stand | 8 of 28 flagged, 4 of them rejected |
 | Written by a second author, independently | **0 of 14** |
 
 So this page previously said the miss rate was 0. It was 0 on one author's fixtures and the page did not say the second half loudly enough, because the second half did not exist yet. **The only miss rate measured against someone who did not write the rules is 14 of 14 missed**, from the one independent attempt anyone has made. The paired set demonstrates coverage of its own fixtures and says nothing about the general rate. Neither number is an accuracy claim about real resumes, and the diverse labelled set review four asked for still does not exist.

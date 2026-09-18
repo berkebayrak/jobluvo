@@ -25,6 +25,12 @@ import { isHard, needsReview } from "./validate";
  *    packet that passes today but has no such resume, an invalid one whose
  *    resume was never stored, cannot be promoted by a rule change; it needs
  *    a new run. The row is left as it is and counted.
+ * 4. A ready or held row whose stored resume is missing or is not that
+ *    candidate is revoked: stamped invalid with a hard finding that says
+ *    so, its resume dropped, through the same guarded write. Leaving it
+ *    was the way the repair failed open (review four, finding 1): the row
+ *    stayed ready and consumableResume kept serving a document nothing
+ *    could verify.
  *
  * The candidate test ignores the order of the skills list: a change set
  * stores the bullet edits and not the skill order the model asked for, so
@@ -45,8 +51,13 @@ export interface ReplayRow {
 
 export type ReplayDecision =
   | { kind: "restamp"; status: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument | null }
+  | { kind: "revoke"; status: "invalid"; would: ReplayStatus; findings: PacketFinding[]; resume: null }
   | { kind: "no_candidate" }
   | { kind: "no_resume"; would: ReplayStatus; findings: PacketFinding[] };
+
+/** The hard finding a revoked row carries: nothing can verify the document it stored. */
+export const UNVERIFIABLE_RESUME = "stored resume is not the base plus the stored changes";
+export const unverifiable = (): PacketFinding => ({ level: "hard", bullet: null, message: UNVERIFIABLE_RESUME });
 
 /** The findings that survive a replay: the summary's, which nothing can replay. */
 export const retainedFindings = (stored: PacketFinding[]): PacketFinding[] => stored.filter((f) => f.bullet === "summary");
@@ -69,7 +80,11 @@ export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candid
   const findings = [...replayed, ...retainedFindings(row.findings)];
   const status = statusOf(findings);
   if (status === "invalid") return { kind: "restamp", status, findings, resume: null };
-  if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) return { kind: "no_resume", would: status, findings };
+  if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) {
+    // A row that is consumable or reviewable today on a document nothing can verify is revoked; a row that is neither cannot be promoted.
+    if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: null };
+    return { kind: "no_resume", would: status, findings };
+  }
   return { kind: "restamp", status, findings, resume: row.resume };
 }
 
@@ -78,6 +93,8 @@ export interface ApplyResult {
   restamped: number;
   /** Of those, rows whose status changed. */
   changedStatus: number;
+  /** Of those, ready or held rows revoked to invalid because their stored resume could not be verified. */
+  revoked: number;
   /** Rows refused because they moved between the read and the write. */
   stale: number;
   /** Rows the decision left alone: no candidate, or no resume to promote. */
@@ -86,9 +103,9 @@ export interface ApplyResult {
 
 /** Writes each restamp, guarded by the `updated_at` the row was read with, so a packet replaced under the report is never stamped with findings from its predecessor. */
 export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; decision: ReplayDecision }[]): Promise<ApplyResult> {
-  const out: ApplyResult = { restamped: 0, changedStatus: 0, stale: 0, untouched: 0 };
+  const out: ApplyResult = { restamped: 0, changedStatus: 0, revoked: 0, stale: 0, untouched: 0 };
   for (const { row, decision } of decisions) {
-    if (decision.kind !== "restamp") {
+    if (decision.kind !== "restamp" && decision.kind !== "revoke") {
       out.untouched += 1;
       continue;
     }
@@ -109,6 +126,7 @@ export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; 
     }
     out.restamped += 1;
     if (row.status !== decision.status) out.changedStatus += 1;
+    if (decision.kind === "revoke") out.revoked += 1;
   }
   return out;
 }

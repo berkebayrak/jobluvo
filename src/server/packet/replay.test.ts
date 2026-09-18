@@ -2,8 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dbPool, type Tx } from "@/db/client";
 import { jobs, packets, sources, users, type PacketFinding, type ResumeDocument } from "@/db/schema";
-import { applyReplay, replayDecision, sameDocument, type ReplayRow } from "./replay";
+import { applyReplay, replayDecision, sameDocument, unverifiable, type ReplayRow } from "./replay";
 import { resumeHash } from "./resume";
+import { consumableResume } from "./run";
 
 /*
  * The replay decision, the five ways the first restamp went wrong, and
@@ -57,9 +58,24 @@ describe("replay decision", () => {
     expect(d).toEqual({ kind: "no_resume", would: "ready", findings: [] });
   });
 
+  it("revokes a ready or held row whose stored resume is not the base plus the stored changes, and cannot promote an invalid one", () => {
+    // A ready row on a document nothing can verify: revoked, invalid, the resume dropped, a hard finding that says why.
+    expect(replayDecision(row({ resume: drifted }), [], doc)).toEqual({ kind: "revoke", status: "invalid", would: "ready", findings: [unverifiable()], resume: null });
+    // A held row with no resume at all: the same.
+    expect(replayDecision(row({ status: "needs_review", resume: null, resumeHash: null, findings: [summaryReview] }), [], null)).toEqual({
+      kind: "revoke",
+      status: "invalid",
+      would: "needs_review",
+      findings: [summaryReview, unverifiable()],
+      resume: null,
+    });
+    // An invalid row that would pass today has nothing to revoke and nothing to promote.
+    expect(replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] }), [], null)).toEqual({ kind: "no_resume", would: "ready", findings: [] });
+  });
+
   it("needs the stored resume to be the base plus the stored changes, up to skill order", () => {
-    // The stored resume is not what the changes describe: no candidate.
-    expect(replayDecision(row({ resume: drifted }), [], doc)).toMatchObject({ kind: "no_resume", would: "ready" });
+    // The stored resume is not what the changes describe: no candidate to restamp.
+    expect(replayDecision(row({ resume: drifted }), [], doc).kind).toBe("revoke");
     // The model reordered the skills and the change set does not carry that: still the candidate.
     expect(replayDecision(row({ resume: reordered }), [], docTwoSkills)).toMatchObject({ kind: "restamp", status: "ready", resume: reordered });
     expect(sameDocument(reordered, docTwoSkills)).toBe(true);
@@ -142,7 +158,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(resumeHash(r.resume!)).toBe(r.resumeHash);
       expect(Object.keys(r.resume!)).not.toEqual(Object.keys(doc));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, stale: 0, untouched: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, stale: 0, untouched: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("invalid");
       expect(after.resume).toBeNull();
@@ -157,11 +173,29 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       // A new run lands on the same user and job after the report read it.
       await tx.update(packets).set({ status: "needs_review", findings: [summaryReview], updatedAt: sql`now() + interval '1 second'` }).where(eq(packets.id, id));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, stale: 1, untouched: 0 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, stale: 1, untouched: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("needs_review");
       expect(after.findings).toEqual([summaryReview]);
       expect(after.resume).toEqual(doc);
+    });
+  });
+
+  it("revokes a ready row whose stored resume cannot be verified, and the gate stops serving it", async () => {
+    await withPacket(async (tx, id) => {
+      const r = await read(tx, id);
+      // Before: ready, and the gate serves the stored document.
+      expect(consumableResume(r)).toEqual(r.resume);
+      // The base plus the stored changes is not the stored resume: the candidate is a different document.
+      const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [], drifted) }]);
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 1, stale: 0, untouched: 0 });
+      const after = await read(tx, id);
+      // The assertion is on the gate, not on the decision: nothing downstream may consume this row.
+      expect(consumableResume(after)).toBeNull();
+      expect(after.status).toBe("invalid");
+      expect(after.resume).toBeNull();
+      expect(after.resumeHash).toBeNull();
+      expect(after.findings).toEqual([summarySoft, unverifiable()]);
     });
   });
 
@@ -172,7 +206,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
         { row: r, decision: { kind: "no_candidate" } },
         { row: r, decision: { kind: "no_resume", would: "ready", findings: [] } },
       ]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, stale: 0, untouched: 2 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, stale: 0, untouched: 2 });
       expect((await read(tx, id)).status).toBe("ready");
     });
   });

@@ -176,11 +176,40 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       // The packet says how it was reached, and a soft finding does not hold it.
       const retry = out.findings.find((f) => f.message === "this answer is a retry");
       expect(retry?.level).toBe("soft");
-      expect(retry?.detail).toBe("the retry dropped 1 of 2 edited lines; 1 line the validator had not objected to was put back from the answer before it");
+      expect(retry?.detail).toBe("the retry dropped 1 of 2 edited lines; 1 line the retry never named and the validator had not objected to was put back from the answer before it");
       expect(out.attemptLog[1]!.retry).toBe(retry?.detail);
       const [row] = await tx.select({ status: packets.status, changes: packets.changes }).from(packets).where(eq(packets.jobId, job.id));
       expect(row.status).toBe("ready");
       expect(row.changes.map((c) => c.bullet).sort()).toEqual(["R1.1", "R1.2"]);
+    });
+  });
+
+  it("does not put back a line the retry named and returned at the resume's own text, which is the self check reverting a claim", () => {
+    return withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call()
+        // The first answer invents a value on R1.1 and promotes R1.2 from the resume's "Own" to "Led".
+        .mockResolvedValueOnce(
+          answer([
+            { bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent.", facts: ["R1.1"] },
+            { bullet: "R1.2", text: "Led the annual planning cycle.", facts: ["R1.2"] },
+          ]),
+        )
+        // The retry fixes R1.1 and, reading its own work back, returns R1.2 at the resume's own wording.
+        .mockResolvedValueOnce(
+          answer([
+            { bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] },
+            { bullet: "R1.2", text: "Own the annual planning cycle.", facts: ["R1.2"] },
+          ]),
+        );
+      const out = await tailorJob(tx, facts, job, { run: "retry-reversion" });
+      // The reversion stands. Before D-039 the merge put "Led the planning cycle" back, because the validator had no
+      // finding on it, and the remaining lookup passed it again: neither "Led" nor any value in it is unknown.
+      const r12 = out.changeSet!.changes.find((c) => c.bullet === "R1.2")!;
+      expect(r12.text).toBe("Own the annual planning cycle.");
+      expect(r12.text).not.toContain("Led");
+      const retry = out.findings.find((f) => f.message === "this answer is a retry");
+      expect(retry?.detail).toContain("it left 1 of them at the resume's own text, which is its decision and stands");
     });
   });
 

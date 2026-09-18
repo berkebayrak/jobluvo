@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
 import { profileDocuments, profileFacts } from "@/db/schema";
 import { recordCost } from "@/server/cost";
 import { env } from "@/lib/env";
 import { CallError, structuredCall, type CallUsage, type PromptContent, type ReasoningEffort } from "@/server/llm/client";
+import { profileLockKey, RESUME_KINDS } from "./confirm";
 import { answerFact, educationFact, employmentFact, skillFact } from "./facts";
 
 /*
@@ -261,6 +262,12 @@ export interface UploadOutcome {
   tokensOut: number;
   usd: number;
   ms: number;
+  /**
+   * True when a newer upload replaced the profile while this extraction was
+   * running. Its facts are stored withdrawn and none of them is confirmable
+   * (review five, finding 7).
+   */
+  superseded: boolean;
 }
 
 /**
@@ -284,7 +291,7 @@ export async function extractUpload(
   const [doc] = await db
     .insert(profileDocuments)
     .values({ userId, filename: file.filename, bytesPhase0: file.bytes, text: "", pageCount: 0, status: "processing" })
-    .returning({ id: profileDocuments.id });
+    .returning({ id: profileDocuments.id, uploadedAt: profileDocuments.uploadedAt });
   const fail = async (message: string) => {
     await db.update(profileDocuments).set({ status: "failed", error: message.slice(0, 500) }).where(eq(profileDocuments.id, doc.id));
   };
@@ -316,11 +323,45 @@ export async function extractUpload(
   // The facts and the document's ready state land together or not at all (D-027): a document could otherwise be left
   // processing or failed with its facts stored, refused by Confirm all and yet confirmable one by one. The model call stays
   // outside the transaction; only the stores are in it.
+  //
+  // The store also decides whether these facts may be confirmed at all (review five, finding 7). A replacement retires the
+  // waiting facts of every document uploaded before the one being confirmed, but it can only retire facts that exist. An
+  // extraction still running at that moment has none yet, so it used to insert them afterwards and they became confirmable
+  // beside the newer profile, which is the replacement it was supposed to lose to. Reading which upload is newest is not
+  // enough on its own: the replacement and this store have to agree on the order they happen in, so the store takes the same
+  // profile lock the replacement takes and asks its question inside it. Either the replacement finishes first and this sees
+  // it, or this finishes first and the replacement retires these facts the ordinary way.
+  let superseded = false;
   try {
     await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${profileLockKey(userId)}))`);
+      const [{ newer }] = await tx
+        .select({ newer: sql<number>`count(*)::int`.mapWith(Number) })
+        .from(profileFacts)
+        .innerJoin(profileDocuments, eq(profileDocuments.id, profileFacts.documentId))
+        .where(
+          and(
+            eq(profileFacts.userId, userId),
+            eq(profileFacts.status, "confirmed"),
+            inArray(profileFacts.kind, [...RESUME_KINDS]),
+            gt(profileDocuments.uploadedAt, doc.uploadedAt),
+          ),
+        );
+      superseded = newer > 0;
       if (result.facts.length) {
+        // Stored either way. The extraction was paid for and its reading is worth keeping; what changes is whether a person
+        // can confirm it. "rejected" is the status a replacement already gives a withdrawn waiting fact, so the profile view
+        // and every decision path read this the same way they read that, with no new state to teach them.
         await tx.insert(profileFacts).values(
-          result.facts.map((f) => ({ userId, documentId: doc.id, kind: f.kind, data: f.data, evidence: f.evidence, origin: "upload" as const, status: "extracted" as const })),
+          result.facts.map((f) => ({
+            userId,
+            documentId: doc.id,
+            kind: f.kind,
+            data: f.data,
+            evidence: f.evidence,
+            origin: "upload" as const,
+            status: (superseded ? "rejected" : "extracted") as "rejected" | "extracted",
+          })),
         );
       }
       // The issues land with the facts: what could not be read is part of what was read (review four, finding 9).
@@ -339,5 +380,6 @@ export async function extractUpload(
     tokensOut: result.usage.outputTokens,
     usd: result.usd,
     ms: result.ms,
+    superseded,
   };
 }

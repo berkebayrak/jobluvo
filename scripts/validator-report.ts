@@ -65,6 +65,7 @@ function outcomeOf(d: ReplayDecision | "excluded"): string {
   if (d === "excluded") return "excluded, no profile reproduces the hash";
   if (d.kind === "restamp") return d.status;
   if (d.kind === "no_candidate") return "not replayed, failed, no candidate";
+  if (d.kind === "revoke") return `revoked, would pass as ${d.would} but the stored resume is not the base plus the stored changes`;
   return `not promoted, passes as ${d.would} but no resume stored`;
 }
 
@@ -126,7 +127,7 @@ async function main() {
       replayed.map((p) => ({ row: p.row, decision: p.decision as ReplayDecision })),
     );
     console.log(
-      `\napplied: ${result.restamped} packets restamped under the rules as they stand, ${result.changedStatus} changed status, ${result.untouched} left as they are (no candidate or no resume), ${result.stale} refused because the row moved since it was read`,
+      `\napplied: ${result.restamped} packets restamped under the rules as they stand, ${result.changedStatus} changed status, ${result.revoked} of them revoked because their stored resume could not be verified, ${result.untouched} left as they are (failed, or invalid with no resume to promote), ${result.stale} refused because the row moved since it was read`,
     );
   }
 
@@ -137,8 +138,9 @@ async function main() {
   const withResume = perPacket.filter((p) => p.hashHolds !== null);
   const rebuilds = perPacket.filter((p) => p.rebuilds).length;
   const noResume = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "no_resume").length;
+  const revoked = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind === "revoke").length;
   console.log(
-    `stored resumes: ${withResume.length}; ${rebuilds} are the base plus their stored changes and summary (skill order not stored, not compared); ${noResume} pass today but have no such resume and are not promoted; resume_hash names the stored resume on ${withResume.filter((p) => p.hashHolds).length} of ${withResume.length} (the rest are rewritten by --apply)`,
+    `stored resumes: ${withResume.length}; ${rebuilds} are the base plus their stored changes and summary (skill order not stored, not compared); ${noResume} pass today but have no such resume and are not promoted; ${revoked} ready or held rows have a resume that cannot be verified and are revoked to invalid by --apply; resume_hash names the stored resume on ${withResume.filter((p) => p.hashHolds).length} of ${withResume.length} (the rest are rewritten by --apply)`,
   );
   const retained = replayed.flatMap((p) => p.row.findings.filter((f) => f.bullet === "summary"));
   console.log(`summary findings kept from the original run, not replayable: ${retained.length} on ${replayed.filter((p) => p.row.findings.some((f) => f.bullet === "summary")).length} packets, by level ${JSON.stringify(count(retained.map((f) => f.level)))}`);

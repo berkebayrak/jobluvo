@@ -6,6 +6,93 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 18 September 2026
 
+### D-031. Review four's last four items: the retry may not delete what it was not asked to, a receipt may not destroy the work, findings are counted by code, and a sample's answers say what made them
+
+The last four items of review four's order, 18 September 2026, one pull request each,
+all measured before they shipped and none of them needing a paid call. Phase 0's review
+four list is complete with this entry.
+
+**Finding 14, the retry (#64).** The prompt told the model not to drop a line and the
+model could not have obeyed: it was sent the findings and never the answer it was
+correcting, so it rewrote from the posting and could not see what it was dropping.
+Measured over the 45 retries the run kept as the packet: 35 dropped edited lines, 5
+edited a different set, 3 reverted to the base resume, 2 kept everything. 171 edited
+lines were dropped, 145 of them lines the validator had never objected to. Three
+changes: the retry is now shown its previous answer line by line; a dropped line the
+validator did not object to is put back, never one it did, with the retry's text winning
+where both edited the same line and the merged set validated whole; and what the retry
+did is classified and recorded on the attempt log and as a soft finding. The status
+delta on the saved answers is zero, 22 ready, 21 held, 2 invalid before and after, and
+that is the result rather than a disappointment: 145 tailored lines across 42 of 45
+packets stop being deleted, and putting them back fires no new finding, which is also
+the check that the merge is sound. The prompt half cannot be measured without a paid
+run and is not claimed to be.
+
+**Finding 16, the cost worksheet (#65).** Five inserts were awaited bare, and each could
+end the work it was recording. On the success paths a failed insert threw out of the
+run, so a paid, validated, ready resume was thrown away over its receipt and extraction
+lost facts it had already read, with no cost row written either: the spend lost twice.
+On the error paths it replaced the original error with its own, so a packet was marked
+failed with "insert failed" rather than the timeout that happened, and in extraction the
+throw jumped over the call that marks the document failed, leaving it processing for
+ever. recordCost attempts the write and never throws, printing COST_NOT_RECORDED with
+the kind, reference and amount so the gap is reconstructable. Stated in the module
+rather than assumed: it cannot rescue an insert that fails at the database inside an
+enclosing transaction, because Postgres fails every statement after it.
+
+**Finding 17, counting by code (#66).** Reports matched findings by their prose, and that
+coupling had already failed twice in one day, silently both times. Every finding now
+carries a code from a closed typed list; the message is free to change because nothing
+counts it; a row written before codes existed reads its code from its message through one
+table used only for those rows, and an unrecognised message reads as no code rather than
+as the wrong one. The wrong citation metric was wrong in three ways and not merely
+coarse: it counted one hard finding and called it the whole, it divided findings on any
+bullet including the summary by cited entries of changes which never contains one, and
+it never said which attempt the packets were. It is now four kinds, numeric support,
+unsupported responsibility, missing citation and wrong role, all over cited bullet edits,
+with an unrecognised column so it can never read zero for the reason it just did.
+
+**The r5 restamp, applied.** Adding codes changes what a stored finding carries, so the
+packets were restamped under revision 2026-09-18.r5: 107 restamped, 0 changed status, 0
+revoked, 0 stale, the grid diagonal. The table stays 62 ready, 41 held, 4 invalid. The
+metric then read, per 100 cited bullet edits, families-18sep 2.08 of 240 cited edits,
+sample-2026-09-17 8.28 of 145, and the single product packet 1 of 6, a denominator too
+small to mean anything. The old metric would have reported 4 unsupported lines across
+all three runs. There are 18.
+
+**First attempt against retained, and what it hides.** On the 80 saved answers, all 80
+comparable: 39 of 394 cited lines unsupported on the first attempt, 9.90 per 100, against
+5 of 240 on the retained one, 2.08. The retained attempt has 154 fewer cited lines, 39
+percent of them, because a retry that drops a line drops its citation problem with it. A
+line deleted is not a line corrected, and the report says so in its own text so the
+comparison cannot be quoted without it. Finding 14's merge is what stops a future run
+losing its denominator this way.
+
+**Finding 18, the saved answers (#67).** They are the only copy of work that has been
+paid for, and they were written once, after every job finished, so a crash at job 79 of
+80 left nothing at all: the same way the 74 versions were lost on 17 September. They are
+now rewritten after each outcome through a temporary file and a rename, so the file on
+disk is always whole and a run that dies keeps what it finished. They also carried no
+provenance, which is exactly why D-029 could not reconstruct the seven runs of 18
+September. The header now carries the run, the time, the model, the prompt and validator
+revisions, the facts hash and the base resume with its hash, and reading checks the
+profile and the base resume rather than assuming them. A file from before headers reads
+as unknown, never guessed. PROMPT_REVISION joins VALIDATOR_REVISION at 2026-09-18.p2.
+
+**The four checks are a command (#62), and it caught two of my own defects the same day.**
+npm run check refuses a tree that is not clean, which includes untracked files, so the
+result describes a commit; it reads exit codes and nothing else, with nothing piped; and
+it stops at the first failure, printing the rest as not run. Its own proof run exited 1
+for the wrong reason, an unquoted git format string, which is the defect it exists to
+stop trusting. It later stopped at tsc on a type error in a test helper after vitest had
+passed 17 of 17 on the same file, because vitest does not typecheck.
+
+**What is left of phase 0.** Review four's list is complete. What stays open is what
+D-028 and D-029 already named and no code closes: scored per applied is unmeasured and
+is the only term that decides the answer, and it needs users. The deferrals sit where
+D-019 placed them. Phase 0 closes again when the user says the list is done, and phase 1
+opens on the user's word only.
+
 ### D-030. The stored packets are restamped and now say what the rules say; the 74 replaced versions are unrecoverable; the validator's miss rate is measured for the first time
 
 The second half of 18 September 2026, working review four's fifth and sixth items. D-029 stands; this entry records what changed under it, what was measured rather than predicted, and what is closed for good.
@@ -31,7 +118,7 @@ The 6 that moved are all ready to held: 5 legacy rows whose summary cannot be re
 
 **The 74 replaced versions are unrecoverable. Closed.** D-029 left point in time recovery open on the user's side. It is closed today, 18 September 2026, not attempted and not available: the overwrite was at 22:57 UTC on 17 September, recovery needs the Neon console or an API key, neither is reachable from this machine, and signing in is the user's action and was not taken within the retention window that Neon's defaults make likely to have passed. No restore, branch or recovery was performed at any point. What those 74 versions held is gone: the packets the six runs of 18 September produced before families-18sep overwrote them, and with them any chance of checking the two retry runs and the four narrow runs against their own rows. Everything from the snapshot of this session forward is preserved instead, and `design/snapshots/2026-09-18-packets/` states what is absent rather than reconstructing it. This is recorded so that nobody spends a day in a month looking for a restore point that was never there.
 
-**Phase 0 stays open.** The reviewer's order has four items left, one pull request each: the retry that drops edited lines must classify what it did and keep the first answer's clean lines (14); a cost row insert failure must not abort tailoring or extraction nor swallow the original error (16); findings need stable codes and the wrong citation metric needs splitting into kinds with the same unit above and below the line (17); saved answers must carry the facts hash, base resume, model, prompt and validator revisions and run id, written as each outcome lands (18). Then phase 0 closes again. Nothing from phase 1 is touched, and phase 1 opens on the user's word only.
+**Phase 0 stays open.** The reviewer's order has four items left, one pull request each: the retry that drops edited lines must classify what it did and keep the first answer's clean lines (14); a cost row insert failure must not abort tailoring or extraction nor swallow the original error (16); findings need stable codes and the wrong citation metric needs splitting into kinds with the same unit above and below the line (17); saved answers must carry the facts hash, base resume, model, prompt and validator revisions and run id, written as each outcome lands (18). Then phase 0 closes again. Nothing from phase 1 is touched, and phase 1 opens on the user's word only. All four were done the same day; D-031 records them and what they measured.
 
 ### D-029. Phase 0 is reopened: the sample script stored what it was told not to store, the population is frozen, the tailoring term is a cost per attempted packet, and the number is a band
 

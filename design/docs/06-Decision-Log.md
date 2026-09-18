@@ -132,6 +132,83 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-042. The documents are made to agree, the rest of the sixth review is placed in phase 1, and the claim about code auditing a model is softened
+
+The sixth review's last three items and its deferral list. No code changes with this entry.
+
+**One current state section, and everything else dated.** The cost summary now opens with
+`Current state, 19 September 2026` and every figure below it keeps its date and the population
+it was measured on. Five things disagreed across that page, this log and CLAUDE.md, and each is
+now stated once:
+
+| What disagreed | What is true |
+|---|---|
+| the ready, held and invalid counts | 83 ready, 18 held, 6 invalid, at r9, restated at the top of the cost summary |
+| whether a held rate exists | it does: 18 of 101, 17.8 percent. "There is no held rate any more" was true for one day under D-034 and D-036 ended it the next |
+| whether `pairs.test.ts` catches 28 of 28 | it did until D-034 and the page went on saying so. It now asserts 26 of 26 truthful and the named rejections, and nothing about the other 34 |
+| whether a missing name is hard or holds | it holds (D-036). The D-034 passage saying every remaining finding is hard is marked as superseded the next day |
+| whether the claim position scope was deleted | it was not. D-034 listed D-023 among the rules that no longer exist while keeping its narrowing three paragraphs earlier, and `entities.ts` still has it |
+
+**Two corrections the review named specifically.**
+
+Four rejected plus four held is **eight flagged, four of them rejected**, not "four caught".
+The old wording counted the rejections only and understated what the check does. The other
+half is worth saying in the same breath: a held line is not a caught fabrication either,
+because nobody has decided any of them.
+
+The 107 stored rows are **two profiles and not one comparable population**: 80 on
+`c9f231127f13` and 27 on `c70bf9c31851`, tailored under different prompts, validator revisions
+and fact sets. A rate over all 107 divides one population's outcomes by two populations' size.
+
+**The self check cost is relabelled** and so is the retry prompt's. What is measured is a
+character count; the token count is an estimate; two calls a packet is a ceiling, not an
+average; the output side is unmeasured. The conclusion, that it does not move the cost per
+packet meaningfully, survives the relabelling.
+
+**The r9 restamp, applied 19 September 2026 from merged code.** Before, r8: 83 ready, 18 held,
+6 invalid. After, r9: 83 ready, 18 held, 6 invalid. 101 rows written, **0 changed status**, 0
+revoked, 0 held, 0 rebuilt, 0 stale, 6 left as they are with no candidate to restamp. **No row
+moved, and none was expected to**: D-040 changes what happens on a profile carrying an
+unreadable number phrase and neither live profile carries one.
+
+**The framing on code auditing a model is softened, not withdrawn.** D-036 said "code cannot
+audit a model". The evidence supports something narrower and still decisive: a hand written
+checker was rewritten five times across five reviews, and a second author reading the
+implementation got fourteen of fourteen false lines past it. That is a reason to stop buying
+this approach, not a proof that no code could do it. D-036 now says that.
+
+### The rest of the sixth review, placed in phase 1
+
+Recorded in the user's priority order so it is answered rather than forgotten. None of these
+is a defect a user meets today; every one is in the measurement and replay apparatus, which is
+where the phase 1 work is. They join the seven D-035 placed.
+
+1. **The replay revokes on one pass and promotes on the next.** The same row can be revoked
+   for an unverifiable document and then, on a later pass, treated as promotable. The decision
+   function is not idempotent across passes over changing inputs.
+2. **Reconstruction provenance, including `sameDocument` sorting skills on full coverage
+   rows.** A rebuilt candidate is compared with the skills sorted, which is right for a legacy
+   row that never stored an order and wrong for a full coverage row that did: it can call two
+   documents the same when the order the model chose differs.
+3. **The extraction race infers replacement from mutable fact status.** Whether an extraction
+   replaces an earlier one is read off a status that another write can change underneath it.
+4. **The report omits rebuilds from its totals.** `rebuilt` is counted and then not carried
+   into the totals the report prints, so a run that rebuilt rows describes itself as having
+   touched fewer than it did.
+5. **The time of check gap between reading job hashes and writing.** The posting text can move
+   between the read that decides a packet is current and the write that stamps it.
+6. **The reconcile script calls a cleared finding a truthful correction.** A finding that is
+   gone because its rule was withdrawn is counted as the retry having fixed the line.
+7. **Partial extraction discards data without raising an issue.** Already on D-035's list from
+   review five, repeated by this review, still needing the phase 1 extraction work.
+8. **The database tests are not isolated from ordinary data.** They run in rolled back
+   transactions against the same database, so a failure can leave a test reading rows it did
+   not write.
+
+**The first phase 1 item is still the pre rank**, because it is the lever on the term that
+dominates the cost function, and because the checking model call of D-036 waits behind it.
+That order is unchanged by anything here.
+
 ### D-041. The case 1 examples contradicted case 3, and two truthful controls sit close to the same line
 
 The user's call on the replacements, from the sixth review's item 4, which is why they were
@@ -467,12 +544,17 @@ Four of forty two. That is what the code catches.
 line back against the facts cited for it, confirm each claim is supported, and rewrite or
 drop the line before answering. Same call, no second request, `PROMPT_REVISION` p4.
 
-Measured on the input side exactly: the sentence is 423 characters, about 106 tokens at
-four characters each, and the changes instruction grows 18.7 percent. At USD 0.2 per
-million input tokens that is USD 0.0000212 a call, so at most two calls a packet, **USD
-0.0000424 per packet**, against a tailoring term of USD 0.00076. About 5.6 percent of the
-tailoring term and about 1.3 percent of the USD 0.00333 per application figure. It does
-not move the cost per packet meaningfully, which is what the user expected.
+*(Corrected 19 September 2026 by the sixth review: this said "measured on the input side
+exactly" and only the character count was measured.)* The sentence is 423 characters, which is
+measured, and the changes instruction grows 18.7 percent. About 106 tokens at four characters
+each, which is an estimate and not a tokeniser reading. At USD 0.2 per million input tokens
+that is about USD 0.0000212 a call, so at most two calls a packet, **about USD 0.0000424 per
+packet**, against a tailoring term of USD 0.00076. Two calls is the ceiling rather than the
+average, since a packet earns its retry only when the first answer is held or rejected, so the
+figure on a one call packet is half of it. About 5.6 percent of the tailoring term and about
+1.3 percent of the USD 0.00333 per application figure, both carrying the same labels. It does
+not move the cost per packet meaningfully, which is what the user expected, and that
+conclusion survives the relabelling.
 
 **The output side is unmeasured.** Saying so rather than leaving it silent: the schema is
 closed and the instruction says not to write commentary, so output should not grow, but
@@ -489,18 +571,37 @@ described as verification.
 
 **3. The real checker is a model, not code. Recorded now, built later.**
 
-The user's call and his reasoning: code cannot audit a model. Five rewrites of hand
-written rules, five reviews, and a second author's fourteen false lines all passed
-regardless. The permanent answer is a separate model call that reads the confirmed facts
-and the tailored lines and judges whether each claim is supported.
+The user's call. His reasoning as first written here was "code cannot audit a model", and
+*(softened 19 September 2026 on the sixth review's last point)* that is stronger than the
+evidence carries. What the evidence carries is this: a hand written checker was rewritten five
+times across five reviews, and a second author reading the implementation got fourteen of
+fourteen false lines past it. That is not proof that no code could do it. It is enough to stop
+buying more of this approach, which is the decision being taken. The permanent answer is a
+separate model call that reads the confirmed facts and the tailored lines and judges whether
+each claim is supported.
 
 It is not built now, for cost. A second call adds roughly USD 0.0004 to 0.0008 per
 application. At eight jobs scored per application the current figure is USD 0.00333
 against a USD 0.0035 floor, which leaves about USD 0.00017 of room: not enough. It fits
 once the phase 1 pre rank brings scored per applied to about seven.
 
-**The sequencing is the decision: the pre rank pays for the checking call, so the pre rank
-comes first.** Nothing about the checking call is designed here beyond what it is for.
+**The sequencing is the decision: the pre rank comes before the checking call.** *(Corrected
+19 September 2026. This said "the pre rank pays for the checking call" as settled fact. It is
+conditional on two numbers that do not exist.)* At 25 applications and one extraction, seven
+scored per applied leaves USD 0.000479 of room: enough for a checker at USD 0.0004 and not for
+one at USD 0.0008, which needs about six. The break even is 7.25 scored per applied for the
+cheap end and 5.97 for the expensive end. Whether the pre rank pays for the checker depends on
+the measured pre rank saving and the measured checker cost, and neither exists. The sequencing
+holds regardless, because the pre rank is the only lever on the term that dominates; the
+sufficiency does not. The cost summary carries the table.
+
+**And the pre rank must be measured for whether it preserves applications, not only for
+whether it reduces scores.** Scored per applied is a ratio. A pre rank that cuts the numerator
+by dropping jobs the user would have applied to cuts the denominator with it: the ratio
+improves on paper and the product does less. Any measurement of it states what it did to
+applications.
+
+Nothing about the checking call is designed here beyond what it is for.
 
 **Until then the hand written check is a placeholder, not the design.** It rejects a
 fabricated figure and holds a suspicious word, and that is the whole of what it is meant
@@ -605,9 +706,12 @@ findable in the history, and it is named here so that nobody in six months wonde
 went: #36 the normaliser and the unreadable phrase rule, #38 rule 2 and the metric subset
 test, #39 and #40 rule 1 and `entities.ts`, #57 the claim model, #58 the entity rules, #64
 the retry restoration (kept: it is not a meaning comparison), #66 stable codes (kept), #77
-the principle (kept, and re-marked above). D-020, D-021, D-022 and D-023 describe rules
-that no longer exist; they are left in place, in date order, as the record of what was
-built and why, and this entry is what supersedes them.
+the principle (kept, and re-marked above). D-020, D-021 and D-022 describe rules that no longer exist, and D-023 describes one that
+mostly does not; they are left in place, in date order, as the record of what was built and
+why, and this entry is what supersedes them. *(Corrected 19 September 2026: D-023 was listed
+with the others and its claim position narrowing is still in `entities.ts` and still used by
+`checkLine`, which this same entry says three paragraphs above is kept. The entry contradicted
+itself and the code was right.)*
 
 ### D-035. The rest of review five is placed in phase 1, not done
 

@@ -183,14 +183,26 @@ added that is not on your profile."
 - **A finding may reject a packet only when what it found is certain (D-036).** A finding
   derived from a guess about a word's shape holds the packet for a person instead: the
   tailored resume is kept and the finding names the word. A new check that cannot say
-  which of the two it is, holds. Today exactly one finding is certain enough to reject,
-  `value-unknown`, because a figure either appears on the profile or it does not; every
-  name and posting word check holds.
+  which of the two it is, holds. One finding can reject, `value-unknown`, and **only while
+  every number on the profile could be read** (D-040): the lookup compares parsed values,
+  so a fact whose own number the normaliser could not read means the absence of a match
+  proves nothing, and the finding holds instead. Every name and posting word check holds.
+- **A rejection blocks the document, it does not delete it (D-038).** The run and the
+  replay keep the rejected candidate and its hash on the row. `consumableResume` is the
+  one door and it serves a `ready` packet only, so the status is what stops a rejected
+  document, not its absence. Do not add a path that clears a resume to stop it being used.
 - Never say or imply that Jobluvo verifies a tailored resume is truthful. It does not.
-  Measured over 28 known false lines: 4 are rejected, 4 held, and 20 pass. Of a second
-  author's 14, none is caught at all. `npm run probe-cheap-check` reproduces that, and
-  `pairs.test.ts` records it. The hand written check is a placeholder until the checking
-  model call of D-036 is built; it is not the design.
+  Measured over 28 known false lines: **8 are flagged, 4 of them rejected and 4 held**, and
+  20 pass. Of a second author's 14, none is flagged at all. Say "flagged", not "caught": a
+  held line is not a caught fabrication, because nobody has decided any of them yet.
+  `npm run probe-cheap-check` reproduces that, and `pairs.test.ts` records it, which no
+  longer asserts the old "28 of 28". The hand written check is a placeholder until the
+  checking model call of D-036 is built; it is not the design.
+- **The current state of the stored packets lives in one place**, the
+  `Current state, 19 September 2026` section at the top of
+  `design/docs/07-Phase-0-Cost-Summary.md`. Every other figure on that page keeps its date
+  and the population it was measured on. The 107 stored rows are two profiles and never one
+  rate. Quote the current state section, not a dated paragraph below it.
 - Never remove, merge, simplify or replace a page, section, animation or interaction that exists in the delivered design (.claude/skills/jobluvo-design/uploads/05-Website.html and the app screens) on your own. If you think something should change, ask first and wait for an answer. Never describe an unapproved change as a deliberate deviation after the fact.
 
 ## Commands

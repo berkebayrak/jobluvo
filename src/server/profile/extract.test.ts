@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { dbPool, type Tx } from "@/db/client";
 import { costEvents, profileDocuments, profileFacts, users } from "@/db/schema";
 import * as client from "@/server/llm/client";
+import { COST_NOT_RECORDED } from "@/server/cost";
 import { unknownCostStats } from "@/server/match/report";
 import { PROCESSING_STALE_MS, profileView } from "./confirm";
 import { extractUpload, factsFrom, type ExtractOutput } from "./extract";
@@ -131,6 +132,26 @@ function failingOn(tx: Tx, nth: number, state = { n: 0 }): Tx {
   });
 }
 
+/** Every insert into the cost worksheet throws, synchronously, before it reaches the database (finding 16). */
+function costInsertFails(tx: Tx): Tx {
+  return new Proxy(tx, {
+    get(target, key, receiver) {
+      if (key === "transaction") {
+        const real = Reflect.get(target, key, receiver) as Tx["transaction"];
+        return ((cb: (inner: Tx) => Promise<unknown>) => real.call(target, (inner: Tx) => cb(costInsertFails(inner)))) as Tx["transaction"];
+      }
+      if (key === "insert") {
+        const real = Reflect.get(target, key, receiver) as Tx["insert"];
+        return ((table: unknown) => {
+          if (table === costEvents) throw new Error("injected cost insert failure");
+          return real.call(target, table as never);
+        }) as Tx["insert"];
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+}
+
 afterAll(async () => {
   const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
   await g.__jobluvoPool?.end();
@@ -196,6 +217,35 @@ describe.skipIf(!hasDb)("the upload path and the document's state", () => {
       expect(out.facts).toBe(0);
       const view = await profileView(tx, userId);
       expect(view.documents[0]).toMatchObject({ status: "ready", state: "empty", extracted: 0, confirmed: 0 });
+    });
+  });
+
+  it("stores the facts and the ready document when the cost row cannot be written", async () => {
+    await withUser(async (tx, userId) => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      call().mockResolvedValueOnce(answer(base));
+      const out = await extractUpload(costInsertFails(tx), userId, file);
+      expect(out.facts).toBe(6);
+      // Facts that have been paid for and read are not thrown away over their receipt.
+      const view = await profileView(tx, userId);
+      expect(view.documents[0]).toMatchObject({ status: "ready", state: "check", error: null, extracted: 6 });
+      expect(await tx.select().from(costEvents).where(eq(costEvents.userId, userId))).toEqual([]);
+      expect(errors.mock.calls.flat().join(" ")).toContain(COST_NOT_RECORDED);
+      errors.mockRestore();
+    });
+  });
+
+  it("keeps the reason a call failed, and fails the document, when that call's cost row cannot be written either", async () => {
+    await withUser(async (tx, userId) => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      call().mockRejectedValueOnce(new client.CallError("response incomplete: max_output_tokens", usage, 0.002, 40000));
+      // The error that reaches the caller is the model's, not the worksheet's.
+      await expect(extractUpload(costInsertFails(tx), userId, file)).rejects.toThrow(/incomplete/);
+      const view = await profileView(tx, userId);
+      // The document is failed with the real reason, not left processing by a throw on the way to fail().
+      expect(view.documents[0]).toMatchObject({ state: "failed", error: "response incomplete: max_output_tokens" });
+      expect(errors.mock.calls.flat().join(" ")).toContain(COST_NOT_RECORDED);
+      errors.mockRestore();
     });
   });
 

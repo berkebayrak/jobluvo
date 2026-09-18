@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { dbPool, type Tx } from "@/db/client";
 import { costEvents, jobs, packets, profileFacts, sources, users } from "@/db/schema";
+import { COST_NOT_RECORDED } from "@/server/cost";
 import type { ScoringJob } from "@/server/match/score";
 import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { resumeFacts } from "@/server/match/profile";
@@ -20,6 +21,32 @@ vi.mock("./validate", async (importOriginal) => {
   return { ...real, factSet: vi.fn(real.factSet), validateChangeSet: vi.fn(real.validateChangeSet) };
 });
 const call = () => vi.mocked(tailor.tailorCall);
+
+/**
+ * A handle whose every insert into the cost worksheet throws, and whose other
+ * writes work. The throw is synchronous, at `db.insert(costEvents)`, so it
+ * never reaches the database and the surrounding transaction stays usable:
+ * this injects a worksheet write that fails on its own, which is what
+ * recordCost is there to survive (finding 16).
+ */
+function costInsertFails(tx: Tx): Tx {
+  return new Proxy(tx, {
+    get(target, key, receiver) {
+      if (key === "transaction") {
+        const real = Reflect.get(target, key, receiver) as Tx["transaction"];
+        return ((cb: (inner: Tx) => Promise<unknown>) => real.call(target, (inner: Tx) => cb(costInsertFails(inner)))) as Tx["transaction"];
+      }
+      if (key === "insert") {
+        const real = Reflect.get(target, key, receiver) as Tx["insert"];
+        return ((table: unknown) => {
+          if (table === costEvents) throw new Error("injected cost insert failure");
+          return real.call(target, table as never);
+        }) as Tx["insert"];
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+}
 /** The findings that say something about the answer, without the soft provenance line a retry carries (finding 14). */
 const holding = <T extends { message: string }>(fs: T[]): T[] => fs.filter((f) => f.message !== "this answer is a retry");
 const realValidate = await vi.importActual<typeof import("./validate")>("./validate");
@@ -172,6 +199,44 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       const out = await tailorJob(tx, facts, job, { run: "retry-merge-objected" });
       expect(out.changeSet!.changes.map((c) => c.bullet)).toEqual(["R1.1"]);
       expect(out.findings.find((f) => f.message === "this answer is a retry")?.detail).toBe("the retry dropped 1 of 2 edited lines");
+    });
+  });
+
+  it("stores the packet when the cost row cannot be written, and says so in the log rather than throwing", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      // The call is paid for and the answer passes; only the worksheet write fails.
+      const out = await tailorJob(costInsertFails(tx), facts, job, { run: "cost-fault" });
+      expect(out.status).toBe("ready");
+      expect(out.resume).not.toBeNull();
+      // The packet is stored, which is the whole point: a paid, validated answer is not thrown away over its receipt.
+      const [row] = await tx.select({ status: packets.status, usd: packets.usd }).from(packets).where(eq(packets.jobId, job.id));
+      expect(row.status).toBe("ready");
+      expect(Number(row.usd)).toBeCloseTo(0.0005, 8);
+      // No row was written, and the loss is not silent.
+      expect(await tx.select().from(costEvents).where(eq(costEvents.refId, job.id))).toEqual([]);
+      expect(errors.mock.calls.flat().join(" ")).toContain(COST_NOT_RECORDED);
+      // The packet still carries the total it spent, so reconciliation can see the row is missing.
+      errors.mockRestore();
+    });
+  });
+
+  it("keeps the reason a call failed when the cost row for that failed call cannot be written either", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      call().mockRejectedValue(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));
+      const out = await tailorJob(costInsertFails(tx), facts, job, { run: "cost-fault-2" });
+      expect(out.status).toBe("failed");
+      // The stored reason is the model's, not the worksheet's.
+      const [row] = await tx.select({ status: packets.status, error: packets.error }).from(packets).where(eq(packets.jobId, job.id));
+      expect(row.status).toBe("failed");
+      expect(row.error).toContain("response incomplete: max_output_tokens");
+      expect(row.error).not.toContain("injected cost insert failure");
+      expect(errors.mock.calls.flat().join(" ")).toContain(COST_NOT_RECORDED);
+      errors.mockRestore();
     });
   });
 

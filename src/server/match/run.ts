@@ -1,6 +1,7 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { dbPool, type DbPool, type Tx } from "@/db/client";
-import { costEvents, jobs, matches, profileFacts } from "@/db/schema";
+import { jobs, matches, profileFacts } from "@/db/schema";
+import { recordCost } from "@/server/cost";
 import { env } from "@/lib/env";
 import { claimMatches, type ClaimedRow } from "./claim";
 import { scoringProfile, type ScoringProfile } from "./profile";
@@ -115,7 +116,8 @@ export async function scoreClaimed(db: DbPool | Tx, profile: ScoringProfile, cla
           updatedAt: new Date(),
         })
         .where(eq(matches.id, c.id));
-      await db.insert(costEvents).values({
+      // A worksheet row that cannot be written does not turn a scored match into a failed one (finding 16).
+      await recordCost(db, {
         kind: "score",
         model,
         userId: profile.userId,
@@ -143,7 +145,8 @@ export async function scoreClaimed(db: DbPool | Tx, profile: ScoringProfile, cla
       await db.update(matches).set({ status: "failed", error: err.message.slice(0, 500), model, updatedAt: new Date() }).where(eq(matches.id, c.id));
       // A call that was made and failed still cost money; the worksheet records it.
       if (err.usage) {
-        await db.insert(costEvents).values({
+        // Recording the price of a failed call must not replace the reason it failed.
+        await recordCost(db, {
           kind: "score",
           model,
           userId: profile.userId,

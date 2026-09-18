@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
-import { costEvents, profileDocuments, profileFacts } from "@/db/schema";
+import { profileDocuments, profileFacts } from "@/db/schema";
+import { recordCost } from "@/server/cost";
 import { env } from "@/lib/env";
 import { CallError, structuredCall, type CallUsage, type PromptContent, type ReasoningEffort } from "@/server/llm/client";
 import { answerFact, educationFact, employmentFact, skillFact } from "./facts";
@@ -293,12 +294,14 @@ export async function extractUpload(
   } catch (e) {
     const err = e instanceof ExtractError ? e : new ExtractError(e instanceof Error ? e.message : String(e), opts.model ?? DEFAULT_MODEL, null, 0, 0);
     if (err.usage) {
-      await db.insert(costEvents).values({ kind: "extract", model: err.model, userId, refId: doc.id, tokensIn: err.usage.inputTokens, tokensCached: err.usage.cachedInputTokens, tokensOut: err.usage.outputTokens, usd: err.usd, ms: err.ms, run: opts.run ?? null });
+      // Recording the price of a failed call must not replace the reason it failed, nor leave the document processing.
+      await recordCost(db, { kind: "extract", model: err.model, userId, refId: doc.id, tokensIn: err.usage.inputTokens, tokensCached: err.usage.cachedInputTokens, tokensOut: err.usage.outputTokens, usd: err.usd, ms: err.ms, run: opts.run ?? null });
     }
     await fail(err.message);
     throw err;
   }
-  await db.insert(costEvents).values({
+  // A worksheet row that cannot be written does not throw away facts that have been paid for and read (finding 16).
+  await recordCost(db, {
     kind: "extract",
     model: result.model,
     userId,

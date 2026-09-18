@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { dbPool, type DbPool, type Tx } from "@/db/client";
-import { costEvents, jobs, sources, type NewJob, type Source } from "@/db/schema";
+import { jobs, sources, type NewJob, type Source } from "@/db/schema";
+import { recordCost } from "@/server/cost";
 import { env } from "@/lib/env";
 import { linkChanged, lockEmployer, normaliseApplyUrl, recomputeCanonicalFor } from "@/server/jobs/identity";
 import { contentHash, descriptionCore, detectRepeated, normalise } from "@/server/jobs/normalize";
@@ -152,7 +153,8 @@ export async function ingestSource(db: DbPool, source: Source, opts: { detailBud
       .where(eq(sources.id, source.id));
   }
   run.ms = Date.now() - started;
-  await db.insert(costEvents).values({ kind: "ingest", refId: source.id, ms: run.ms });
+  // Not a model cost, a timing row, but the same rule: it does not abort the batch that produced it (finding 16).
+  await recordCost(db, { kind: "ingest", refId: source.id, ms: run.ms });
   return run;
 }
 

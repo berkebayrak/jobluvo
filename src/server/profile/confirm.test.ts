@@ -351,6 +351,21 @@ describe.skipIf(!hasDb)("confirmation over its cycle", () => {
     });
   });
 
+  it("an empty string clears a skill's evidence, an omitted one keeps it, and an emptied required field is refused (review four, finding 11)", async () => {
+    await withUser(async (tx, userId) => {
+      const [doc] = await tx.insert(profileDocuments).values({ userId, filename: "resume.pdf", bytesPhase0: Buffer.from("%PDF"), text: "", status: "ready" }).returning({ id: profileDocuments.id });
+      const [skill] = await tx
+        .insert(profileFacts)
+        .values({ userId, documentId: doc.id, kind: "skill", origin: "upload", status: "extracted", evidence: "SQL (6 years)", data: { name: "SQL", years: 6, evidence: "Pricing dashboards in SQL" } })
+        .returning({ id: profileFacts.id, version: profileFacts.version });
+      const kept = await editFact(tx, userId, { id: skill.id, version: skill.version, data: { name: "SQL", years: 7 } });
+      expect(kept.data).toEqual({ name: "SQL", years: 7, evidence: "Pricing dashboards in SQL" });
+      const cleared = await editFact(tx, userId, { id: skill.id, version: kept.version, data: { name: "SQL", years: 7, evidence: "" } });
+      expect(cleared.data).toEqual({ name: "SQL", years: 7 });
+      await expect(editFact(tx, userId, { id: skill.id, version: cleared.version, data: { name: "", years: 7 } })).rejects.toMatchObject({ reason: "invalid" });
+    });
+  });
+
   it("documentState reads every state from the status and the counts", () => {
     const now = Date.now();
     const at = (ms: number) => new Date(now - ms);

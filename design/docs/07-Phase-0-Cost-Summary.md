@@ -104,7 +104,9 @@ The held rate is a workflow outcome, not a validator accuracy measure (D-029). I
 | Retained, the same unsupported claim | 3 | 7.7 percent |
 | Replaced by a different unsupported claim | 1 | 2.6 percent |
 
-One further line is unsupported on the retained attempt that was not on the first, so the retained total of 5 is 3 retained plus 1 replaced plus 1 new. So the retry genuinely corrects about half of what it is sent back for and deletes about two fifths of it, and that deletion is what the merge rule of finding 14 stops.
+**The retry corrects about half of what it is sent back for and deletes about two fifths of it.** That is the sentence this table exists to support, and it replaces the withdrawn one.
+
+One further line is unsupported on the retained attempt that was not on the first, so the retained total of 5 is 3 retained plus 1 replaced plus 1 new. The deletion is what the merge rule of finding 14 stops.
 
 An earlier entry, D-031, read the same two rates as "39 percent of that fall is the denominator". That was arithmetically backwards and is withdrawn: a smaller denominator raises a rate when the numerator holds, and 39 unsupported lines over the retained attempt's 240 cited lines would be 16.25 per 100, above the first attempt's 9.90. The whole fall came from the numerator. The instinct to say what a favourable number was hiding was right; the number offered as the answer was wrong and had not been checked. The table above is what that caveat should have been.
 

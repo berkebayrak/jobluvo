@@ -394,6 +394,9 @@ function main() {
     out(`| ${k === "corrected" ? "Corrected, the line is still there and is now supported" : k === "deleted" ? "Deleted, the line is gone and its problem with it" : k === "retained" ? "Retained, the same unsupported claim" : "Replaced by a different unsupported claim"} | ${fate[k]} | ${firstTotal ? ((100 * fate[k]) / firstTotal).toFixed(1) : "0"} percent |`);
   }
   out();
+  const share = (n: number) => (firstTotal ? Math.round((100 * n) / firstTotal) : 0);
+  out(`**The retry corrects about ${share(fate.corrected) >= 45 && share(fate.corrected) <= 55 ? "half" : `${share(fate.corrected)} percent`} of what it is sent back for and deletes about ${share(fate.deleted) >= 37 && share(fate.deleted) <= 43 ? "two fifths" : `${share(fate.deleted)} percent`} of it.**`);
+  out();
   out(
     `Unsupported lines on the retained attempt that were not unsupported on the first: ${appeared}. The retained total ${retainedTotal} is ${fate.retained} retained plus ${fate.replaced} replaced plus ${appeared} new, which is how the two counts reconcile.`,
   );

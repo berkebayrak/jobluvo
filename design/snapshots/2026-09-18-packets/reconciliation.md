@@ -160,6 +160,8 @@ Unsupported lines on the first attempt: 39. On the retained attempt: 5. What bec
 | Retained, the same unsupported claim | 3 | 7.7 percent |
 | Replaced by a different unsupported claim | 1 | 2.6 percent |
 
+**The retry corrects about half of what it is sent back for and deletes about two fifths of it.**
+
 Unsupported lines on the retained attempt that were not unsupported on the first: 1. The retained total 5 is 3 retained plus 1 replaced plus 1 new, which is how the two counts reconcile.
 
 Correction to an earlier reading of these same numbers: it said 39 percent of the fall in the rate was the denominator. That is arithmetically backwards. A smaller denominator raises a rate when the numerator holds: 39 over the retained attempt's 240 cited lines would be 16.25 per 100, above the first attempt's 9.90. The whole fall came from the numerator. What the denominator hides is not the rate but the deletions, which the table above counts directly.

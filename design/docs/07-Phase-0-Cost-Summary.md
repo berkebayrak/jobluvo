@@ -1,22 +1,32 @@
 # Phase 0, the cost per application
 
-**The upstream model cost per application supports the pricing if scored per applied stays at or below about seven to eight and a half, depending on how many attempted packets become applications. At nine it is over the band's low end in every scenario. Submission, the inbox, the agents and infrastructure are not in this number.**
+**The upstream model cost per application supports the pricing if scored per applied stays at or below about seven to eight and a half, depending on how many attempted packets become applications. At nine it is over the band's low end in every scenario. Submission, the inbox, the agents and infrastructure are not in this number, and the tailoring term is a historical measurement taken under a prompt and a validator that have since been replaced.**
 
 Phase 0 exists to produce one number (D-002): the measured cost per application, against the USD 0.0035 to 0.0064 budget band, USD 0.0045 target. This page holds the three measured terms, each named for what it is paid per, and the band they make. Each term links to the decision that records how it was measured. All three on gpt-5.6-luna, reasoning off, strict JSON output; scoring and extraction measured 17 September 2026, tailoring restated 18 September under the validator rules that ship (D-024) and restated again the same day as a cost per attempted packet (D-029).
 
 Superseded on 18 September 2026 (D-029): the headline that stood from D-024 to D-029, "at or below about eight, tailoring and extraction together are under USD 0.0009 at any ratio", assumed every attempted packet becomes an application. It did not say so, and about three in ten are held.
 
+**Every term on this page is a historical measurement, and the tailoring term was measured under a policy that no longer ships (review five, 18C).** Since USD 0.0610 over 80 was measured on 18 September, the retry has been given the previous answer to correct rather than the findings alone (prompt revision 2026-09-18.p2, #64), a retry's clean dropped lines are put back and the merged set revalidated (#64), and the validator has moved three revisions. Every one of those changes what the model is sent, what it sends back, or how many lines a second attempt has to write. Replaying stored answers offline cannot measure any of it: it re-reads answers the old prompt produced and cannot say what the new prompt would produce, how often a retry would be earned, or what either would cost in tokens. **The cost per attempted packet under the policy that ships today is unmeasured.** It becomes measured when an authorised paid run measures it, and not before. The figure below is kept because it is the last one that was measured, labelled with the revisions it was measured under.
+
 ## The function
 
-    upstream model cost per application = scored per applied x 0.000311 + 0.0610 / (80 x approval) + 0.0021 / applications per user
+    upstream model cost per application = scored per applied x 0.000311
+                                         + 0.0610 / (80 x conversion)
+                                         + 0.0021 x extractions per user / applications per user
 
 | Term | Paid per | USD | How | Decision |
 |---|---|---|---|---|
 | Scoring | job scored, per user | 0.000311 mean, p10 0.000241, p90 0.000383 | 100 job stratified sample, profile as its own cached message | D-010, D-011 |
-| Tailoring | attempted packet, as a change set | 0.00076 per attempted packet including the one retry a held or rejected answer earns, the sample's USD 0.0610 over its 80; 0.00078 under the cited value rule; 0.000538 before any retry | 80 job stratified sample on 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, the phase 0 mix; 128 calls, USD 0.0610 in all | D-024, D-013 |
-| Extraction | user, once | 0.0021 | one resume as a PDF, five runs; cost representative, accuracy circular | D-014 |
+| Tailoring | attempted packet, as a change set | 0.00076 per attempted packet including the one retry a held or rejected answer earns, the sample's USD 0.0610 over its 80; 0.00078 under the cited value rule; 0.000538 before any retry. **Historical: measured under prompt revision p1 and validator revision 2026-09-18.r3, both superseded. Unmeasured under the policy that ships today** | 80 job stratified sample on 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, the phase 0 mix; 128 calls, USD 0.0610 in all | D-024, D-013 |
+| Extraction | extraction, of which a user may make more than one | 0.0021 | one resume as a PDF, five runs; cost representative, accuracy circular | D-014 |
 
-Scoring is a rate: it is paid for every job a user is shown a score for, and an application is one of several. Tailoring is paid per attempted packet, and an attempted packet becomes an application only when it is ready, or held and then approved by a person on DOC-03; the approval rate is unmeasured and cannot be measured without DOC-03 and users. Extraction is paid once per user and spread over however many applications they make. Two unknowns, then: the ratio of jobs scored to applications made, and the share of attempted packets that become applications. Neither can be measured until there are users, so the page gives a band.
+Scoring is a rate: it is paid for every job a user is shown a score for, and an application is one of several.
+
+**Conversion is packet to application, not approval among held packets (review five, 18E).** The denominator of the tailoring term is attempted packets, so the quantity that converts it is the share of all attempted packets that become applications. That is not the same as the approval rate on DOC-03, and the two must not be swapped: a ready packet can still fail to be submitted, an invalid one can go out on the original resume, and a held one can be approved. Conversion is one number covering all three routes, it is unmeasured, and it cannot be measured without DOC-03 and users.
+
+Extraction is paid per extraction, not per user (review five, 18D). The product lets a user upload a replacement resume whenever they want one, so extractions per user is at least one and has no ceiling the product enforces. The old wording, "per user, once", was an assumption dressed as a unit. The tables below hold extractions per user at 1, which is the floor; a user who re-uploads once doubles that term.
+
+Three unknowns, then: the ratio of jobs scored to applications made, the share of attempted packets that become applications, and how many times a user has a resume read. None can be measured until there are users, so the page gives a band.
 
 | Tailoring per application, by what becomes an application | USD | Break even scored per applied, 25 applications per user | At 10 |
 |---|---|---|---|
@@ -44,7 +54,19 @@ Applications per user at 25, the free trial, in the first table; it is a scenari
 | 10 | 99 percent | 109 percent |
 | 5 | 105 percent | 115 percent |
 
-At eight scored per applied and 25 applications the number sits inside the band only if every attempted packet becomes an application; on the ready only denominator it is over the low end by 6 percent. At nine it is over the low end in every scenario. At twenty scoring alone is over the low end and the total is over the high end. The break even against the low end runs from 8.53 to 7.35 scored per applied across the scenarios at 25 applications, and from 8.13 to 6.95 at 10. The headroom under the old headline, USD 0.000168 at eight, was smaller than the denominator's effect, which is why one number was the wrong shape for this page.
+**Corrected on 18 September 2026 (review five, 18A).** This paragraph said the number sits inside the band at eight scored per applied "only if every attempted packet becomes an application". That is false, and it is false against this page's own table: the 78 of 80 scenario gives USD 0.00335, inside the band, with two packets not converting. The claim confused "the only scenario in the table that is inside" with "the only conversion that is inside", and it never solved for the threshold.
+
+Solved: at eight scored per applied, the conversion at which the total reaches the low end is
+
+| Extractions and applications per user | Conversion needed to stay inside the band, of 80 attempted packets | As a share |
+|---|---|---|
+| 1 extraction, 25 applications | 65.7 | about 82 percent |
+| 1 extraction, 10 applications | 76.1 | about 95 percent |
+| 1 extraction, 5 applications | 103.0 | over 80, so no conversion is enough |
+
+So at eight scored per applied and 25 applications, roughly four in five attempted packets converting is sufficient, not five in five. At 10 applications almost every packet must convert. At 5 the extraction term alone puts eight over the low end whatever converts. At nine scored per applied it is over the low end in every scenario in the table, and at twenty scoring alone is over the low end and the total is over the high end. The break even against the low end runs from 8.53 to 7.35 scored per applied across the scenarios at 25 applications, and from 8.13 to 6.95 at 10.
+
+What this does not say: that the product economics work. It says the upstream model cost fits the allowance under stated assumptions. Submission, the inbox, the agents and infrastructure are not in this number, and conversion, scored per applied and extractions per user are all unmeasured.
 
 ## Invalid packets
 
@@ -56,6 +78,8 @@ Both invalid packets were the same sentence on one profile, "managing six", four
 
 This is the one place the held rate is stated. Every earlier figure in the decision log points here and says superseded. When the rate changes, this section changes and the entry that changed it says so.
 
+**A note on dates, because one of them was wrong (review five, 17).** A run tag is named for the date in Istanbul and every timestamp on this page is UTC, and Istanbul is three hours ahead. So the runs tagged `18sep` have UTC timestamps on 17 September: `families-18sep-changes` wrote its 128 cost rows between 22:57:07 and 22:58:20 UTC on 17 September, which is 01:57 on 18 September in Istanbul. This row previously dated the restamp that preceded that write to 22:50 UTC on 18 September, which cannot be seven minutes before 22:57 UTC on 17 September. The snapshot settles it: the 27 surviving rows of that restamp carry `updated_at` of 22:49 and 22:50 UTC on 17 September. The restamp was 17 September and the date here is corrected.
+
 **The live number is the fresh cross family one.** In a sentence about what Jobluvo does, the held rate is about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024). The stored packets' figure describes history and is what the status column states.
 
 | Held rate, 18 September 2026 | Packets |
@@ -63,13 +87,26 @@ This is the one place the held rate is stated. Every earlier figure in the decis
 | Fresh answers, 80 job cross family sample, the retained attempt as stored by the run, and re-read under the rules as they stand (D-029) | 54 ready, 24 held, 2 invalid, of 80 |
 | The same answers, last attempt only, what the scope table counted; the three that differ are held first answers kept over a rejected retry (D-029) | 54 ready, 21 held, 5 invalid, of 80 |
 | The same answers read under the rule before the narrowing | 21 ready, 54 held, 5 invalid, of 80 |
-| Stored packets of 17 September, replayed and restamped at 22:50 UTC on 18 September, one seeded resume | 65 ready, 29 held, 7 invalid, of 101. Superseded the same day (D-029): at 22:57 UTC the families-18sep run stored its packets and replaced 74 of these rows. A dated observation, not a description of the table |
+| Stored packets of 17 September, replayed and restamped at 22:50 UTC on 17 September, one seeded resume | 65 ready, 29 held, 7 invalid, of 101. Superseded the same day (D-029): at 22:57 UTC the families-18sep run stored its packets and replaced 74 of these rows. A dated observation, not a description of the table |
 | The table on 18 September after that write, before the restamp, two profiles | 68 ready, 35 held, 4 invalid, of 107. Superseded by the restamp of that afternoon, the line below |
 | The table on 18 September after the restamps of that afternoon (D-030, D-031), two profiles | 62 ready, 41 held, 4 invalid, of 107, every row carrying the validator revision it passed under, now 2026-09-18.r5. The second restamp added stable codes to the stored findings and moved no status. Not a rate: 80 packets on the uploaded profile and 27 on the seeded one, never combined. 6 of the 68 ready moved, 5 of them legacy rows whose summary cannot be revalidated and 1 on the entity rule |
 
 The limit, which goes beside this figure every time it is quoted: one user, the current uploaded profile, one draw of 80 jobs in four families. The stored figure carries its own: one seeded resume, bullets only, no summary. The true rate on a real population is unknown and could be materially different in either direction. Nobody designs capacity from three in ten and nobody assumes it will fall.
 
 The held rate is a workflow outcome, not a validator accuracy measure (D-029). It counts how often the validator fired. It does not count how often it should have fired and did not, so a lower held rate on its own could mean fewer false positives or more missed inventions.
+
+**What a retry does to an unsupported line, counted rather than inferred from a rate (review five, 18B).** On the 80 saved answers, of the 39 lines the first attempt left unsupported by what they cite:
+
+| What became of it | Lines | Share |
+|---|---|---|
+| Corrected, the line is still there and is now supported | 19 | 48.7 percent |
+| Deleted, the line is gone and its problem with it | 16 | 41.0 percent |
+| Retained, the same unsupported claim | 3 | 7.7 percent |
+| Replaced by a different unsupported claim | 1 | 2.6 percent |
+
+One further line is unsupported on the retained attempt that was not on the first, so the retained total of 5 is 3 retained plus 1 replaced plus 1 new. So the retry genuinely corrects about half of what it is sent back for and deletes about two fifths of it, and that deletion is what the merge rule of finding 14 stops.
+
+An earlier entry, D-031, read the same two rates as "39 percent of that fall is the denominator". That was arithmetically backwards and is withdrawn: a smaller denominator raises a rate when the numerator holds, and 39 unsupported lines over the retained attempt's 240 cited lines would be 16.25 per 100, above the first attempt's 9.90. The whole fall came from the numerator. The instinct to say what a favourable number was hiding was right; the number offered as the answer was wrong and had not been checked. The table above is what that caveat should have been.
 
 **The miss rate, the first measurement in this project that counts the other direction.** `src/server/packet/pairs.test.ts` is a paired evaluation set: 28 deliberately false lines, each an invention the validator is supposed to catch, and 26 truthful lines built from the same facts, each one the validator must let through. It catches 28 of 28 and passes 26 of 26, a miss rate of 0 and a false positive rate of 0 on that set, asserted on every run of `npm test` and printed by it. Every held rate above this line measures how often the validator fired; this is the only number that measures what it lets past. Its limit is the whole of its weight: the set is small, and one author wrote both the rules and the examples, so it shows the rules do what that author meant and cannot show what none of them thought to write down. It is not the diverse labelled set review four asked for, and it does not license a claim about the validator's accuracy on real resumes. A zero here is a floor under the rules as they stand, not evidence of correctness.
 

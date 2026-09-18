@@ -154,6 +154,9 @@ added that is not on your profile."
   and `npm run build`. Do not push a red build. Run them with `npm run check`, which
   refuses a tree that is not clean, so the result describes the commit and not something
   half saved, and stops at the first non zero exit instead of reading past it.
+- A restamp (`npm run validator-report -- --apply`) is applied only from merged code, never
+  from a branch. Report the table before and after and name the rows that moved. Applying
+  one from an unmerged branch leaves production in a state no committed code can explain.
 - Ask before adding a dependency. Say what it buys and what it costs.
 - Ask before changing a design token. Tokens come from the handoff; if one is wrong, fix
   it in `.claude/skills/jobluvo-design/tokens/` too so the design system and the code

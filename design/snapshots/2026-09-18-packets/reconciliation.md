@@ -149,7 +149,35 @@ Answers with both a first and a retained attempt parsed: 80 of 80. Counted in ci
 | First attempt | 394 | 25 | 22 | 0 | 0 | 39 | 9.90 | 0 |
 | Retained attempt | 240 | 4 | 2 | 0 | 0 | 5 | 2.08 | 0 |
 
-The retained attempt has 154 fewer cited lines than the first, 39 percent of them, because a retry that drops a line drops its citation problem with it (finding 14). Read the two rates against that: a line deleted is not a line corrected. The merge rule of finding 14 puts back the lines the validator had not objected to, so a run under it does not lose the denominator this way.
+### What became of the first attempt's unsupported lines
+
+Unsupported lines on the first attempt: 39. On the retained attempt: 5. What became of each of the 39:
+
+| What became of it | Lines | Share of the first attempt's |
+|---|---|---|
+| Corrected, the line is still there and is now supported | 19 | 48.7 percent |
+| Deleted, the line is gone and its problem with it | 16 | 41.0 percent |
+| Retained, the same unsupported claim | 3 | 7.7 percent |
+| Replaced by a different unsupported claim | 1 | 2.6 percent |
+
+Unsupported lines on the retained attempt that were not unsupported on the first: 1. The retained total 5 is 3 retained plus 1 replaced plus 1 new, which is how the two counts reconcile.
+
+Correction to an earlier reading of these same numbers: it said 39 percent of the fall in the rate was the denominator. That is arithmetically backwards. A smaller denominator raises a rate when the numerator holds: 39 over the retained attempt's 240 cited lines would be 16.25 per 100, above the first attempt's 9.90. The whole fall came from the numerator. What the denominator hides is not the rate but the deletions, which the table above counts directly.
+
+First few, line by line:
+
+- 0a33383c R2.2 deleted: was responsibility-not-in-cited:strategy
+- 0a33383c R2.4 deleted: was responsibility-not-in-cited:strategy
+- 8067f6b1 R1.6 corrected: was responsibility-not-in-cited:model
+- 8067f6b1 R1.2 corrected: was metric-differs:num:3, metric-differs:num:4
+- 8067f6b1 R1.1 retained: was value-not-in-cited:num:6, now value-not-in-cited:num:6
+- eea5d175 R1.6 corrected: was value-not-in-cited:num:1
+- 29afe8b8 R1.1 corrected: was responsibility-not-in-cited:staff, value-not-in-cited:num:6
+- 705cfbaa R1.1 deleted: was responsibility-not-in-cited:members, value-not-in-cited:num:6
+- 90711d78 R1.5 deleted: was metric-differs:money:usd:18000000
+- 0bc36f1b R1.3 deleted: was responsibility-not-in-cited:strategy
+- 0bc36f1b R2.4 deleted: was responsibility-not-in-cited:analysis
+- 5b83a366 R1.5 deleted: was metric-differs:money:usd:18000000
 
 ## Spend, every cost row tied to an attempt
 

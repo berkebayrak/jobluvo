@@ -166,26 +166,39 @@ export function parseDocument(text: string): DocumentOutput {
  * instruction together. Bumped with every change to any of them, and
  * written into a sample's saved answers so a measurement says which prompt
  * produced the answers it is reading (review four, finding 18). p2 is the
- * retry being shown the answer it is correcting (finding 14).
+ * retry being shown the answer it is correcting (finding 14). p5 aligns the
+ * retry with the standing rule it contradicted and says what returning or
+ * omitting a line means, since the code reads the two differently (D-039).
+ * p5 changes the retry path only, so it is paid on a retry and never on a
+ * first call.
  */
-export const PROMPT_REVISION = "2026-09-18.p4";
+export const PROMPT_REVISION = "2026-09-19.p5";
 
 export function factsBlock(entries: FactEntry[]): string {
   return ["CANDIDATE FACTS, each with its id", "", ...entries.map((e) => `${e.id}: ${e.text}`)].join("\n");
 }
 
-/** The answer the retry is correcting, printed so the model edits it rather than writing a new one from the posting. */
+/**
+ * The answer the retry is correcting, printed so the model edits it rather
+ * than writing a new one from the posting.
+ *
+ * The closing instruction says what returning a line means and what leaving one
+ * out means, because the code now treats those differently and the model should
+ * not have to guess which it is doing (D-039). It also stops telling the model
+ * that an unflagged line must come back unchanged, which contradicted the
+ * standing rule that an unsupported line is rewritten or dropped.
+ */
 function previousBlock(cs: ChangeSet): string {
   const lines = [
     ...(cs.summary ? [`- summary: ${cs.summary}`] : []),
     ...cs.changes.map((c) => `- ${c.bullet}: ${c.text}${c.facts.length ? ` [facts: ${c.facts.join(", ")}]` : ""}`),
   ];
-  return `\n\nYOUR PREVIOUS ANSWER, the lines you returned last time:\n${lines.length ? lines.join("\n") : "- no lines"}\nReturn all of these lines again, with only the ones named below changed. A line not named below must come back exactly as it is above.`;
+  return `\n\nYOUR PREVIOUS ANSWER, the lines you returned last time:\n${lines.length ? lines.join("\n") : "- no lines"}\nReturn all of these lines again, changing the ones named below. Leave the rest as they are, with one exception: if reading a line back against the facts it cites shows those facts do not support it, correct that line or write the resume's original line back in its place. Every line you return is your decision and it stands, including a line you return at the resume's original text. A line you leave out is read as an accident and the version above is put back, so a line you mean to change must be returned changed. The summary is always your decision: return it again to keep it.`;
 }
 
 export function buildMessages(facts: string, job: string, retryOf?: PacketFinding[], previousAnswer?: ChangeSet): PromptMessage[] {
   const posting = retryOf?.length
-    ? `${job}${previousAnswer ? previousBlock(previousAnswer) : ""}\n\nYour previous answer did not pass the validator. Fix these and answer again. Where a finding names a word, replace that word with the cited fact's own word; where it names a value, use the cited fact's value and its meaning; where it says no fact is cited, cite the fact the line draws on. Keep every line and every value: do not drop a line, a number or a claim to pass the check.\n${retryOf.map((f) => `- ${f.bullet ?? "summary"}: ${f.message}${f.value ? ` (${f.value})` : ""}${f.detail ? `; ${f.detail}` : ""}`).join("\n")}`
+    ? `${job}${previousAnswer ? previousBlock(previousAnswer) : ""}\n\nYour previous answer did not pass the validator. Fix these and answer again. Where a finding names a word, replace that word with the cited fact's own word; where it names a value, use the cited fact's value and its meaning; where it says no fact is cited, cite the fact the line draws on. Do not drop a line, a number or a claim merely to pass the check. Correcting a line the facts do not support, or writing the resume's original line back in its place, is not dropping it: that is the task, and it applies to every line, not only the ones named here.\n${retryOf.map((f) => `- ${f.bullet ?? "summary"}: ${f.message}${f.value ? ` (${f.value})` : ""}${f.detail ? `; ${f.detail}` : ""}`).join("\n")}`
     : job;
   return [
     { role: "developer", content: facts },

@@ -44,6 +44,26 @@ import { applyChanges, type ChangeSet } from "./resume";
  * is. `effectOf` applies the change set and reads the result against the
  * base, and the summary and the skill order are read the same way as any
  * bullet. Nothing is now called restored that was not restored.
+ *
+ * The sixth review's item 2 is that the restoration above outlived the rule it
+ * depended on. "The validator did not object to it" meant something while the
+ * validator read meaning. Since D-034 it means only "this line held no unknown
+ * number and no unknown name", which is true of almost every line, including
+ * every one the prompt's own read-back is meant to catch. So when the self
+ * check added in D-036 correctly put "Supported recruitment" back in place of
+ * "Led recruitment", the merge added in finding 8 read that as an accidental
+ * drop, restored the promoted line, and the remaining lookup passed it again.
+ * The self check and the merge were undoing each other, and the merge won.
+ *
+ * What separates the two cases is not what the line says, which nothing here
+ * can read, but whether the retry spoke about the line at all. An answer that
+ * names a bullet has made a decision about it, and writing the resume's own
+ * text back is one of the decisions the prompt asks for. An answer that never
+ * names the bullet has said nothing, and that is the omission finding 14 is
+ * about. So: a named line stands, whatever its text; an unnamed line is put
+ * back if the validator had not objected to it. The summary is always named,
+ * because the schema requires the field, so it is never restored and the
+ * prompt now says so (D-039).
  */
 
 /** What the retry did to the previous answer's edited lines. */
@@ -58,13 +78,35 @@ export interface RetryClassification {
   kind: RetryKind;
   /** Lines the previous answer edited that the retry leaves at the base text. "summary" is one of them. */
   dropped: string[];
+  /** Of the dropped lines, those the retry named: it wrote the resume's own text back, which is a decision and stands. */
+  reverted: string[];
+  /** Of the dropped lines, those the retry never named: it said nothing, which is the omission finding 14 is about. */
+  omitted: string[];
   /** Lines the previous answer edited, the summary counted as one. */
   of: number;
-  /** Of the dropped lines, those the validator had no hard or review finding on, which are the ones put back. */
+  /** Of the omitted lines, those the validator had no hard or review finding on, which are the ones put back. */
   clean: string[];
-  /** True when the previous answer put the skills in an order other than the base's and the retry leaves them in the base's. */
+  /** True when the previous answer put the skills in an order other than the base's and the retry gave no order of its own. */
   droppedSkillOrder: boolean;
 }
+
+/**
+ * What an answer spoke about: the lines it named and whether it gave a skill
+ * order. This is the difference between a decision and a silence, and it
+ * cannot be read off the change set alone, because the change set a document
+ * mode answer produces holds only the lines whose text differs from the base
+ * while the answer itself returned every line (D-039).
+ */
+export interface Explicit {
+  lines: Set<string>;
+  skillOrder: boolean;
+}
+
+/**
+ * What a changes mode answer spoke about: the bullets it listed, and the
+ * summary, which the schema makes it write whether it has one or not.
+ */
+export const explicitOf = (cs: ChangeSet): Explicit => ({ lines: new Set([...cs.changes.map((c) => c.bullet), "summary"]), skillOrder: cs.skills.length > 0 });
 
 /**
  * What a change set does to the base document: the lines whose text it ends
@@ -94,8 +136,15 @@ export const objectedTo = (findings: PacketFinding[]): Set<string> =>
  * @param previous the answer that was retried
  * @param next the retry's answer
  * @param previousFindings the validator's findings on `previous`, which say which of its lines were objected to
+ * @param explicit what the retry spoke about; defaults to what a changes mode answer names
  */
-export function classifyRetry(base: ResumeDocument, previous: ChangeSet, next: ChangeSet, previousFindings: PacketFinding[]): RetryClassification {
+export function classifyRetry(
+  base: ResumeDocument,
+  previous: ChangeSet,
+  next: ChangeSet,
+  previousFindings: PacketFinding[],
+  explicit: Explicit = explicitOf(next),
+): RetryClassification {
   const baseSkills = base.skills.map((s) => s.id);
   const first = effectOf(base, previous);
   const second = effectOf(base, next);
@@ -103,10 +152,13 @@ export function classifyRetry(base: ResumeDocument, previous: ChangeSet, next: C
   const after = second.lines;
   const dropped = [...before].filter((b) => !after.has(b));
   const objected = objectedTo(previousFindings);
-  const clean = dropped.filter((b) => !objected.has(b));
-  // A reorder the retry leaves at the base order is dropped, whether it wrote
-  // no order or wrote the base's back.
-  const droppedSkillOrder = !sameOrder(first.skills, baseSkills) && sameOrder(second.skills, baseSkills);
+  // A line the retry named and left at the base text is a reversion it chose, and reverting an unsupported line is
+  // one of the two things the prompt asks for. It is not the merge's to undo, however clean the lookup finds it.
+  const reverted = dropped.filter((b) => explicit.lines.has(b));
+  const omitted = dropped.filter((b) => !explicit.lines.has(b));
+  const clean = omitted.filter((b) => !objected.has(b));
+  // A reorder is dropped only when the retry gave no order at all. An order it wrote, even the base's, is its own.
+  const droppedSkillOrder = !sameOrder(first.skills, baseSkills) && sameOrder(second.skills, baseSkills) && !explicit.skillOrder;
   const added = [...after].filter((b) => !before.has(b));
   // The retry reverted when it leaves the base resume untouched, order included, and the answer before it did not.
   const revertedToBase = after.size === 0 && sameOrder(second.skills, baseSkills) && before.size > 0;
@@ -119,7 +171,7 @@ export function classifyRetry(base: ResumeDocument, previous: ChangeSet, next: C
       : added.length > 0
         ? "edited a different set of lines"
         : "dropped edited lines";
-  return { kind, dropped, of: before.size, clean, droppedSkillOrder };
+  return { kind, dropped, reverted, omitted, of: before.size, clean, droppedSkillOrder };
 }
 
 /** The sentence a classification prints, on the attempt log and in the soft finding. */
@@ -128,33 +180,33 @@ export function describeRetry(c: RetryClassification): string {
     c.kind === "dropped edited lines" || c.kind === "edited a different set of lines"
       ? `the retry ${c.kind === "dropped edited lines" ? "dropped" : "edited a different set of lines and dropped"} ${c.dropped.length} of ${c.of} edited lines`
       : `the retry ${c.kind}`;
-  const kept = c.clean.length
-    ? `; ${c.clean.length} ${c.clean.length === 1 ? "line the validator had not objected to was" : "lines the validator had not objected to were"} put back from the answer before it${c.clean.includes("summary") ? ", the summary among them" : ""}`
+  const chose = c.reverted.length
+    ? `; it left ${c.reverted.length} of them at the resume's own text, which is its decision and stands${c.reverted.includes("summary") ? ", the summary among them" : ""}`
     : "";
-  const skills = c.droppedSkillOrder ? "; the skill order was dropped and put back" : "";
-  return head + kept + skills;
+  const kept = c.clean.length
+    ? `; ${c.clean.length} ${c.clean.length === 1 ? "line the retry never named and the validator had not objected to was" : "lines the retry never named and the validator had not objected to were"} put back from the answer before it`
+    : "";
+  const skills = c.droppedSkillOrder ? "; no skill order was given and the previous one was put back" : "";
+  return head + chose + kept + skills;
 }
 
 /**
- * The retry's answer with the previous answer's clean dropped lines put back,
- * the summary and the skill order among them. Only lines the validator did not
- * object to are restored, and the result is validated whole by the caller. The
- * retry's own text always wins on a line both answers edit.
+ * The retry's answer with the previous answer's omitted clean lines put back,
+ * and the skill order when the retry gave none. Only lines the retry never
+ * named and the validator did not object to are restored, and the result is
+ * validated whole by the caller. The retry's own text always wins on a line it
+ * named, including when that text is the resume's own.
  *
- * A line the retry left at the base text is dropped whether it omitted the
- * line or wrote the base text back in its place, so an entry of next's for
- * such a line is a no op by construction and the previous answer's line
- * replaces it rather than being refused. That refusal is what let
- * describeRetry claim a restoration that had not happened (finding 8).
+ * The summary is never restored. The schema makes every answer write the
+ * field, so there is no silence to tell apart from a decision, and a retry
+ * that returns a different summary or none has decided. The prompt says this
+ * in as many words, so the model is not surprised by it (D-039).
  */
 export function mergeRetry(previous: ChangeSet, next: ChangeSet, c: RetryClassification): ChangeSet {
-  if (!c.clean.length && !c.droppedSkillOrder) return next;
-  const restore = new Set(c.clean);
-  const summary = restore.has("summary");
+  const restore = new Set(c.clean.filter((b) => b !== "summary"));
+  if (!restore.size && !c.droppedSkillOrder) return next;
   return {
     ...next,
-    summary: summary ? previous.summary : next.summary,
-    summaryFacts: summary ? previous.summaryFacts : next.summaryFacts,
     changes: [...next.changes.filter((ch) => !restore.has(ch.bullet)), ...previous.changes.filter((ch) => restore.has(ch.bullet))],
     skills: c.droppedSkillOrder ? previous.skills : next.skills,
   };

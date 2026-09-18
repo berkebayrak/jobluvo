@@ -120,6 +120,79 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-039. A line the retry names is the model's decision, and the merge stops overriding it
+
+The user's call, from the sixth review's item 2. It is damage this project created in the
+same week: the self check went into the prompt on 19 September (D-036, #82) and the merge
+that undoes it went in on 18 September (review five's finding 8, #79).
+
+**What was wrong.** `mergeRetry` put back any line the retry left at the resume's base text,
+as long as the validator had no finding on it. That rule was written while the validator
+still read meaning, when "the validator did not object" carried information. Since D-034 it
+means only "this line holds no unknown number and no unknown name", which is true of almost
+every line, and true of every line the prompt's read-back exists to catch. So when the model
+read its own work back, found that "Led recruitment" was not what the fact said, and returned
+"Supported recruitment", the merge called that an accidental drop, restored "Led
+recruitment", and the remaining lookup passed it. The self check and the merge were undoing
+each other and the merge won. It applied to the summary and the skill order on the same
+rule.
+
+**The distinction, and it is the whole of the fix.** Nothing in the code can read whether a
+line changed its claim. What the code can see is whether the retry spoke about the line at
+all. An answer that names a bullet has decided about it, and writing the resume's own words
+back is one of the two things the prompt asks for when a line is not supported. An answer
+that never names the bullet has said nothing, and silence is the omission finding 14 is
+about.
+
+| The retry | Before | Now |
+|---|---|---|
+| names a line, new text | stands | stands |
+| names a line, the resume's own text | the previous answer's line is put back | stands |
+| never names the line | put back if the validator had not objected | unchanged, put back if the validator had not objected |
+| names a line the validator objected to | never put back | unchanged, never put back |
+
+Finding 8's reading of what a line is survives untouched: a line is still what the applied
+document says it is, and the counts are still taken off the applied document. What is
+withdrawn is the conclusion it drew, that any line at the base text should be restored.
+
+**The summary is never restored, and that is a narrowing of finding 8.** The schema makes
+every answer write the summary field, so there is no silence to tell apart from a decision: a
+retry that returns no summary has returned no summary. The cost is that a model which forgets
+its summary loses it. That is the cheaper of the two errors, because the other way round
+keeps a summary the model's own read-back had just withdrawn, and it is the case the review
+named. Flagged here rather than in a commit message because it reverses part of a finding
+that was accepted three days ago.
+
+**The skill order follows the same rule.** An order the retry wrote is an order it chose,
+even when it is the base's. Only an answer that gives no order at all has said nothing.
+
+**The prompt is aligned, because it contradicted the rule it was enforcing.** The retry block
+told the model that "a line not named below must come back exactly as it is above", while
+`RULES` told it that an unsupported line is rewritten or dropped. A model reading both was
+told to leave a line alone and to fix it. The retry block now says what returning a line
+means, what leaving one out means, and that correcting or reverting a line its own read-back
+finds unsupported is the task rather than a way of dropping it. `PROMPT_REVISION` is
+`2026-09-19.p5`.
+
+**What p5 costs, labelled for what each number is.** The retry block goes from 225 to 847
+characters, which is measured. At four characters a token that is about 156 tokens, which is
+an estimate and not a measurement. At USD 0.2 per million input tokens it is about USD
+0.000031 per retry, and it is paid on the retry call only, never on a first call: over the 48
+retries of the 80 job sample it would have been about USD 0.0015 in all. The output side is
+unmeasured, as it is for p4, and gets measured with the first paid run of phase 1.
+
+**"Keep both attempts" is implemented as the merge not destroying either, not as storing
+both.** The user chose this when asked. What the retry wrote is still visible only in the
+soft finding's sentence and the attempt log, not as stored text, so a person reading a packet
+cannot see the first answer's wording of a reverted line. That is a real limit and it is
+recorded here rather than left to be discovered: if the packet screen needs to show both, a
+column has to be added.
+
+**What this does not claim.** It does not make the self check reliable. D-036 says a model
+checking its own output is a soft test and that framing is unchanged. What this fixes is
+narrower and worth saying plainly: the system was taking the model's corrections and putting
+the errors back.
+
 ### D-038. A rejection blocks the document, it does not delete it
 
 The user's call, from the sixth review, and it is first on that review's list because every

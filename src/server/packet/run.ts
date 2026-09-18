@@ -8,7 +8,7 @@ import { loadScoringJobs } from "@/server/match/run";
 import type { ScoringJob } from "@/server/match/score";
 import { applyChanges, applyDocument, baseResume, factEntries, resumeHash, type Applied, type ChangeSet } from "./resume";
 import { parseChanges, parseDocument, tailorCall, TailorError, type TailorMode, type TailorResult } from "./tailor";
-import { classifyRetry, describeRetry, mergeRetry, retryFinding, type RetryClassification } from "./retry";
+import { classifyRetry, describeRetry, explicitOf, mergeRetry, retryFinding, type Explicit, type RetryClassification } from "./retry";
 import { lemmasOf } from "./entities";
 import { actionable, factSet, isHard, needsReview, validateChangeSet, VALIDATOR_REVISION } from "./validate";
 
@@ -110,11 +110,19 @@ export interface TailorOutcome {
   ms: number;
 }
 
-/** What the model returned, read into a change set, or the parse error. */
-function readAnswer(mode: TailorMode, text: string, base: ResumeDocument): { cs: ChangeSet; applied: Applied } {
+/**
+ * What the model returned, read into a change set, or the parse error.
+ *
+ * `explicit` is what the answer spoke about, and it is read here rather than
+ * off the change set because the two differ in document mode: that answer
+ * returns every line and the change set it produces holds only the lines whose
+ * text differs from the base, so a line returned at the resume's own text
+ * looks unspoken when it was the most deliberate thing in the answer (D-039).
+ */
+function readAnswer(mode: TailorMode, text: string, base: ResumeDocument): { cs: ChangeSet; applied: Applied; explicit: Explicit } {
   if (mode === "changes") {
     const cs = parseChanges(text);
-    return { cs, applied: applyChanges(base, cs) };
+    return { cs, applied: applyChanges(base, cs), explicit: explicitOf(cs) };
   }
   const doc = parseDocument(text);
   const applied = applyDocument(base, doc);
@@ -124,13 +132,22 @@ function readAnswer(mode: TailorMode, text: string, base: ResumeDocument): { cs:
     changes: applied.diff.filter((d) => d.bullet !== "summary").map((d) => ({ bullet: d.bullet, text: d.after, facts: d.facts })),
     skills: [],
   };
-  return { cs, applied };
+  // Every line the document answer returned against a line the resume has, whether or not it changed it.
+  const lines = new Set<string>(["summary"]);
+  for (const role of doc.experience) {
+    const baseRole = base.experience.find((r) => r.id === role.id);
+    if (!baseRole) continue;
+    role.bullets.forEach((_, j) => {
+      if (baseRole.bullets[j]) lines.add(`${role.id}.${j + 1}`);
+    });
+  }
+  return { cs, applied, explicit: { lines, skillOrder: true } };
 }
 
 interface Attempt {
   n: number;
   outcome: AttemptOutcome;
-  candidate: { cs: ChangeSet; applied: Applied } | null;
+  candidate: { cs: ChangeSet; applied: Applied; explicit: Explicit } | null;
   findings: PacketFinding[];
   error?: string;
   /** What this attempt did to the answer before it, on a retry that parsed. */
@@ -232,15 +249,17 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
       log.push({ n, outcome: "failed", candidate: null, findings: [], error: e instanceof Error ? e.message : String(e) });
       continue;
     }
-    // A retry may not delete a line the validator did not object to: that line was validated and nothing asked it to
-    // change, and dropping it is how a retry passes by removing the claim (finding 14). Such lines are put back from
-    // the answer before it, the retry's own text always winning where both edited the same line, and the merged set is
-    // validated whole so a restored line is read again rather than trusted because it passed once.
+    // A retry may not silently delete a line the validator did not object to: that line was validated and nothing asked
+    // it to change, and dropping it is how a retry passes by removing the claim (finding 14). Such lines are put back
+    // from the answer before it, and the merged set is validated whole so a restored line is read again rather than
+    // trusted because it passed once. A line the retry named is its own decision and is never put back, including when
+    // it named the line and wrote the resume's own text: that is the prompt's read-back reverting a claim it could not
+    // support, and restoring it is how the self check and the merge came to undo each other (D-039).
     let classification: RetryClassification | null = null;
     if (previous?.candidate) {
-      classification = classifyRetry(base, previous.candidate.cs, candidate.cs, previous.findings);
+      classification = classifyRetry(base, previous.candidate.cs, candidate.cs, previous.findings, candidate.explicit);
       const merged = mergeRetry(previous.candidate.cs, candidate.cs, classification);
-      if (merged !== candidate.cs) candidate = { cs: merged, applied: applyChanges(base, merged) };
+      if (merged !== candidate.cs) candidate = { cs: merged, applied: applyChanges(base, merged), explicit: candidate.explicit };
     }
     let findings: PacketFinding[];
     try {

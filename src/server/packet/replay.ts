@@ -82,6 +82,8 @@ export type ReplayDecision =
   /** The row could not be revalidated at all, so it is held and its resume kept: not consumable, not destroyed. */
   | { kind: "hold"; status: "needs_review"; findings: PacketFinding[]; resume: ResumeDocument | null; why: string }
   | { kind: "no_candidate" }
+  /** A rejected row whose resume was cleared, rebuilt from the base plus its own stored change set and stamped on what the validator says now (D-037). */
+  | { kind: "rebuild"; status: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument; coverage: "full" }
   | { kind: "no_resume"; would: ReplayStatus; findings: PacketFinding[]; coverage: ReplayCoverage };
 
 /** The review finding a legacy row with a summary carries: the replay read its bullets and could not read its summary again. */
@@ -139,8 +141,14 @@ export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candid
   const status = statusOf(findings);
   if (status === "invalid") return { kind: "restamp", status, findings, resume: null, coverage };
   if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) {
-    // A row that is consumable or reviewable today on a document nothing can verify is revoked; a row that is neither cannot be promoted.
+    // A row that is consumable or reviewable today on a document nothing can verify is revoked.
     if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: null, coverage };
+    // A rejected row whose resume was cleared, but which stores the change set it was built from, is rebuilt
+    // from the base plus that change set and stamped on what the validator says about it now (D-037). This is
+    // not a promotion on evidence nothing can check, which is what review five's finding 6 forbids: base plus
+    // a stored change set is deterministic and both are on the row, so the candidate is verifiable in the only
+    // sense that matters. A bullets only row stores no change set, cannot be rebuilt, and stays as it is.
+    if (!row.resume && candidate && coverage === "full") return { kind: "rebuild", status, findings, resume: candidate, coverage };
     return { kind: "no_resume", would: status, findings, coverage };
   }
   return { kind: "restamp", status, findings, resume: row.resume, coverage };
@@ -159,13 +167,15 @@ export interface ApplyResult {
   stale: number;
   /** Rows the decision left alone: no candidate, or no resume to promote. */
   untouched: number;
+  /** Of those written, rows whose cleared resume was rebuilt from their own stored change set (D-037). */
+  rebuilt: number;
 }
 
 /** Writes each restamp, guarded by the `updated_at` the row was read with, so a packet replaced under the report is never stamped with findings from its predecessor. */
 export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; decision: ReplayDecision }[]): Promise<ApplyResult> {
-  const out: ApplyResult = { restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 0 };
+  const out: ApplyResult = { restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 0, rebuilt: 0 };
   for (const { row, decision } of decisions) {
-    if (decision.kind !== "restamp" && decision.kind !== "revoke" && decision.kind !== "hold") {
+    if (decision.kind !== "restamp" && decision.kind !== "revoke" && decision.kind !== "hold" && decision.kind !== "rebuild") {
       out.untouched += 1;
       continue;
     }
@@ -190,6 +200,7 @@ export async function applyReplay(db: DbPool | Tx, decisions: { row: ReplayRow; 
     if (row.status !== decision.status) out.changedStatus += 1;
     if (decision.kind === "revoke") out.revoked += 1;
     if (decision.kind === "hold") out.held += 1;
+    if (decision.kind === "rebuild") out.rebuilt += 1;
   }
   return out;
 }

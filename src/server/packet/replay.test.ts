@@ -23,6 +23,7 @@ const summaryReview: PacketFinding = { level: "review", bullet: "summary", messa
 const summaryHard: PacketFinding = { level: "hard", bullet: "summary", message: "value in no cited fact", value: "40" };
 const summarySoft: PacketFinding = { level: "soft", bullet: "summary", message: "name in no fact, sentence initial", value: "Owned", detail: "sentence initial" };
 const bulletHard: PacketFinding = { level: "hard", bullet: "R1.1", message: "value in no cited fact", value: "six" };
+const bulletReview: PacketFinding = { level: "review", bullet: "R1.1", message: "name appears in no confirmed fact", value: "KPI" };
 
 /** The same document with its skills in another order, as a model that reordered them leaves it. */
 const reordered: ResumeDocument = { ...doc, skills: [{ id: "S2", text: "Planning" }, { id: "S1", text: "Financial modelling" }] };
@@ -43,6 +44,36 @@ describe("replay decision", () => {
     expect(replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [summaryHard] }), [], null)).toEqual({ kind: "restamp", status: "invalid", findings: [summaryHard], resume: null, coverage: "bullets" });
     // A soft summary finding travels and decides nothing; the legacy summary itself holds the row, since the replay could not read it again.
     expect(replayDecision(row({ findings: [summarySoft] }), [], doc)).toMatchObject({ kind: "restamp", status: "needs_review", findings: [summarySoft, summaryNotRevalidated()], resume: doc });
+  });
+
+  /*
+   * D-037. A rejection clears the stored resume. When the rule that rejected the row is
+   * later withdrawn, the row passes again and there is nothing to promote, which is how a
+   * day of a wrong rule destroyed ten packets on 18 September 2026. A row that stores the
+   * change set it was built from can be rebuilt: base plus that change set is
+   * deterministic and both are on the row. That is reconstruction, not promotion on
+   * evidence nothing can check, and the difference is the change set.
+   */
+  it("rebuilds a rejected row's cleared resume from its own stored change set, and stamps what the validator says now", () => {
+    const rejected = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard], changeSet });
+    // The rule that rejected it is gone, so the replay finds nothing: the row comes back on the rebuilt candidate.
+    const d = replayDecision(rejected, [], doc);
+    expect(d).toEqual({ kind: "rebuild", status: "ready", findings: [], resume: doc, coverage: "full" });
+  });
+
+  it("rebuilds to whatever the validator says, never to ready by default", () => {
+    const rejected = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard], changeSet });
+    // Still held by a finding of its own: it comes back held, with its resume, not ready.
+    expect(replayDecision(rejected, [bulletReview], doc)).toEqual({ kind: "rebuild", status: "needs_review", findings: [bulletReview], resume: doc, coverage: "full" });
+    // Still rejected: no rebuild at all, and no resume.
+    expect(replayDecision(rejected, [bulletHard], null)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard], resume: null, coverage: "full" });
+  });
+
+  it("leaves a rejected row with no stored change set exactly as it is, because nothing can rebuild it", () => {
+    // The honest cost of the rule that deleted the evidence: a legacy row cannot be reconstructed and stays invalid.
+    const legacy = row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] });
+    // "would: ready" is the sting: it passes today and there is no document left to give anybody.
+    expect(replayDecision(legacy, [], null)).toMatchObject({ kind: "no_resume", would: "ready" });
   });
 
   it("keeps only the summary's old findings; bullet findings are the replay's", () => {
@@ -179,7 +210,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(resumeHash(r.resume!)).toBe(r.resumeHash);
       expect(Object.keys(r.resume!)).not.toEqual(Object.keys(doc));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 0, stale: 0, untouched: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 0, stale: 0, untouched: 0 , rebuilt: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("invalid");
       expect(after.resume).toBeNull();
@@ -196,7 +227,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       // A new run lands on the same user and job after the report read it.
       await tx.update(packets).set({ status: "needs_review", findings: [summaryReview], updatedAt: sql`now() + interval '1 second'` }).where(eq(packets.id, id));
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [bulletHard], doc) }]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 1, untouched: 0 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 1, untouched: 0 , rebuilt: 0 });
       const after = await read(tx, id);
       expect(after.status).toBe("needs_review");
       expect(after.findings).toEqual([summaryReview]);
@@ -211,7 +242,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(consumableResume(r)).toEqual(r.resume);
       // The base plus the stored changes is not the stored resume: the candidate is a different document.
       const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [], drifted) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 1, held: 0, stale: 0, untouched: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 1, held: 0, stale: 0, untouched: 0 , rebuilt: 0 });
       const after = await read(tx, id);
       // The assertion is on the gate, not on the decision: nothing downstream may consume this row.
       expect(consumableResume(after)).toBeNull();
@@ -228,7 +259,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       // Before: ready, and the gate serves the stored document on evidence nothing can check.
       expect(consumableResume(r)).toEqual(r.resume);
       const result = await applyReplay(tx, [{ row: r, decision: unreplayable(r, profileNotReproducible()) }]);
-      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 1, stale: 0, untouched: 0 });
+      expect(result).toEqual({ restamped: 1, changedStatus: 1, revoked: 0, held: 1, stale: 0, untouched: 0 , rebuilt: 0 });
       const after = await read(tx, id);
       // The assertion is on the gate: nothing downstream may consume this row.
       expect(consumableResume(after)).toBeNull();
@@ -275,7 +306,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
         { row: r, decision: { kind: "no_candidate" } },
         { row: r, decision: { kind: "no_resume", would: "ready", findings: [], coverage: "bullets" } },
       ]);
-      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 2 });
+      expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, held: 0, stale: 0, untouched: 2 , rebuilt: 0 });
       expect((await read(tx, id)).status).toBe("ready");
     });
   });

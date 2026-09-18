@@ -3,6 +3,7 @@ import type { DbPool, Tx } from "@/db/client";
 import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { STALE_CLAIM_MINUTES } from "@/server/match/claim";
 import { PROCESSING_STALE_MS } from "@/server/profile/confirm";
+import { CITATION_KIND, type CitationKind, type FindingCode } from "@/server/packet/codes";
 
 /*
  * The cost per model call, as a distribution, from cost_events. One block
@@ -45,47 +46,116 @@ export interface CitationStats {
   run: string;
   packets: number;
   edits: number;
+  /** The denominator: bullet edits that cite at least one fact. Every numerator below counts the same thing, a cited bullet edit. */
   citedEdits: number;
-  /** Edits whose cited facts do not carry a value the edit uses. */
-  wrongCitations: number;
-  /** Per 100 cited edits. */
+  /** Cited bullet edits with a finding of each kind. A line with two findings of one kind counts once; a line with two kinds counts in both. */
+  numericSupport: number;
+  unsupportedResponsibility: number;
+  missingCitation: number;
+  wrongRole: number;
+  /** Cited bullet edits with at least one citation failure of any kind. Not the sum of the four: one line can fail in two ways. */
+  anyKind: number;
+  /** `anyKind` per 100 cited edits. */
   ratePer100: number;
+  /** Cited bullet edits whose findings carry no code this build knows, which would otherwise be counted as zero of everything. */
+  unrecognised: number;
+  /** Of the packets, those the run kept on their first attempt, and those on a retry. A retried packet's numbers are the retained attempt's. */
+  packetsFirstAttempt: number;
+  packetsRetried: number;
 }
 
 /**
- * How often the model points at the wrong supporting fact, from the packets
- * on hand, by the run that wrote them. A packet is one row per user and
- * job, so a later run over the same jobs replaces the earlier rows; the
- * decision log keeps each sample's rate as it was measured.
+ * How often a line is not supported by what it cites, from the packets on
+ * hand, by the run that wrote them, split by the four ways it happens
+ * (review four, finding 17).
+ *
+ * Three things this fixes, all of which made the old single number wrong
+ * rather than merely coarse.
+ *
+ * 1. It counted one finding, matched by its prose in SQL, and called the
+ *    result "wrong citations". Every review level citation failure, a
+ *    responsibility the cited facts do not carry, a missing citation, a
+ *    fact from another role, was absent from the numerator. The number was
+ *    a fraction of the problem presented as the whole of it, and the day
+ *    that sentence is reworded it reads zero.
+ * 2. Numerator and denominator counted different things. The numerator
+ *    counted distinct (packet, bullet) pairs from the findings, which
+ *    includes a finding on the summary; the denominator counted cited
+ *    entries of `changes`, which never contains the summary. A rate over
+ *    two different units is not a rate.
+ * 3. Nothing said which attempt the packets were. A retried packet's
+ *    findings are the retained attempt's, and a run with many retries is
+ *    not comparable to one without, so the split is reported beside it.
+ *
+ * A packet is one row per user and job, so a later run over the same jobs
+ * replaces the earlier rows; the decision log keeps each sample's rate as
+ * it was measured.
  */
 export async function citationStats(db: DbPool | Tx): Promise<CitationStats[]> {
+  // The codes of each kind, sent to the query as lists, so the SQL never names a message.
+  // A list of codes as an IN list. Interpolating a JavaScript array gives a parameter tuple, which `any()` cannot read.
+  const list = (codes: string[]) => sql.join(codes.map((c) => sql`${c}`), sql`, `);
+  const of = (kind: CitationKind) => list((Object.keys(CITATION_KIND) as FindingCode[]).filter((c) => CITATION_KIND[c] === kind));
+  const known = list(Object.keys(CITATION_KIND));
   const r = await db.execute<Record<string, unknown>>(sql`
     with edits as (
-      select coalesce(p.run, 'product') as run, p.id, e
+      select coalesce(p.run, 'product') as run, p.id, e->>'bullet' as bullet
       from packets p, jsonb_array_elements(p.changes) e
+      where jsonb_array_length(e->'facts') > 0
     ),
-    wrong as (
-      select coalesce(p.run, 'product') as run, p.id, f->>'bullet' as bullet
-      from packets p, jsonb_array_elements(p.findings) f
-      where f->>'message' = 'value is on the profile but not in the cited facts'
+    all_edits as (
+      select coalesce(p.run, 'product') as run, count(*)::int as n
+      from packets p, jsonb_array_elements(p.changes) e group by 1
+    ),
+    -- Only findings on a bullet that is itself a cited edit: same unit above and below the line.
+    f as (
+      select e.run, e.id, e.bullet, fi->>'code' as code
+      from edits e
+      join packets p on p.id = e.id
+      cross join lateral jsonb_array_elements(p.findings) fi
+      where fi->>'bullet' = e.bullet
+    ),
+    counted as (
+      select run,
+        count(distinct (id, bullet)) filter (where code in (${of("numeric support")}))            as numeric_support,
+        count(distinct (id, bullet)) filter (where code in (${of("unsupported responsibility")})) as unsupported_responsibility,
+        count(distinct (id, bullet)) filter (where code in (${of("missing citation")}))           as missing_citation,
+        count(distinct (id, bullet)) filter (where code in (${of("wrong role")}))                 as wrong_role,
+        count(distinct (id, bullet)) filter (where code in (${known}))                            as any_kind,
+        count(distinct (id, bullet)) filter (where code is null)                                    as unrecognised
+      from f group by run
     )
-    select run,
+    select e.run,
       (select count(*)::int from packets p where coalesce(p.run, 'product') = e.run) as packets,
-      count(*)::int as edits,
-      count(*) filter (where jsonb_array_length(e->'facts') > 0)::int as cited,
-      (select count(distinct (id, bullet))::int from wrong w where w.run = e.run) as wrong
-    from edits e group by run order by run
+      (select count(*)::int from packets p where coalesce(p.run, 'product') = e.run and coalesce(p.attempt, 1) = 1) as packets_first,
+      (select count(*)::int from packets p where coalesce(p.run, 'product') = e.run and p.attempt > 1) as packets_retried,
+      (select n from all_edits a where a.run = e.run) as edits,
+      count(*)::int as cited,
+      coalesce((select numeric_support from counted c where c.run = e.run), 0)::int as numeric_support,
+      coalesce((select unsupported_responsibility from counted c where c.run = e.run), 0)::int as unsupported_responsibility,
+      coalesce((select missing_citation from counted c where c.run = e.run), 0)::int as missing_citation,
+      coalesce((select wrong_role from counted c where c.run = e.run), 0)::int as wrong_role,
+      coalesce((select any_kind from counted c where c.run = e.run), 0)::int as any_kind,
+      coalesce((select unrecognised from counted c where c.run = e.run), 0)::int as unrecognised
+    from edits e group by e.run order by e.run
   `);
   return r.rows.map((x) => {
     const cited = num(x.cited);
-    const wrong = num(x.wrong);
+    const any = num(x.any_kind);
     return {
       run: String(x.run),
       packets: num(x.packets),
       edits: num(x.edits),
       citedEdits: cited,
-      wrongCitations: wrong,
-      ratePer100: cited ? Number(((100 * wrong) / cited).toFixed(2)) : 0,
+      numericSupport: num(x.numeric_support),
+      unsupportedResponsibility: num(x.unsupported_responsibility),
+      missingCitation: num(x.missing_citation),
+      wrongRole: num(x.wrong_role),
+      anyKind: any,
+      ratePer100: cited ? Number(((100 * any) / cited).toFixed(2)) : 0,
+      unrecognised: num(x.unrecognised),
+      packetsFirstAttempt: num(x.packets_first),
+      packetsRetried: num(x.packets_retried),
     };
   });
 }

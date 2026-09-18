@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { FindingCode } from "@/server/packet/codes";
 import type { ChangeSet } from "@/server/packet/resume";
 
 /*
@@ -95,6 +96,8 @@ export interface ResumeChange {
 export interface PacketFinding {
   level: "hard" | "review" | "soft";
   bullet: string | null;
+  /** The stable name of this kind of finding (src/server/packet/codes.ts). Reports count this, never the message. Absent on a row written before codes existed. */
+  code?: FindingCode;
   message: string;
   value?: string;
   /** What the check saw on each side, for the review screen: the fact's reading against the line's. */

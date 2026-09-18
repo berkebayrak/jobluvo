@@ -337,6 +337,7 @@ export function entityFindings(line: string, bullet: string | null, cited: Cited
       const why = entity.includes("form") ? "by its form" : entity.includes("proper") ? "capitalised" : entity.includes("sentence start") ? "opens the sentence and is not a verb" : "the posting uses it";
       out.push({
         level: "review",
+        code: entity.every((s) => s === "posting") ? "posting-word-unknown" : "name-unknown",
         bullet,
         message: entity.every((s) => s === "posting") ? "word from the posting appears in no confirmed fact" : "name appears in no confirmed fact",
         value: t.token,
@@ -347,7 +348,7 @@ export function entityFindings(line: string, bullet: string | null, cited: Cited
     if (t.signals.includes("qualification")) {
       const stem = qualificationStem(t.key) ?? qualificationStem(t.token.toLowerCase());
       if (stem && !profileHasStem(stem)) {
-        out.push({ level: "review", bullet, message: "qualification appears in no confirmed fact", value: t.token, detail: "a certification or licence is a claim wherever it stands" });
+        out.push({ level: "review", bullet, code: "qualification-unsupported", message: "qualification appears in no confirmed fact", value: t.token, detail: "a certification or licence is a claim wherever it stands" });
         continue;
       }
     }
@@ -358,9 +359,9 @@ export function entityFindings(line: string, bullet: string | null, cited: Cited
     const tool = t.instrument ? citedObjects.find((o) => o.verb === "with") : undefined;
     const hint = tool ?? same ?? citedObjects[0];
     const says = hint ? `the cited fact says ${hint.head}` : "the cited facts name no object for it";
-    if (t.signals.includes("object")) out.push({ level: "review", bullet, message: "responsibility is not in the cited facts", value: t.token, detail: says });
-    else if (t.signals.includes("instrument")) out.push({ level: "review", bullet, message: "tool is not in the cited facts", value: t.token, detail: says });
-    else if (entity.length) out.push({ level: "review", bullet, message: "entity is on the profile but not in the cited facts", value: t.token, detail: says });
+    if (t.signals.includes("object")) out.push({ level: "review", bullet, code: "responsibility-not-in-cited", message: "responsibility is not in the cited facts", value: t.token, detail: says });
+    else if (t.signals.includes("instrument")) out.push({ level: "review", bullet, code: "tool-not-in-cited", message: "tool is not in the cited facts", value: t.token, detail: says });
+    else if (entity.length) out.push({ level: "review", bullet, code: "entity-not-in-cited", message: "entity is on the profile but not in the cited facts", value: t.token, detail: says });
   }
   return out;
 }

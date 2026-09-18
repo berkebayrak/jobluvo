@@ -70,11 +70,11 @@ export type ReplayDecision =
 
 /** The review finding a legacy row with a summary carries: the replay read its bullets and could not read its summary again. */
 export const SUMMARY_NOT_REVALIDATED = "summary not revalidated: the packet stores no change set";
-export const summaryNotRevalidated = (): PacketFinding => ({ level: "review", bullet: "summary", message: SUMMARY_NOT_REVALIDATED });
+export const summaryNotRevalidated = (): PacketFinding => ({ level: "review", bullet: "summary", code: "summary-not-revalidated", message: SUMMARY_NOT_REVALIDATED });
 
 /** The hard finding a revoked row carries: nothing can verify the document it stored. */
 export const UNVERIFIABLE_RESUME = "stored resume is not the base plus the stored changes";
-export const unverifiable = (): PacketFinding => ({ level: "hard", bullet: null, message: UNVERIFIABLE_RESUME });
+export const unverifiable = (): PacketFinding => ({ level: "hard", bullet: null, code: "unverifiable-resume", message: UNVERIFIABLE_RESUME });
 
 /** The findings that survive a replay: the summary's, which nothing can replay. */
 export const retainedFindings = (stored: PacketFinding[]): PacketFinding[] => stored.filter((f) => f.bullet === "summary");

@@ -118,6 +118,7 @@ export function mergeRetry(previous: ChangeSet, next: ChangeSet, c: RetryClassif
 export const retryFinding = (c: RetryClassification): PacketFinding => ({
   level: "soft",
   bullet: null,
+  code: "retry-provenance",
   message: "this answer is a retry",
   detail: describeRetry(c),
 });

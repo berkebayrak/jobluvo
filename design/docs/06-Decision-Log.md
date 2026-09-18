@@ -52,16 +52,20 @@ on this machine, one project, `npm run check` runs of the full suite:
 | 742, 747, 724, 876 ms | Warm | passed |
 
 Every run that reported a multi second wake failed and every warm one passed but one.
-The likely explanation for the multi second wakes after the upgrade is the user's: editing
-a compute restarts it, and scale to zero and the autoscaling ceiling were changed in one
-edit, so any run in the following minutes shows a wake whatever the setting says. The
-monitoring graph is being read to confirm there are no inactive periods after that change.
+The 3024 ms on the free plan against 742 to 876 ms warm is a clean before and after, and
+that part is settled.
 
-This is written down rather than absorbed, and with the condition attached: **if a multi
-second wake appears again once the compute has been stable for a while, that is a real
-finding and not a leftover from the edit.** The warm up stays either way. A green build
-should not depend on a billing setting, the plan can change, and a new environment can
-start on free.
+**The multi second wakes after the upgrade are unexplained, and are recorded as
+unexplained.** One candidate is that editing a compute restarts it, and scale to zero and
+the autoscaling ceiling were changed in one edit, so a run in the following minutes would
+show a wake whatever the setting says. That is a plausible account and not a verified one.
+The monitoring graph is being read to see whether anything is still suspending the
+compute. Until it has been read, a multi second wake is an open question rather than a
+leftover from the edit, and writing it down as the restart would be the same move as
+calling the 74 versions unrecoverable before anyone looked at the retention window.
+
+The warm up stays either way. A green build should not depend on a billing setting, the
+plan can change, and a new environment can start on free.
 
 ### D-032. Review five: the deliverable is corrected where it was wrong in public, "addressed" stops meaning "closed", and a restamp is only ever applied from merged code
 

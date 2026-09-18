@@ -55,6 +55,26 @@ const MAX_CLIENT_LIFETIME_SECONDS = 240;
  * cap, so the pool rotates its connections before the proxy closes them
  * underneath it.
  */
+/**
+ * Builds a pool with the options and the handler above.
+ *
+ * Two things stay true, and both matter more than they look.
+ *
+ * The application constructs exactly one pool, for the lifetime of the
+ * process, through `pool()` below. Nothing else may call this: a route, a
+ * cron or a helper that builds its own pool gets its own set of
+ * connections, and on Vercel that multiplies by the number of warm
+ * instances until the database refuses new ones. If you are reaching for
+ * this from application code, you want `dbPool()`.
+ *
+ * No test reaches into the application's pool. The reason this function is
+ * exported at all is that proving eviction means killing connections, and
+ * killing connections in the pool every other test file shares is how a fix
+ * for flakiness becomes a cause of it. That is not a hypothetical: the
+ * eviction test did exactly that, passed alone and failed in the full run.
+ * So a test that needs to break connections builds its own pool here and
+ * ends it, and the application's pool is never touched.
+ */
 export function createPool(connectionString: string): Pool {
   const created = new Pool({ connectionString, maxLifetimeSeconds: MAX_CLIENT_LIFETIME_SECONDS });
   created.on("error", (err: Error) => {
@@ -64,12 +84,7 @@ export function createPool(connectionString: string): Pool {
   return created;
 }
 
-/**
- * The one pool the application uses. Construction is `createPool` above so a
- * test can build an identical one of its own: proving eviction means killing
- * connections, and killing connections in the pool every other test shares is
- * how a fix for flakiness becomes a cause of it.
- */
+/** The one pool the application uses, built once and reused for the life of the process. */
 function pool(): Pool {
   if (!g.__jobluvoPool) g.__jobluvoPool = createPool(env().DATABASE_URL);
   return g.__jobluvoPool;

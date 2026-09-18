@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "@neondatabase/serverless";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createPool, POOL_CLIENT_EVICTED } from "./client";
+import { sql } from "drizzle-orm";
+import { createPool, dbPool, endPool, POOL_CLIENT_EVICTED } from "./client";
 
 /*
  * The pool hands out live connections, not dead ones (review five).
@@ -89,5 +90,35 @@ describe.skipIf(!hasDb)("the pooled connection", () => {
     // since a pool with no lifetime is the state this fixes and it is one edit away from returning.
     const options = handle().options as unknown as { maxLifetimeSeconds?: number };
     expect(options.maxLifetimeSeconds).toBe(240);
+  });
+});
+
+/*
+ * The application's own pool, and the one thing a test may do to it: shut it
+ * down through `endPool`. Every database backed test file's `afterAll` used to
+ * do this by reaching into globalThis for `end()`, which closed the
+ * connections and left the global pointing at the closed pool, so the next
+ * `dbPool()` in the same process was handed it straight back and failed on its
+ * first query. Vitest runs each test file in its own process, which is what
+ * kept that from failing every run rather than some runs.
+ */
+describe.skipIf(!hasDb)("shutting down the application's pool", () => {
+  afterAll(async () => {
+    await endPool();
+  });
+
+  it("builds a new pool for the next caller rather than handing back the ended one", async () => {
+    const first = await dbPool().execute(sql`select 1 as one`);
+    expect(Number(first.rows[0].one)).toBe(1);
+    await endPool();
+    // With the global left set this is the ended pool, and this query fails immediately.
+    const second = await dbPool().execute(sql`select 2 as two`);
+    expect(Number(second.rows[0].two)).toBe(2);
+  });
+
+  it("is safe to call when there is no pool, so a second shutdown is not an error", async () => {
+    await dbPool().execute(sql`select 1`);
+    await endPool();
+    await expect(endPool()).resolves.toBeUndefined();
   });
 });

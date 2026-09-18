@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type Tx } from "@/db/client";
 import { jobs, packets, sources, users, type PacketFinding, type ResumeDocument } from "@/db/schema";
 import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, summaryNotRevalidated, unreplayable, unverifiable, type ReplayRow } from "./replay";
 import { resumeHash } from "./resume";
@@ -164,8 +164,7 @@ const read = async (tx: Tx, id: string): Promise<ReplayRow> => {
 };
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 describe.skipIf(!hasDb)("replay write guard", () => {

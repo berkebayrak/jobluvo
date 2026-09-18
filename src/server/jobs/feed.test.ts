@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type Tx } from "@/db/client";
 import { jobGroupLinks, jobGroups, jobs, sources, swipeDecisions, users, type JobLocation } from "@/db/schema";
 import type { FilterFacts } from "@/server/match/hardFilter";
 import { feedForUser } from "./feed";
@@ -94,8 +94,7 @@ const ids = async (tx: Tx, userId: string, facts: FilterFacts | null = null) =>
   (await feedForUser(userId, { db: tx, facts })).jobs.map((j) => j.id);
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 describe.skipIf(!hasDb)("the feed over a cycle", () => {

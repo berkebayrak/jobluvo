@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { dbPool, type DbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type DbPool, type Tx } from "@/db/client";
 import { jobs, sources, users, type Source } from "@/db/schema";
 import { applyPostings, claimBatch, ingestSource, knownJobs } from "./ingest";
 import { smartrecruiters } from "./smartrecruiters";
@@ -67,8 +67,7 @@ async function row(tx: Tx, sourceId: string) {
 }
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 describe.skipIf(!hasDb)("ingest over successive SmartRecruiters polls", () => {

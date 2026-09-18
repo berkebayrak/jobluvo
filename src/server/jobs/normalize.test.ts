@@ -82,6 +82,13 @@ describe("parseLocation", () => {
     expect(loc.region).toBeUndefined();
     expect(parseLocation("Berlin, constructor").country).toBeUndefined();
     expect(decodeEntities("a &constructor; b &amp; c")).toBe("a &constructor; b & c");
+    // Review five, finding 16: a numeric entity that names no character is left as the posting wrote it,
+    // and never throws. One of these used to abort a whole board's ingest from inside its transaction.
+    expect(decodeEntities("over the top &#1114112; here")).toBe("over the top &#1114112; here");
+    expect(decodeEntities("hex too &#x110000; here")).toBe("hex too &#x110000; here");
+    expect(decodeEntities("a lone surrogate &#55296; stays")).toBe("a lone surrogate &#55296; stays");
+    expect(decodeEntities("the last real one &#1114111; decodes")).toBe(`the last real one ${String.fromCodePoint(0x10ffff)} decodes`);
+    expect(() => htmlToText("<p>&#1114112;</p>")).not.toThrow();
     expect(countryCodeOf("constructor")).toBeUndefined();
   });
 

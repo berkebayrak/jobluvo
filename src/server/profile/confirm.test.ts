@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dbPool, type DbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type DbPool, type Tx } from "@/db/client";
 import { profileDocuments, profileFacts, users } from "@/db/schema";
 import { resumeFacts } from "@/server/match/profile";
 import { filterFacts } from "@/server/profile/viewer";
@@ -49,8 +49,7 @@ const seedFacts = (userId: string) => [
 ];
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 describe.skipIf(!hasDb)("confirmation over its cycle", () => {

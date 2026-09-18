@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dbPool, type Tx } from "@/db/client";
+import { dbPool, endPool, type Tx } from "@/db/client";
 import { jobs, sources, type JobLocation, type NewJob } from "@/db/schema";
 import { hardFilterSql, type FilterFacts } from "./hardFilter";
 import type { AuthorizationFact, PreferenceFact, SponsorshipFact } from "@/server/profile/facts";
@@ -112,8 +112,7 @@ async function withFixtures(fn: (evaluate: (f: FilterFacts) => Promise<Record<st
 }
 
 afterAll(async () => {
-  const g = globalThis as unknown as { __jobluvoPool?: { end(): Promise<void> } };
-  await g.__jobluvoPool?.end();
+  await endPool();
 });
 
 describe.skipIf(!hasDb)("hardFilterSql against fixture rows", () => {

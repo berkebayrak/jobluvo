@@ -92,6 +92,28 @@ function pool(): Pool {
 
 export const dbPool = () => drizzleServerless({ client: pool(), schema });
 
+/**
+ * Ends the application's pool and forgets it, so the next `dbPool()` builds a
+ * new one rather than being handed the ended one. This is the only supported
+ * way to shut the pool down.
+ *
+ * `end()` closes the pool's connections. It does not clear the module global
+ * that points at the pool, and those two facts together turn a shutdown into
+ * the next caller's failure: `dbPool()` sees a pool, returns the ended one,
+ * and the first query on it fails at once. Eight test files each reached into
+ * globalThis to call `end()` directly, so there was nowhere for this to be
+ * true once. Here it is true once.
+ *
+ * The global is cleared before the close is awaited, so a caller arriving
+ * while the close is in flight builds a fresh pool instead of queueing on one
+ * that is going away.
+ */
+export async function endPool(): Promise<void> {
+  const ending = g.__jobluvoPool;
+  g.__jobluvoPool = undefined;
+  await ending?.end();
+}
+
 export const dbHttp = () => drizzleHttp({ client: neon(env().DATABASE_URL), schema });
 
 export type DbPool = ReturnType<typeof dbPool>;

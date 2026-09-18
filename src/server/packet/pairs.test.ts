@@ -5,22 +5,34 @@ import { factEntries } from "./resume";
 import { checkLine, factSet } from "./validate";
 
 /*
- * The evaluation set (review four): paired lines against one profile, each
- * pair a truthful rewording that must pass and a false rewrite that must be
- * held or rejected. Every number this project produced before this file
- * counted how often the validator fired; this file counts how often it
- * should have fired and did not. A false line that passes is a miss, and
- * the miss rate is printed with the pass rate on the truthful lines.
+ * The evaluation set, and what it is now for.
  *
- * Each case names the review finding it came from and who wrote it, and the
- * second of those matters more than it looks. A set written by the person who
- * wrote the rules measures whether the rules do what that person meant. It
- * cannot measure what nobody thought of, and on 18 September 2026 that stopped
- * being a caveat and became a result: this set caught 28 of its own 28, and a
- * second author who had read the implementation wrote 14 false lines that the
- * validator missed, all 14. So the counts are printed by author, and a total
- * across both would hide the only number that has ever said anything about
- * what the validator lets past.
+ * Every pair is a truthful rewording that must pass and a false rewrite that
+ * should not be shipped. This file used to assert that the validator caught
+ * every false line, and it did: 28 of 28. It no longer asserts that, because
+ * the code no longer does it. The meaning comparison was removed by the user's
+ * decision (D-034), and measured against these same lines the code that
+ * remains catches 8 of 28.
+ *
+ * READ THIS BEFORE CITING THIS FILE. It is not evidence that Jobluvo catches
+ * fabrication. It is a record of a set of false lines, split into the few the
+ * code still rejects and the many the tailoring prompt alone is responsible
+ * for. Nothing below asserts that a recorded line is caught, and nothing below
+ * should be read as saying the system is safe against the cases in it.
+ *
+ * Three things are asserted, and they are worth asserting:
+ *
+ *  - Every truthful line passes. 26 of 26. Removing rules cannot create a
+ *    false positive, and this is what says so as the remaining check changes.
+ *  - The lines the invention check does reject are still rejected, named one
+ *    by one, so that check cannot quietly stop working.
+ *  - The counts are printed by author and by case, never summed, which is the
+ *    rule that survived review five and the reason the misleading 28 was found.
+ *
+ * The second author's fourteen are in the file too (FOURTEEN below), on the
+ * profile they were written against. None of them was ever caught, and none of
+ * them is caught now. They are here so that nobody has to go and find them
+ * again.
  *
  * Add a pair whenever a miss is found in the wild, with its author; never
  * remove one.
@@ -245,52 +257,159 @@ const PAIRS: Pair[] = [
   },
 ];
 
-const level = (bullet: string, line: string, cited: string[]) => {
-  const f = checkLine(line, bullet, cited, set, posting);
+const level = (bullet: string, line: string, cited: string[], facts = set, post = posting) => {
+  const f = checkLine(line, bullet, cited, facts, post);
   return f.some((x) => x.level === "hard") ? "invalid" : f.some((x) => x.level === "review") ? "needs_review" : "ready";
 };
 
+/*
+ * The second author's fourteen, on one profile as they were written. Recorded,
+ * never asserted: every one of them passes, before the removal and after it.
+ */
+const FOURTEEN_ROLES: string[][] = [
+  [
+    "Reduced customer churn by 11 percent and cut acquisition cost by 5 percent.",
+    "Managed 6 junior analysts.",
+    "Negotiated 3 deals.",
+    "Reviewed budgets annually and reduced costs by 11 percent.",
+    "Reviewed budgets annually and reviewed costs.",
+    "Did not join in January 2023.",
+    "Managed a team in 2000.",
+    "Did not manage recruitment.",
+    "Supported recruitment of analysts.",
+    "Built dashboards in Excel.",
+    "Built 6 dashboards in Excel.",
+    "Certified in Excel.",
+  ],
+  ["Used Salesforce."],
+];
+
+const FOURTEEN_FACTS: ResumeFacts = {
+  ...FACTS,
+  employment: FOURTEEN_ROLES.map((bullets, i) => ({
+    company: i === 0 ? "Arvento" : "Deloitte",
+    title: i === 0 ? "Head of Strategy" : "Consultant",
+    start: i === 0 ? "2022-03" : "2019-06",
+    ...(i === 0 ? {} : { end: "2022-02" }),
+    bullets,
+  })),
+  education: [],
+  skills: [],
+  sources: { employment: FOURTEEN_ROLES.map(() => RESUME), education: [], skills: [] },
+};
+const fourteenSet = factSet(factEntries(FOURTEEN_FACTS));
+
+interface Counter {
+  id: string;
+  case: Case;
+  bullet: string;
+  line: string;
+  /** The reviewer used an empty posting for 5a, which is what made it the case it is. */
+  emptyPosting?: boolean;
+}
+
+const FOURTEEN: Counter[] = [
+  { id: "1a", case: "case 2", bullet: "R1.1", line: "Reduced customer acquisition cost by 11 percent." },
+  { id: "1b", case: "case 3", bullet: "R1.2", line: "Managed 6 senior analysts." },
+  { id: "1c", case: "case 3", bullet: "R1.3", line: "Closed 3 deals." },
+  { id: "2a", case: "case 2", bullet: "R1.4", line: "Reduced costs by 11 percent annually." },
+  { id: "2b", case: "case 2", bullet: "R1.5", line: "Reviewed costs annually." },
+  { id: "3a", case: "polarity", bullet: "R1.6", line: "Joined in 2023." },
+  { id: "3b", case: "case 2", bullet: "R1.7", line: "Managed a team and 2000 customers." },
+  { id: "4a", case: "polarity", bullet: "R1.8", line: "Managed recruitment." },
+  { id: "4b", case: "case 3", bullet: "R1.9", line: "Led recruitment of analysts." },
+  { id: "4c", case: "case 2", bullet: "R1.10", line: "Used Salesforce." },
+  { id: "4d", case: "case 2", bullet: "R1.11", line: "Built 6 dashboards using Salesforce." },
+  { id: "4e", case: "case 2", bullet: "R1.10", line: "Built dashboards in Excel and Salesforce." },
+  { id: "5a", case: "invention", bullet: "R1.10", line: "Built dashboards using salesforce data.", emptyPosting: true },
+  { id: "5b", case: "case 2", bullet: "R2.1", line: "Certified in Salesforce." },
+];
+
+/*
+ * The false lines the invention check still rejects, named one by one. This is
+ * the whole of what the code catches out of the 28, and it is asserted so the
+ * check cannot quietly stop working. Every other false line in this file is
+ * the prompt's responsibility.
+ */
+const STILL_CAUGHT = new Set([
+  "Presented reports quarterly.",
+  "Grew the team from 4 to 19 people.",
+  "Ran a conjoint study of 2,000 customers that lifted ARPU 16 percent.",
+  "Built dashboards using Tableau.",
+  "Built dashboards and recruitment systems.",
+  "Certified in Salesforce.",
+  "Salesforce certified, ran the sales pipeline.",
+  "Ran the pricing review across 30 markets.",
+]);
+
 describe("paired evaluation set", () => {
-  it("catches every false line and passes every truthful one, and prints the miss rate", () => {
-    const misses: string[] = [];
-    const falseHolds: string[] = [];
+  it("passes every truthful line: removing a rule cannot create a false positive, and this is what says so", () => {
+    const held: string[] = [];
+    let caseOne = 0;
+    for (const p of PAIRS) {
+      for (const line of p.truthful) {
+        caseOne += 1;
+        const l = level(p.bullet, line, p.cited);
+        if (l !== "ready") held.push(`case 1 ${p.finding}: "${line}" ${l}`);
+      }
+    }
+    expect(caseOne).toBe(26);
+    expect(held).toEqual([]);
+  });
+
+  it("still rejects the false lines the invention check reaches, each named", () => {
+    const missed: string[] = [];
+    for (const p of PAIRS) {
+      for (const entry of p.false) {
+        const line = typeof entry === "string" ? entry : entry.line;
+        if (!STILL_CAUGHT.has(line)) continue;
+        if (level(p.bullet, line, p.cited) === "ready") missed.push(`${p.finding}: "${line}" is no longer rejected`);
+      }
+    }
+    expect(missed).toEqual([]);
+  });
+
+  it("records what the prompt is responsible for, and asserts nothing about it", () => {
     const blank = () => ({ falseLines: 0, caught: 0 });
     const byAuthor: Record<Author, ReturnType<typeof blank>> = { rules: blank(), independent: blank() };
     const byCase: Record<Case, ReturnType<typeof blank>> = { "case 2": blank(), "case 3": blank(), invention: blank(), polarity: blank() };
-    let caseOne = 0;
-    let caseOnePassed = 0;
+    const passing: string[] = [];
     for (const p of PAIRS) {
       for (const entry of p.false) {
         const line = typeof entry === "string" ? entry : entry.line;
         const kind = typeof entry === "string" ? p.case : entry.case;
         byAuthor[p.author].falseLines += 1;
         byCase[kind].falseLines += 1;
-        if (level(p.bullet, line, p.cited) === "ready") misses.push(`${kind} ${p.finding}: "${line}" passed`);
+        if (level(p.bullet, line, p.cited) === "ready") passing.push(`${kind}: "${line}" (${p.finding})`);
         else {
           byAuthor[p.author].caught += 1;
           byCase[kind].caught += 1;
         }
       }
-      for (const line of p.truthful) {
-        // Every truthful line is case 1: stronger wording, the same claim, which must pass.
-        caseOne += 1;
-        const l = level(p.bullet, line, p.cited);
-        if (l !== "ready") falseHolds.push(`case 1 ${p.finding}: "${line}" ${l} ${JSON.stringify(checkLine(line, p.bullet, p.cited, set, posting).filter((f) => f.level !== "soft").map((f) => [f.message, f.value]))}`);
-        else caseOnePassed += 1;
+    }
+    for (const c of FOURTEEN) {
+      byAuthor.independent.falseLines += 1;
+      byCase[c.case].falseLines += 1;
+      const post = c.emptyPosting ? new Set<string>() : posting;
+      if (level(c.bullet, c.line, [c.bullet], fourteenSet, post) === "ready") passing.push(`${c.case}: "${c.line}" (reviewer ${c.id})`);
+      else {
+        byAuthor.independent.caught += 1;
+        byCase[c.case].caught += 1;
       }
     }
-    // By author and by case, never summed into one figure. A total let one author's cases carry the other's,
-    // and it let "invention", which nobody disputes, carry case 3, which nobody had written a test for.
+    // By author and by case, never summed into one figure: a total let one author's cases carry the other's.
     for (const author of ["rules", "independent"] as const) {
-      const t = byAuthor[author];
-      console.log(t.falseLines ? `by author, ${author}: ${t.caught} of ${t.falseLines} false lines caught` : `by author, ${author}: no cases yet`);
+      const a = byAuthor[author];
+      console.log(`by author, ${author}: ${a.caught} of ${a.falseLines} false lines rejected by the code`);
     }
     for (const c of ["case 2", "case 3", "invention", "polarity"] as const) {
-      const t = byCase[c];
-      console.log(t.falseLines ? `by case, ${c}: ${t.caught} of ${t.falseLines} false lines caught` : `by case, ${c}: no cases yet`);
+      const a = byCase[c];
+      console.log(`by case, ${c}: ${a.caught} of ${a.falseLines} false lines rejected by the code`);
     }
-    console.log(`case 1, stronger wording that must pass: ${caseOnePassed} of ${caseOne} passed`);
-    expect(misses).toEqual([]);
-    expect(falseHolds).toEqual([]);
+    console.log(`\n${passing.length} false lines are not rejected by any code. The tailoring prompt is what stands between these and a submitted resume:`);
+    for (const s of passing) console.log(`  ${s}`);
+    // Deliberately no expectation on `passing`. Asserting it would turn a record of what is
+    // not checked into a claim that it is checked, which is the thing this file must not say.
+    expect(byAuthor.rules.falseLines + byAuthor.independent.falseLines).toBe(42);
   });
 });

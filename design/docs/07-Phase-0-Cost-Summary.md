@@ -22,6 +22,8 @@ Superseded on 18 September 2026 (D-029): the headline that stood from D-024 to D
 
 Scoring is a rate: it is paid for every job a user is shown a score for, and an application is one of several.
 
+**Conversion is packet to application, not approval among held packets (review five, 18E; denominator restated by D-034).** With nothing held, "approval among held packets" no longer names a population at all: the quantity is approval among all attempted packets, since every packet goes to DOC-03 and almost none carries a finding. That does not change the term below, which was already denominated in attempted packets; it removes the thing it was being confused with.
+
 **Conversion is packet to application, not approval among held packets (review five, 18E).** The denominator of the tailoring term is attempted packets, so the quantity that converts it is the share of all attempted packets that become applications. That is not the same as the approval rate on DOC-03, and the two must not be swapped: a ready packet can still fail to be submitted, an invalid one can go out on the original resume, and a held one can be approved. Conversion is one number covering all three routes, it is unmeasured, and it cannot be measured without DOC-03 and users.
 
 Extraction is paid per extraction, not per user (review five, 18D). The product lets a user upload a replacement resume whenever they want one, so extractions per user is at least one and has no ceiling the product enforces. The old wording, "per user, once", was an assumption dressed as a unit. The tables below hold extractions per user at 1, which is the floor; a user who re-uploads once doubles that term.
@@ -80,7 +82,11 @@ This is the one place the held rate is stated. Every earlier figure in the decis
 
 **A note on dates, because one of them was wrong (review five, 17).** A run tag is named for the date in Istanbul and every timestamp on this page is UTC, and Istanbul is three hours ahead. So the runs tagged `18sep` have UTC timestamps on 17 September: `families-18sep-changes` wrote its 128 cost rows between 22:57:07 and 22:58:20 UTC on 17 September, which is 01:57 on 18 September in Istanbul. This row previously dated the restamp that preceded that write to 22:50 UTC on 18 September, which cannot be seven minutes before 22:57 UTC on 17 September. The snapshot settles it: the 27 surviving rows of that restamp carry `updated_at` of 22:49 and 22:50 UTC on 17 September. The restamp was 17 September and the date here is corrected.
 
-**The live number is the fresh cross family one.** In a sentence about what Jobluvo does, the held rate is about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024). The stored packets' figure describes history and is what the status column states.
+**There is no held rate any more. D-034 removed the meaning comparison, and the number this section exists to state is now a rejection rate of 7.5 percent with nothing held.** Re-reading the same 80 saved answers under the code as it stands: 74 ready, 0 held, 6 invalid. The six carry no tailored resume and the user gets their original. Two findings account for all of it, a word taken from the posting that no fact carries (5) and a name that no fact carries (2); every rule that compared what a line means with what a fact means is gone.
+
+Read that 7.5 percent for what it is. It is not a quality measure and it is not an improvement on 33.8 percent. The same answers are being read by a check that asks far less, and against the 28 known false lines of `pairs.test.ts` the code now rejects 8 where it rejected 28. What the packets say about themselves changed; the packets did not.
+
+**The figure this section used to state, kept because it is what the stored rows carry until the restamp.** The held rate was about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024).
 
 | Held rate, 18 September 2026 | Packets |
 |---|---|
@@ -135,7 +141,11 @@ A resume pasted from a word processor is exactly where an en dash comes from. Wh
 
 And of the 48 retries in the 80 job sample, 2 substituted words as the prompt asks, 2 reverted to the base resume and 37 dropped edited lines (D-029, `design/snapshots/2026-09-18-packets/reconciliation.md`): a ready packet after a retry is not evidence that the held claim was corrected.
 
-This is a product fact, not only a measurement (D-022). At three in ten, DOC-03, the packet review screen, is a primary flow, designed and staffed as such, not a fallback screen before submission. A held packet costs nothing today because nothing is submitted, DOC-03 does not exist and the resume is kept for a person; a shipped invention is permanent. That reasoning inverts the day DOC-03 ships.
+**DOC-03 stays a gate and stops being a queue (D-034).** At three in ten held, the packet review screen was a primary flow, designed and staffed as such. At 7.5 percent rejected and nothing held, it is not: there is no queue of flagged packets to work through. It stays a gate before submission for a reason that does not depend on the rate at all, and the reason is the user's: a person should see what goes out in their name. So every packet passes through DOC-03 and almost none of them arrives with anything flagged.
+
+That changes what the screen is. It was "the validator thinks these lines are wrong, decide"; it is now "here is your tailored resume, approve it", with a rejected packet offering the original instead. The review volume is 100 percent either way; what fell is the share arriving with a finding attached.
+
+It also changes what the gate is worth. The validator used to be able to say something about a particular line; it no longer can, and the tailoring prompt is the only thing between a model that wants to sound impressive and a submitted resume. The person at DOC-03 is the last check that reads meaning at all, which is an argument for the gate, not against it.
 
 Superseded figures, each true when written: 4.0 percent on 17 September under the claim validator (D-017), computed by a defective replay; 4.0 percent on 17 September confirmed by the corrected replay (#35); 15.6 percent of the 90 packets ready that day under rule 2 (D-021); 17.8 percent of 101 on 18 September under rule 2 alone; 36.6 percent of 101 stored and seven in ten on fresh answers on 18 September under rule 1 with the posting noun anywhere (D-022); one in four on fresh answers on 18 September under the narrowing (D-023). The seven in ten and one in four were six generations over the same 20 Ashby jobs, the fixed seed and the old draw, not 120 jobs (D-024).
 

@@ -1,11 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { dbPool, type Tx } from "@/db/client";
 import { costEvents, profileDocuments, profileFacts, users } from "@/db/schema";
 import * as client from "@/server/llm/client";
 import { COST_NOT_RECORDED } from "@/server/cost";
 import { unknownCostStats } from "@/server/match/report";
-import { PROCESSING_STALE_MS, profileView } from "./confirm";
+import { PROCESSING_STALE_MS, profileView, replaceWithDocument } from "./confirm";
 import { extractUpload, factsFrom, type ExtractOutput } from "./extract";
 import { textPdf, wrap } from "./pdf";
 
@@ -246,6 +246,54 @@ describe.skipIf(!hasDb)("the upload path and the document's state", () => {
       expect(view.documents[0]).toMatchObject({ state: "failed", error: "response incomplete: max_output_tokens" });
       expect(errors.mock.calls.flat().join(" ")).toContain(COST_NOT_RECORDED);
       errors.mockRestore();
+    });
+  });
+
+  it("an extraction that finishes after a newer upload replaced the profile stores its facts withdrawn, and none of them is confirmable", async () => {
+    await withUser(async (tx, userId) => {
+      // The sequence review five names: the older upload is still being read when the newer one replaces the profile.
+      // A replacement can only retire waiting facts that exist, and this one has none yet, so before finding 7 its facts
+      // landed afterwards and were confirmable beside the profile that had just replaced them.
+      call().mockImplementationOnce(async () => {
+        // Everything in here happens while the older extraction is still running.
+        call().mockResolvedValueOnce(answer(base));
+        const newer = await extractUpload(tx, userId, { ...file, filename: "newer.pdf" });
+        // now() is the transaction's start time and does not move inside one, so the fixture separates the two uploads
+        // explicitly. In production the wall clock does it.
+        await tx.update(profileDocuments).set({ uploadedAt: sql`now() + interval '1 second'` }).where(eq(profileDocuments.id, newer.documentId));
+        const waiting = await tx
+          .select({ id: profileFacts.id, version: profileFacts.version })
+          .from(profileFacts)
+          .where(and(eq(profileFacts.documentId, newer.documentId), eq(profileFacts.status, "extracted")));
+        await replaceWithDocument(tx, userId, newer.documentId, waiting);
+        return answer(base);
+      });
+      const older = await extractUpload(tx, userId, file);
+
+      expect(older.superseded).toBe(true);
+      // Its reading is kept, because it was paid for and read.
+      expect(older.facts).toBe(6);
+      const stored = await tx.select({ status: profileFacts.status }).from(profileFacts).where(eq(profileFacts.documentId, older.documentId));
+      expect(stored).toHaveLength(6);
+      // The assertion that matters: not one of them can be confirmed.
+      expect(stored.filter((f) => f.status === "extracted")).toEqual([]);
+      expect(stored.every((f) => f.status === "rejected")).toBe(true);
+      // The profile a person sees is the newer document's, and the older one offers nothing to confirm.
+      const view = await profileView(tx, userId);
+      const olderDoc = view.documents.find((d) => d.id === older.documentId)!;
+      expect(olderDoc).toMatchObject({ status: "ready", state: "rejected", extracted: 0 });
+      // Confirm all on the superseded document has nothing to act on.
+      await expect(replaceWithDocument(tx, userId, older.documentId, [])).rejects.toThrow(/nothing left to confirm/);
+    });
+  });
+
+  it("an extraction that finishes with no newer upload behind it is confirmable as before", async () => {
+    await withUser(async (tx, userId) => {
+      call().mockResolvedValueOnce(answer(base));
+      const only = await extractUpload(tx, userId, file);
+      expect(only.superseded).toBe(false);
+      const stored = await tx.select({ status: profileFacts.status }).from(profileFacts).where(eq(profileFacts.documentId, only.documentId));
+      expect(stored.every((f) => f.status === "extracted")).toBe(true);
     });
   });
 

@@ -25,7 +25,7 @@ import { FACT_SCHEMAS } from "./facts";
  * They are the user's own answers, not resume content.
  */
 
-const RESUME_KINDS = ["contact", "link", "employment", "education", "project", "skill", "answer"] as const;
+export const RESUME_KINDS = ["contact", "link", "employment", "education", "project", "skill", "answer"] as const;
 
 /**
  * What the screen says about a document, from its extraction status and

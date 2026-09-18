@@ -21,7 +21,7 @@ vi.mock("./validate", async (importOriginal) => {
 });
 const call = () => vi.mocked(tailor.tailorCall);
 /** The findings that say something about the answer, without the soft provenance line a retry carries (finding 14). */
-const holding = (fs: { message: string }[]) => fs.filter((f) => f.message !== "this answer is a retry");
+const holding = <T extends { message: string }>(fs: T[]): T[] => fs.filter((f) => f.message !== "this answer is a retry");
 const realValidate = await vi.importActual<typeof import("./validate")>("./validate");
 
 /*

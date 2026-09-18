@@ -201,6 +201,22 @@ comes first.** Nothing about the checking call is designed here beyond what it i
 fabricated figure and holds a suspicious word, and that is the whole of what it is meant
 to do. Every document that describes it says placeholder.
 
+**What the one day at hard cost, found by the r8 restamp and recorded because it is the
+case for this decision.** Ten stored packets were rejected under r7 on 18 September by a
+name or a posting word, and a rejected packet loses its stored resume. Under r8 all ten
+pass, and none can be promoted, because the resume is gone. The words that destroyed them
+were "alignment", "analytics", "cross-team", "execution", "experience", "members",
+"professionals", "relationships", "roadmap" and "KPI". Not one is an invented metric,
+employer, product or qualification. Three further rows sit invalid from r6 on
+`value-not-in-cited`, a rule D-034 deleted, so **not one of the thirteen packets still
+marked invalid is invalid for a fabricated value**. Seven of the thirteen carry a stored
+change set and could be rebuilt from base plus changes; that is a separate decision and is
+not taken here.
+
+This is the argument for the rule in one paragraph. A guess was allowed to reject for a
+single day, on one demo profile with 107 packets, and it destroyed ten tailored resumes
+and nothing else.
+
 ### D-034. The meaning comparison comes out of the validator and the truthfulness instruction moves into the prompt
 
 **The user's decision.** It reverses an architectural choice made in phase 0 and it is not

@@ -1,0 +1,1917 @@
+{
+ "c9f231127f130c45224c0714b0e0144412e22ec4781665b672562bdb2263b7f1": {
+  "userId": "bc219369-16b3-4c7c-9f72-48d389a9846d",
+  "rowSet": "confirmed now",
+  "rowIds": [
+   "3ef2320b-8585-4ea3-a7a5-81271eae96a4",
+   "4a22136a-faa9-4cb7-b35b-fafa1223d216",
+   "5bf3a9c3-1916-439b-8d1a-58e0189bdfcb",
+   "02bc96d3-bf77-4b73-a757-2ef0a2e896be",
+   "0d25f31e-dc07-4544-a6ff-a0154db1bed1",
+   "0ee1b425-ae48-4348-8695-c9539054b92a",
+   "16854d65-748b-475e-bb2e-64820e3f8c17",
+   "35192caa-c4fc-4f43-9b90-4222d304f04b",
+   "3e7bb9f8-14c7-41da-92c5-f1bfd041af78",
+   "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+   "50432adc-8b5c-4d9b-b749-6ea2a64fd8c3",
+   "5211eeeb-f732-4876-8616-78be52a72e37",
+   "5395c748-f6a7-467a-a6e5-47ca0f12d85f",
+   "58d1e30f-564b-43cc-a7e3-a85f34e56919",
+   "5dec1423-8f8a-4c8f-91cf-164aabc51c58",
+   "6703b4eb-923f-4839-80cb-a635346115c8",
+   "69d93a51-e949-4471-92d9-a9ecf4c57099",
+   "78519b5d-edfc-49ea-a5cf-465ad09ae550",
+   "8d38521d-9448-4a06-aa9c-a395c9a89dd8",
+   "8f663ca2-f06c-4e25-a068-98e4be9b0b53",
+   "a996a02d-0fa7-40c9-b1ed-8e95b18d1886",
+   "af448e98-63c9-4281-9232-10c5ca5b0d3e",
+   "bce63edf-d75f-4426-a506-6e5c6ec8fccd",
+   "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+   "e8af1241-8930-47cb-af2a-a90a6d4a96b6",
+   "ef78aeba-c24f-45c1-80ca-be2743faf494",
+   "f0c68025-91d8-4b03-ad83-809211b2f0ab",
+   "f32c89bb-e600-4b74-840d-617e11456091",
+   "f7dd738b-0745-4b88-8ac6-6e41c2681e4a"
+  ],
+  "factsHash": "c9f231127f130c45224c0714b0e0144412e22ec4781665b672562bdb2263b7f1",
+  "prefsHash": "6de77ea51cac94d14c92c1fa4fbb3868234c58cd8963729bf5a0441245d4f2b6",
+  "matchesPacketHash": true,
+  "packetsOnThisHash": 80,
+  "facts": {
+   "userId": "bc219369-16b3-4c7c-9f72-48d389a9846d",
+   "prefs": {
+    "targetCountries": [
+     "US"
+    ],
+    "relocation": "yes",
+    "remote": "remote_ok",
+    "employmentTypes": [
+     "Full time"
+    ],
+    "earliestStart": "2026-11-01"
+   },
+   "employment": [
+    {
+     "company": "Arvento",
+     "title": "Head of Strategy and PMO",
+     "location": "Istanbul, Turkey",
+     "start": "2022-03",
+     "bullets": [
+      "Lead the strategy and PMO function for a telematics company with USD 140M revenue, reporting to the CEO, with a team of four strategy managers and two analysts.",
+      "Designed and ran a 3 year cost transformation program across 4 business units that reduced operating cost by 11 percent (USD 9.2M a year) against a 12 percent target.",
+      "Own the annual planning cycle: targets, initiative portfolio and budget with product and finance, presented to the board twice a year.",
+      "Built the company OKR system from scratch in 2023, now used by 38 teams, with a quarterly review cadence chaired by the executive committee.",
+      "Screened 14 acquisition targets in fleet software and prepared the investment case for the one that closed in 2024 (USD 18M).",
+      "Set up the PMO: stage gates, a single initiative register and a monthly steering pack that replaced 6 separate reporting formats."
+     ]
+    },
+    {
+     "company": "Deloitte Turkey",
+     "title": "Senior Strategy Consultant",
+     "location": "Istanbul, Turkey",
+     "start": "2019-06",
+     "end": "2022-02",
+     "bullets": [
+      "Delivered 9 growth and operating model projects for clients in telecoms, retail banking and consumer goods, as workstream lead on the last 5.",
+      "Led the market entry study for a regional bank's SME lending product: sized a USD 1.1B addressable market and built the 5 year business case adopted by the client's board.",
+      "Redesigned the operating model of a 2,400 person retail bank division, cutting management layers from 7 to 5 and consolidating 11 regional units into 6.",
+      "Ran the pricing workstream of a telecom postpaid relaunch, with a conjoint study of 2,000 customers, that lifted ARPU 6 percent in the first year.",
+      "Managed teams of 2 to 4 consultants and coached 6 analysts through the firm's case review process."
+     ]
+    },
+    {
+     "company": "Turkcell",
+     "title": "Business Analyst, Pricing and Market Analysis",
+     "location": "Istanbul, Turkey",
+     "start": "2016-09",
+     "end": "2019-05",
+     "bullets": [
+      "Built and maintained the pricing model for the consumer postpaid portfolio (12 plans, 20M subscribers), with monthly elasticity updates from usage data.",
+      "Ran the quarterly competitor and market share analysis presented to the CMO, drawing on regulator filings, panel data and internal churn figures.",
+      "Wrote the business cases for 3 tariff launches, one of which added 400k net subscribers in its first two quarters.",
+      "Automated the weekly pricing dashboard in SQL and Power BI, removing about 12 hours of manual work a week for the team."
+     ]
+    },
+    {
+     "company": "Garanti BBVA",
+     "title": "Analyst, Strategic Planning",
+     "location": "Istanbul, Turkey",
+     "start": "2014-08",
+     "end": "2016-08",
+     "bullets": [
+      "Supported the annual strategic plan for the retail banking group: data gathering, branch network analysis and the financial model behind the 3 year targets.",
+      "Prepared the monthly performance pack for the executive committee, covering 900 branches and 4 product lines.",
+      "Modelled the branch consolidation scenarios that led to 60 closures with a 2 percent deposit loss against a 5 percent planning assumption."
+     ]
+    }
+   ],
+   "education": [
+    {
+     "institution": "Koc University",
+     "degree": "MBA, Executive MBA, part time",
+     "start": "2018-09",
+     "end": "2020-06",
+     "notes": [
+      "Graduated with distinction. Capstone on subscription pricing in emerging markets."
+     ]
+    },
+    {
+     "institution": "Bogazici University",
+     "degree": "BSc",
+     "field": "Industrial Engineering",
+     "start": "2010-09",
+     "end": "2014-06"
+    }
+   ],
+   "skills": [
+    {
+     "name": "Annual planning and budgeting",
+     "years": 8,
+     "evidence": "Annual planning and budgeting (8 years): Owns the planning cycle at Arvento"
+    },
+    {
+     "name": "Board and executive reporting",
+     "years": 6,
+     "evidence": "Board and executive reporting (6 years): Board presentations twice a year, executive committee packs"
+    },
+    {
+     "name": "Corporate strategy",
+     "years": 8,
+     "evidence": "Corporate strategy (8 years): Strategy lead at Arvento, consultant at Deloitte"
+    },
+    {
+     "name": "Cost transformation programs",
+     "years": 4,
+     "evidence": "Cost transformation programs (4 years): 3 year program across 4 business units, USD 9.2M a year"
+    },
+    {
+     "name": "Financial modelling",
+     "years": 10,
+     "evidence": "Financial modelling (10 years): Business cases at every role since Garanti"
+    },
+    {
+     "name": "M&A screening and investment cases",
+     "years": 3,
+     "evidence": "M&A screening and investment cases (3 years): 14 targets screened, one USD 18M deal closed"
+    },
+    {
+     "name": "Market sizing",
+     "years": 6,
+     "evidence": "Market sizing (6 years): USD 1.1B SME lending market study at Deloitte"
+    },
+    {
+     "name": "OKR frameworks",
+     "years": 3,
+     "evidence": "OKR frameworks (3 years): Company OKR system used by 38 teams"
+    },
+    {
+     "name": "Operating model design",
+     "years": 3,
+     "evidence": "Operating model design (3 years): Retail bank division redesign at Deloitte"
+    },
+    {
+     "name": "PMO leadership",
+     "years": 4,
+     "evidence": "PMO leadership (4 years): Built the PMO at Arvento, stage gates and steering pack"
+    },
+    {
+     "name": "People management",
+     "years": 5,
+     "evidence": "People management (5 years): Team of six at Arvento, teams of 2 to 4 at Deloitte"
+    },
+    {
+     "name": "Power BI and Excel",
+     "years": 10,
+     "evidence": "Power BI and Excel (10 years): Dashboards and models at every role"
+    },
+    {
+     "name": "Presentation and storytelling",
+     "years": 8,
+     "evidence": "Presentation and storytelling (8 years): Client and board decks"
+    },
+    {
+     "name": "Pricing and elasticity analysis",
+     "years": 5,
+     "evidence": "Pricing and elasticity analysis (5 years): Postpaid pricing model at Turkcell, conjoint study at Deloitte"
+    },
+    {
+     "name": "SQL",
+     "years": 6,
+     "evidence": "SQL (6 years): Pricing dashboard and usage analysis at Turkcell"
+    },
+    {
+     "name": "Stakeholder management",
+     "years": 8,
+     "evidence": "Stakeholder management (8 years): CEO, CFO, board and client executives"
+    }
+   ],
+   "answers": [
+    {
+     "question": "Notice period",
+     "answer": "30 days"
+    },
+    {
+     "question": "Salary expectation",
+     "answer": "USD 150,000 to 175,000 base"
+    }
+   ],
+   "sources": {
+    "employment": [
+     {
+      "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "0d25f31e-dc07-4544-a6ff-a0154db1bed1",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "f0c68025-91d8-4b03-ad83-809211b2f0ab",
+      "origin": "upload",
+      "hasEvidence": true
+     }
+    ],
+    "education": [
+     {
+      "rowId": "0ee1b425-ae48-4348-8695-c9539054b92a",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "8f663ca2-f06c-4e25-a068-98e4be9b0b53",
+      "origin": "upload",
+      "hasEvidence": true
+     }
+    ],
+    "skills": [
+     {
+      "rowId": "a996a02d-0fa7-40c9-b1ed-8e95b18d1886",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "5dec1423-8f8a-4c8f-91cf-164aabc51c58",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "6703b4eb-923f-4839-80cb-a635346115c8",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "ef78aeba-c24f-45c1-80ca-be2743faf494",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "f7dd738b-0745-4b88-8ac6-6e41c2681e4a",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "bce63edf-d75f-4426-a506-6e5c6ec8fccd",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "f32c89bb-e600-4b74-840d-617e11456091",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "3e7bb9f8-14c7-41da-92c5-f1bfd041af78",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "e8af1241-8930-47cb-af2a-a90a6d4a96b6",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "58d1e30f-564b-43cc-a7e3-a85f34e56919",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "69d93a51-e949-4471-92d9-a9ecf4c57099",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "78519b5d-edfc-49ea-a5cf-465ad09ae550",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "af448e98-63c9-4281-9232-10c5ca5b0d3e",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "5395c748-f6a7-467a-a6e5-47ca0f12d85f",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "5211eeeb-f732-4876-8616-78be52a72e37",
+      "origin": "upload",
+      "hasEvidence": true
+     },
+     {
+      "rowId": "02bc96d3-bf77-4b73-a757-2ef0a2e896be",
+      "origin": "upload",
+      "hasEvidence": true
+     }
+    ]
+   },
+   "prefsHash": "6de77ea51cac94d14c92c1fa4fbb3868234c58cd8963729bf5a0441245d4f2b6",
+   "factsHash": "c9f231127f130c45224c0714b0e0144412e22ec4781665b672562bdb2263b7f1"
+  },
+  "factEntries": [
+   {
+    "id": "R1",
+    "text": "Head of Strategy and PMO, Arvento, Istanbul, Turkey, 2022-03 to present",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R1.1",
+    "text": "Lead the strategy and PMO function for a telematics company with USD 140M revenue, reporting to the CEO, with a team of four strategy managers and two analysts.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R1.2",
+    "text": "Designed and ran a 3 year cost transformation program across 4 business units that reduced operating cost by 11 percent (USD 9.2M a year) against a 12 percent target.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R1.3",
+    "text": "Own the annual planning cycle: targets, initiative portfolio and budget with product and finance, presented to the board twice a year.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R1.4",
+    "text": "Built the company OKR system from scratch in 2023, now used by 38 teams, with a quarterly review cadence chaired by the executive committee.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R1.5",
+    "text": "Screened 14 acquisition targets in fleet software and prepared the investment case for the one that closed in 2024 (USD 18M).",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R1.6",
+    "text": "Set up the PMO: stage gates, a single initiative register and a monthly steering pack that replaced 6 separate reporting formats.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "3ec74b20-087f-47e9-b0a2-cd501d37449f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R2",
+    "text": "Senior Strategy Consultant, Deloitte Turkey, Istanbul, Turkey, 2019-06 to 2022-02",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R2.1",
+    "text": "Delivered 9 growth and operating model projects for clients in telecoms, retail banking and consumer goods, as workstream lead on the last 5.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R2.2",
+    "text": "Led the market entry study for a regional bank's SME lending product: sized a USD 1.1B addressable market and built the 5 year business case adopted by the client's board.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R2.3",
+    "text": "Redesigned the operating model of a 2,400 person retail bank division, cutting management layers from 7 to 5 and consolidating 11 regional units into 6.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R2.4",
+    "text": "Ran the pricing workstream of a telecom postpaid relaunch, with a conjoint study of 2,000 customers, that lifted ARPU 6 percent in the first year.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R2.5",
+    "text": "Managed teams of 2 to 4 consultants and coached 6 analysts through the firm's case review process.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "c57aa2a5-8b43-4adf-980a-9bde3eb568f1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R3",
+    "text": "Business Analyst, Pricing and Market Analysis, Turkcell, Istanbul, Turkey, 2016-09 to 2019-05",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "0d25f31e-dc07-4544-a6ff-a0154db1bed1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R3.1",
+    "text": "Built and maintained the pricing model for the consumer postpaid portfolio (12 plans, 20M subscribers), with monthly elasticity updates from usage data.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "0d25f31e-dc07-4544-a6ff-a0154db1bed1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R3.2",
+    "text": "Ran the quarterly competitor and market share analysis presented to the CMO, drawing on regulator filings, panel data and internal churn figures.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "0d25f31e-dc07-4544-a6ff-a0154db1bed1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R3.3",
+    "text": "Wrote the business cases for 3 tariff launches, one of which added 400k net subscribers in its first two quarters.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "0d25f31e-dc07-4544-a6ff-a0154db1bed1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R3.4",
+    "text": "Automated the weekly pricing dashboard in SQL and Power BI, removing about 12 hours of manual work a week for the team.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "0d25f31e-dc07-4544-a6ff-a0154db1bed1",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R4",
+    "text": "Analyst, Strategic Planning, Garanti BBVA, Istanbul, Turkey, 2014-08 to 2016-08",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "f0c68025-91d8-4b03-ad83-809211b2f0ab",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R4.1",
+    "text": "Supported the annual strategic plan for the retail banking group: data gathering, branch network analysis and the financial model behind the 3 year targets.",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "f0c68025-91d8-4b03-ad83-809211b2f0ab",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R4.2",
+    "text": "Prepared the monthly performance pack for the executive committee, covering 900 branches and 4 product lines.",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "f0c68025-91d8-4b03-ad83-809211b2f0ab",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "R4.3",
+    "text": "Modelled the branch consolidation scenarios that led to 60 closures with a 2 percent deposit loss against a 5 percent planning assumption.",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "f0c68025-91d8-4b03-ad83-809211b2f0ab",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "E1",
+    "text": "MBA, Executive MBA, part time, Koc University, 2018-09 to 2020-06. Graduated with distinction. Capstone on subscription pricing in emerging markets.",
+    "kind": "education",
+    "role": null,
+    "source": {
+     "rowId": "0ee1b425-ae48-4348-8695-c9539054b92a",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "E2",
+    "text": "BSc, Industrial Engineering, Bogazici University, 2010-09 to 2014-06",
+    "kind": "education",
+    "role": null,
+    "source": {
+     "rowId": "8f663ca2-f06c-4e25-a068-98e4be9b0b53",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S1",
+    "text": "Annual planning and budgeting (8 years; Annual planning and budgeting (8 years): Owns the planning cycle at Arvento)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "a996a02d-0fa7-40c9-b1ed-8e95b18d1886",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S2",
+    "text": "Board and executive reporting (6 years; Board and executive reporting (6 years): Board presentations twice a year, executive committee packs)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "5dec1423-8f8a-4c8f-91cf-164aabc51c58",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S3",
+    "text": "Corporate strategy (8 years; Corporate strategy (8 years): Strategy lead at Arvento, consultant at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "6703b4eb-923f-4839-80cb-a635346115c8",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S4",
+    "text": "Cost transformation programs (4 years; Cost transformation programs (4 years): 3 year program across 4 business units, USD 9.2M a year)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "ef78aeba-c24f-45c1-80ca-be2743faf494",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S5",
+    "text": "Financial modelling (10 years; Financial modelling (10 years): Business cases at every role since Garanti)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "f7dd738b-0745-4b88-8ac6-6e41c2681e4a",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S6",
+    "text": "M&A screening and investment cases (3 years; M&A screening and investment cases (3 years): 14 targets screened, one USD 18M deal closed)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "bce63edf-d75f-4426-a506-6e5c6ec8fccd",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S7",
+    "text": "Market sizing (6 years; Market sizing (6 years): USD 1.1B SME lending market study at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "f32c89bb-e600-4b74-840d-617e11456091",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S8",
+    "text": "OKR frameworks (3 years; OKR frameworks (3 years): Company OKR system used by 38 teams)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "3e7bb9f8-14c7-41da-92c5-f1bfd041af78",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S9",
+    "text": "Operating model design (3 years; Operating model design (3 years): Retail bank division redesign at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "e8af1241-8930-47cb-af2a-a90a6d4a96b6",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S10",
+    "text": "PMO leadership (4 years; PMO leadership (4 years): Built the PMO at Arvento, stage gates and steering pack)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "58d1e30f-564b-43cc-a7e3-a85f34e56919",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S11",
+    "text": "People management (5 years; People management (5 years): Team of six at Arvento, teams of 2 to 4 at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "69d93a51-e949-4471-92d9-a9ecf4c57099",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S12",
+    "text": "Power BI and Excel (10 years; Power BI and Excel (10 years): Dashboards and models at every role)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "78519b5d-edfc-49ea-a5cf-465ad09ae550",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S13",
+    "text": "Presentation and storytelling (8 years; Presentation and storytelling (8 years): Client and board decks)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "af448e98-63c9-4281-9232-10c5ca5b0d3e",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S14",
+    "text": "Pricing and elasticity analysis (5 years; Pricing and elasticity analysis (5 years): Postpaid pricing model at Turkcell, conjoint study at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "5395c748-f6a7-467a-a6e5-47ca0f12d85f",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S15",
+    "text": "SQL (6 years; SQL (6 years): Pricing dashboard and usage analysis at Turkcell)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "5211eeeb-f732-4876-8616-78be52a72e37",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   },
+   {
+    "id": "S16",
+    "text": "Stakeholder management (8 years; Stakeholder management (8 years): CEO, CFO, board and client executives)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "02bc96d3-bf77-4b73-a757-2ef0a2e896be",
+     "origin": "upload",
+     "hasEvidence": true
+    }
+   }
+  ],
+  "baseResume": {
+   "summary": null,
+   "experience": [
+    {
+     "id": "R1",
+     "heading": "Head of Strategy and PMO, Arvento, Istanbul, Turkey, 2022-03 to present",
+     "bullets": [
+      {
+       "id": "R1.1",
+       "text": "Lead the strategy and PMO function for a telematics company with USD 140M revenue, reporting to the CEO, with a team of four strategy managers and two analysts."
+      },
+      {
+       "id": "R1.2",
+       "text": "Designed and ran a 3 year cost transformation program across 4 business units that reduced operating cost by 11 percent (USD 9.2M a year) against a 12 percent target."
+      },
+      {
+       "id": "R1.3",
+       "text": "Own the annual planning cycle: targets, initiative portfolio and budget with product and finance, presented to the board twice a year."
+      },
+      {
+       "id": "R1.4",
+       "text": "Built the company OKR system from scratch in 2023, now used by 38 teams, with a quarterly review cadence chaired by the executive committee."
+      },
+      {
+       "id": "R1.5",
+       "text": "Screened 14 acquisition targets in fleet software and prepared the investment case for the one that closed in 2024 (USD 18M)."
+      },
+      {
+       "id": "R1.6",
+       "text": "Set up the PMO: stage gates, a single initiative register and a monthly steering pack that replaced 6 separate reporting formats."
+      }
+     ]
+    },
+    {
+     "id": "R2",
+     "heading": "Senior Strategy Consultant, Deloitte Turkey, Istanbul, Turkey, 2019-06 to 2022-02",
+     "bullets": [
+      {
+       "id": "R2.1",
+       "text": "Delivered 9 growth and operating model projects for clients in telecoms, retail banking and consumer goods, as workstream lead on the last 5."
+      },
+      {
+       "id": "R2.2",
+       "text": "Led the market entry study for a regional bank's SME lending product: sized a USD 1.1B addressable market and built the 5 year business case adopted by the client's board."
+      },
+      {
+       "id": "R2.3",
+       "text": "Redesigned the operating model of a 2,400 person retail bank division, cutting management layers from 7 to 5 and consolidating 11 regional units into 6."
+      },
+      {
+       "id": "R2.4",
+       "text": "Ran the pricing workstream of a telecom postpaid relaunch, with a conjoint study of 2,000 customers, that lifted ARPU 6 percent in the first year."
+      },
+      {
+       "id": "R2.5",
+       "text": "Managed teams of 2 to 4 consultants and coached 6 analysts through the firm's case review process."
+      }
+     ]
+    },
+    {
+     "id": "R3",
+     "heading": "Business Analyst, Pricing and Market Analysis, Turkcell, Istanbul, Turkey, 2016-09 to 2019-05",
+     "bullets": [
+      {
+       "id": "R3.1",
+       "text": "Built and maintained the pricing model for the consumer postpaid portfolio (12 plans, 20M subscribers), with monthly elasticity updates from usage data."
+      },
+      {
+       "id": "R3.2",
+       "text": "Ran the quarterly competitor and market share analysis presented to the CMO, drawing on regulator filings, panel data and internal churn figures."
+      },
+      {
+       "id": "R3.3",
+       "text": "Wrote the business cases for 3 tariff launches, one of which added 400k net subscribers in its first two quarters."
+      },
+      {
+       "id": "R3.4",
+       "text": "Automated the weekly pricing dashboard in SQL and Power BI, removing about 12 hours of manual work a week for the team."
+      }
+     ]
+    },
+    {
+     "id": "R4",
+     "heading": "Analyst, Strategic Planning, Garanti BBVA, Istanbul, Turkey, 2014-08 to 2016-08",
+     "bullets": [
+      {
+       "id": "R4.1",
+       "text": "Supported the annual strategic plan for the retail banking group: data gathering, branch network analysis and the financial model behind the 3 year targets."
+      },
+      {
+       "id": "R4.2",
+       "text": "Prepared the monthly performance pack for the executive committee, covering 900 branches and 4 product lines."
+      },
+      {
+       "id": "R4.3",
+       "text": "Modelled the branch consolidation scenarios that led to 60 closures with a 2 percent deposit loss against a 5 percent planning assumption."
+      }
+     ]
+    }
+   ],
+   "education": [
+    {
+     "id": "E1",
+     "text": "MBA, Executive MBA, part time, Koc University, 2018-09 to 2020-06. Graduated with distinction. Capstone on subscription pricing in emerging markets."
+    },
+    {
+     "id": "E2",
+     "text": "BSc, Industrial Engineering, Bogazici University, 2010-09 to 2014-06"
+    }
+   ],
+   "skills": [
+    {
+     "id": "S1",
+     "text": "Annual planning and budgeting"
+    },
+    {
+     "id": "S2",
+     "text": "Board and executive reporting"
+    },
+    {
+     "id": "S3",
+     "text": "Corporate strategy"
+    },
+    {
+     "id": "S4",
+     "text": "Cost transformation programs"
+    },
+    {
+     "id": "S5",
+     "text": "Financial modelling"
+    },
+    {
+     "id": "S6",
+     "text": "M&A screening and investment cases"
+    },
+    {
+     "id": "S7",
+     "text": "Market sizing"
+    },
+    {
+     "id": "S8",
+     "text": "OKR frameworks"
+    },
+    {
+     "id": "S9",
+     "text": "Operating model design"
+    },
+    {
+     "id": "S10",
+     "text": "PMO leadership"
+    },
+    {
+     "id": "S11",
+     "text": "People management"
+    },
+    {
+     "id": "S12",
+     "text": "Power BI and Excel"
+    },
+    {
+     "id": "S13",
+     "text": "Presentation and storytelling"
+    },
+    {
+     "id": "S14",
+     "text": "Pricing and elasticity analysis"
+    },
+    {
+     "id": "S15",
+     "text": "SQL"
+    },
+    {
+     "id": "S16",
+     "text": "Stakeholder management"
+    }
+   ]
+  },
+  "baseResumeHash": "eff9e45ee180cac1b010c5e3b056eba127c60cde1b596261c3a4b87845558bb0",
+  "baseResumeShapeHash": "eff9e45ee180cac1b010c5e3b056eba127c60cde1b596261c3a4b87845558bb0"
+ },
+ "c70bf9c31851c0969350efcf5c804681c429532be125c24bca6e43959fdc5450": {
+  "userId": "bc219369-16b3-4c7c-9f72-48d389a9846d",
+  "rowSet": "confirmed preference plus rejected rows with no document, the seeded facts",
+  "rowIds": [
+   "4a22136a-faa9-4cb7-b35b-fafa1223d216",
+   "030de56e-b524-4558-bd4f-29600b4329e1",
+   "08b62401-f66c-4061-95a8-84c0a0abcc40",
+   "2c13a312-516d-45d2-bf95-cc57b01eee73",
+   "33b2ba36-a6cc-4b2a-83b1-8e00ce8213d3",
+   "3a66b4e8-0752-4ca6-a283-663e28e694e9",
+   "43192468-a064-4fde-b2e8-a1fe8f5470aa",
+   "461bd105-432a-4afa-911a-1de27f830763",
+   "4c8552de-8c8e-4d47-923f-f081e85a5391",
+   "594546e2-d71c-417b-b361-c9377d7b75b2",
+   "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+   "6eabb10d-68c3-4004-b3e7-1729d2d8303e",
+   "76368e2e-c775-4a86-ba6e-05778b215154",
+   "80a9169e-87be-4e55-bc7d-068f6b7dae50",
+   "9bcb3535-f0fd-41c0-84e4-d1c8d5271163",
+   "a4c6288c-ce72-4a29-9f1a-4bf6715ef0d8",
+   "a966c3af-8d9a-4aad-b249-e76e224e93b5",
+   "ac8b89eb-f99d-4d81-8d9a-66b05fcdf644",
+   "b5a168f3-de2a-4d4d-a422-348a494d3085",
+   "b7663513-747f-4709-8083-d74081b56540",
+   "be365c77-3b42-46af-807a-d4cfef7a7c62",
+   "c3a458dd-7e2a-407c-a713-4f23bcfa8c3c",
+   "d441cb90-913a-4fd2-95ef-eaac348d1ea0",
+   "dfa2ab28-ad20-4fab-94f7-4598fb6a2837",
+   "e6d24605-47ba-4a96-b618-81dae44c444c"
+  ],
+  "factsHash": "c70bf9c31851c0969350efcf5c804681c429532be125c24bca6e43959fdc5450",
+  "prefsHash": "6de77ea51cac94d14c92c1fa4fbb3868234c58cd8963729bf5a0441245d4f2b6",
+  "matchesPacketHash": true,
+  "packetsOnThisHash": 27,
+  "facts": {
+   "userId": "bc219369-16b3-4c7c-9f72-48d389a9846d",
+   "prefs": {
+    "targetCountries": [
+     "US"
+    ],
+    "relocation": "yes",
+    "remote": "remote_ok",
+    "employmentTypes": [
+     "Full time"
+    ],
+    "earliestStart": "2026-11-01"
+   },
+   "employment": [
+    {
+     "company": "Arvento",
+     "title": "Head of Strategy and PMO",
+     "location": "Istanbul, Turkey",
+     "start": "2022-03",
+     "bullets": [
+      "Lead the strategy and PMO function for a telematics company with USD 140M revenue, reporting to the CEO, with a team of four strategy managers and two analysts.",
+      "Designed and ran a 3 year cost transformation program across 4 business units that reduced operating cost by 11 percent (USD 9.2M a year) against a 12 percent target.",
+      "Own the annual planning cycle: targets, initiative portfolio and budget with product and finance, presented to the board twice a year.",
+      "Built the company OKR system from scratch in 2023, now used by 38 teams, with a quarterly review cadence chaired by the executive committee.",
+      "Screened 14 acquisition targets in fleet software and prepared the investment case for the one that closed in 2024 (USD 18M).",
+      "Set up the PMO: stage gates, a single initiative register and a monthly steering pack that replaced 6 separate reporting formats."
+     ]
+    },
+    {
+     "company": "Deloitte Turkey",
+     "title": "Senior Strategy Consultant",
+     "location": "Istanbul, Turkey",
+     "start": "2019-06",
+     "end": "2022-02",
+     "bullets": [
+      "Delivered 9 growth and operating model projects for clients in telecoms, retail banking and consumer goods, as workstream lead on the last 5.",
+      "Led the market entry study for a regional bank's SME lending product: sized a USD 1.1B addressable market and built the 5 year business case adopted by the client's board.",
+      "Redesigned the operating model of a 2,400 person retail bank division, cutting management layers from 7 to 5 and consolidating 11 regional units into 6.",
+      "Ran the pricing workstream of a telecom postpaid relaunch, with a conjoint study of 2,000 customers, that lifted ARPU 6 percent in the first year.",
+      "Managed teams of 2 to 4 consultants and coached 6 analysts through the firm's case review process."
+     ]
+    },
+    {
+     "company": "Turkcell",
+     "title": "Business Analyst, Pricing and Market Analysis",
+     "location": "Istanbul, Turkey",
+     "start": "2016-09",
+     "end": "2019-05",
+     "bullets": [
+      "Built and maintained the pricing model for the consumer postpaid portfolio (12 plans, 20M subscribers), with monthly elasticity updates from usage data.",
+      "Ran the quarterly competitor and market share analysis presented to the CMO, drawing on regulator filings, panel data and internal churn figures.",
+      "Wrote the business cases for 3 tariff launches, one of which added 400k net subscribers in its first two quarters.",
+      "Automated the weekly pricing dashboard in SQL and Power BI, removing about 12 hours of manual work a week for the team."
+     ]
+    },
+    {
+     "company": "Garanti BBVA",
+     "title": "Analyst, Strategic Planning",
+     "location": "Istanbul, Turkey",
+     "start": "2014-08",
+     "end": "2016-08",
+     "bullets": [
+      "Supported the annual strategic plan for the retail banking group: data gathering, branch network analysis and the financial model behind the 3 year targets.",
+      "Prepared the monthly performance pack for the executive committee, covering 900 branches and 4 product lines.",
+      "Modelled the branch consolidation scenarios that led to 60 closures with a 2 percent deposit loss against a 5 percent planning assumption."
+     ]
+    }
+   ],
+   "education": [
+    {
+     "institution": "Koc University",
+     "degree": "MBA",
+     "field": "Executive MBA, part time",
+     "start": "2018-09",
+     "end": "2020-06",
+     "notes": [
+      "Graduated with distinction. Capstone on subscription pricing in emerging markets."
+     ]
+    },
+    {
+     "institution": "Bogazici University",
+     "degree": "BSc",
+     "field": "Industrial Engineering",
+     "start": "2010-09",
+     "end": "2014-06"
+    }
+   ],
+   "skills": [
+    {
+     "name": "M&A screening and investment cases",
+     "years": 3,
+     "evidence": "14 targets screened, one USD 18M deal closed"
+    },
+    {
+     "name": "Cost transformation programs",
+     "years": 4,
+     "evidence": "3 year program across 4 business units, USD 9.2M a year"
+    },
+    {
+     "name": "Board and executive reporting",
+     "years": 6,
+     "evidence": "Board presentations twice a year, executive committee packs"
+    },
+    {
+     "name": "PMO leadership",
+     "years": 4,
+     "evidence": "Built the PMO at Arvento, stage gates and steering pack"
+    },
+    {
+     "name": "Financial modelling",
+     "years": 10,
+     "evidence": "Business cases at every role since Garanti"
+    },
+    {
+     "name": "Stakeholder management",
+     "years": 8,
+     "evidence": "CEO, CFO, board and client executives"
+    },
+    {
+     "name": "Presentation and storytelling",
+     "years": 8,
+     "evidence": "Client and board decks"
+    },
+    {
+     "name": "OKR frameworks",
+     "years": 3,
+     "evidence": "Company OKR system used by 38 teams"
+    },
+    {
+     "name": "Power BI and Excel",
+     "years": 10,
+     "evidence": "Dashboards and models at every role"
+    },
+    {
+     "name": "Annual planning and budgeting",
+     "years": 8,
+     "evidence": "Owns the planning cycle at Arvento"
+    },
+    {
+     "name": "Pricing and elasticity analysis",
+     "years": 5,
+     "evidence": "Postpaid pricing model at Turkcell, conjoint study at Deloitte"
+    },
+    {
+     "name": "SQL",
+     "years": 6,
+     "evidence": "Pricing dashboard and usage analysis at Turkcell"
+    },
+    {
+     "name": "Operating model design",
+     "years": 3,
+     "evidence": "Retail bank division redesign at Deloitte"
+    },
+    {
+     "name": "Corporate strategy",
+     "years": 8,
+     "evidence": "Strategy lead at Arvento, consultant at Deloitte"
+    },
+    {
+     "name": "People management",
+     "years": 5,
+     "evidence": "Team of six at Arvento, teams of 2 to 4 at Deloitte"
+    },
+    {
+     "name": "Market sizing",
+     "years": 6,
+     "evidence": "USD 1.1B SME lending market study at Deloitte"
+    }
+   ],
+   "answers": [
+    {
+     "question": "Notice period",
+     "answer": "30 days"
+    },
+    {
+     "question": "Salary expectation",
+     "answer": "USD 150,000 to 175,000 base"
+    }
+   ],
+   "sources": {
+    "employment": [
+     {
+      "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "3a66b4e8-0752-4ca6-a283-663e28e694e9",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "4c8552de-8c8e-4d47-923f-f081e85a5391",
+      "origin": "user",
+      "hasEvidence": false
+     }
+    ],
+    "education": [
+     {
+      "rowId": "c3a458dd-7e2a-407c-a713-4f23bcfa8c3c",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "08b62401-f66c-4061-95a8-84c0a0abcc40",
+      "origin": "user",
+      "hasEvidence": false
+     }
+    ],
+    "skills": [
+     {
+      "rowId": "594546e2-d71c-417b-b361-c9377d7b75b2",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "43192468-a064-4fde-b2e8-a1fe8f5470aa",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "b7663513-747f-4709-8083-d74081b56540",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "030de56e-b524-4558-bd4f-29600b4329e1",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "9bcb3535-f0fd-41c0-84e4-d1c8d5271163",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "e6d24605-47ba-4a96-b618-81dae44c444c",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "b5a168f3-de2a-4d4d-a422-348a494d3085",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "d441cb90-913a-4fd2-95ef-eaac348d1ea0",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "2c13a312-516d-45d2-bf95-cc57b01eee73",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "a966c3af-8d9a-4aad-b249-e76e224e93b5",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "dfa2ab28-ad20-4fab-94f7-4598fb6a2837",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "6eabb10d-68c3-4004-b3e7-1729d2d8303e",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "ac8b89eb-f99d-4d81-8d9a-66b05fcdf644",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "a4c6288c-ce72-4a29-9f1a-4bf6715ef0d8",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "80a9169e-87be-4e55-bc7d-068f6b7dae50",
+      "origin": "user",
+      "hasEvidence": false
+     },
+     {
+      "rowId": "be365c77-3b42-46af-807a-d4cfef7a7c62",
+      "origin": "user",
+      "hasEvidence": false
+     }
+    ]
+   },
+   "prefsHash": "6de77ea51cac94d14c92c1fa4fbb3868234c58cd8963729bf5a0441245d4f2b6",
+   "factsHash": "c70bf9c31851c0969350efcf5c804681c429532be125c24bca6e43959fdc5450"
+  },
+  "factEntries": [
+   {
+    "id": "R1",
+    "text": "Head of Strategy and PMO, Arvento, Istanbul, Turkey, 2022-03 to present",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R1.1",
+    "text": "Lead the strategy and PMO function for a telematics company with USD 140M revenue, reporting to the CEO, with a team of four strategy managers and two analysts.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R1.2",
+    "text": "Designed and ran a 3 year cost transformation program across 4 business units that reduced operating cost by 11 percent (USD 9.2M a year) against a 12 percent target.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R1.3",
+    "text": "Own the annual planning cycle: targets, initiative portfolio and budget with product and finance, presented to the board twice a year.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R1.4",
+    "text": "Built the company OKR system from scratch in 2023, now used by 38 teams, with a quarterly review cadence chaired by the executive committee.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R1.5",
+    "text": "Screened 14 acquisition targets in fleet software and prepared the investment case for the one that closed in 2024 (USD 18M).",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R1.6",
+    "text": "Set up the PMO: stage gates, a single initiative register and a monthly steering pack that replaced 6 separate reporting formats.",
+    "kind": "employment",
+    "role": "R1",
+    "source": {
+     "rowId": "76368e2e-c775-4a86-ba6e-05778b215154",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R2",
+    "text": "Senior Strategy Consultant, Deloitte Turkey, Istanbul, Turkey, 2019-06 to 2022-02",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R2.1",
+    "text": "Delivered 9 growth and operating model projects for clients in telecoms, retail banking and consumer goods, as workstream lead on the last 5.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R2.2",
+    "text": "Led the market entry study for a regional bank's SME lending product: sized a USD 1.1B addressable market and built the 5 year business case adopted by the client's board.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R2.3",
+    "text": "Redesigned the operating model of a 2,400 person retail bank division, cutting management layers from 7 to 5 and consolidating 11 regional units into 6.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R2.4",
+    "text": "Ran the pricing workstream of a telecom postpaid relaunch, with a conjoint study of 2,000 customers, that lifted ARPU 6 percent in the first year.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R2.5",
+    "text": "Managed teams of 2 to 4 consultants and coached 6 analysts through the firm's case review process.",
+    "kind": "employment",
+    "role": "R2",
+    "source": {
+     "rowId": "6b9702b1-10e8-4997-8ba6-43a8c02bc808",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R3",
+    "text": "Business Analyst, Pricing and Market Analysis, Turkcell, Istanbul, Turkey, 2016-09 to 2019-05",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "3a66b4e8-0752-4ca6-a283-663e28e694e9",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R3.1",
+    "text": "Built and maintained the pricing model for the consumer postpaid portfolio (12 plans, 20M subscribers), with monthly elasticity updates from usage data.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "3a66b4e8-0752-4ca6-a283-663e28e694e9",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R3.2",
+    "text": "Ran the quarterly competitor and market share analysis presented to the CMO, drawing on regulator filings, panel data and internal churn figures.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "3a66b4e8-0752-4ca6-a283-663e28e694e9",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R3.3",
+    "text": "Wrote the business cases for 3 tariff launches, one of which added 400k net subscribers in its first two quarters.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "3a66b4e8-0752-4ca6-a283-663e28e694e9",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R3.4",
+    "text": "Automated the weekly pricing dashboard in SQL and Power BI, removing about 12 hours of manual work a week for the team.",
+    "kind": "employment",
+    "role": "R3",
+    "source": {
+     "rowId": "3a66b4e8-0752-4ca6-a283-663e28e694e9",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R4",
+    "text": "Analyst, Strategic Planning, Garanti BBVA, Istanbul, Turkey, 2014-08 to 2016-08",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "4c8552de-8c8e-4d47-923f-f081e85a5391",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R4.1",
+    "text": "Supported the annual strategic plan for the retail banking group: data gathering, branch network analysis and the financial model behind the 3 year targets.",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "4c8552de-8c8e-4d47-923f-f081e85a5391",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R4.2",
+    "text": "Prepared the monthly performance pack for the executive committee, covering 900 branches and 4 product lines.",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "4c8552de-8c8e-4d47-923f-f081e85a5391",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "R4.3",
+    "text": "Modelled the branch consolidation scenarios that led to 60 closures with a 2 percent deposit loss against a 5 percent planning assumption.",
+    "kind": "employment",
+    "role": "R4",
+    "source": {
+     "rowId": "4c8552de-8c8e-4d47-923f-f081e85a5391",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "E1",
+    "text": "MBA, Executive MBA, part time, Koc University, 2018-09 to 2020-06. Graduated with distinction. Capstone on subscription pricing in emerging markets.",
+    "kind": "education",
+    "role": null,
+    "source": {
+     "rowId": "c3a458dd-7e2a-407c-a713-4f23bcfa8c3c",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "E2",
+    "text": "BSc, Industrial Engineering, Bogazici University, 2010-09 to 2014-06",
+    "kind": "education",
+    "role": null,
+    "source": {
+     "rowId": "08b62401-f66c-4061-95a8-84c0a0abcc40",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S1",
+    "text": "M&A screening and investment cases (3 years; 14 targets screened, one USD 18M deal closed)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "594546e2-d71c-417b-b361-c9377d7b75b2",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S2",
+    "text": "Cost transformation programs (4 years; 3 year program across 4 business units, USD 9.2M a year)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "43192468-a064-4fde-b2e8-a1fe8f5470aa",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S3",
+    "text": "Board and executive reporting (6 years; Board presentations twice a year, executive committee packs)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "b7663513-747f-4709-8083-d74081b56540",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S4",
+    "text": "PMO leadership (4 years; Built the PMO at Arvento, stage gates and steering pack)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "030de56e-b524-4558-bd4f-29600b4329e1",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S5",
+    "text": "Financial modelling (10 years; Business cases at every role since Garanti)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "9bcb3535-f0fd-41c0-84e4-d1c8d5271163",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S6",
+    "text": "Stakeholder management (8 years; CEO, CFO, board and client executives)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "e6d24605-47ba-4a96-b618-81dae44c444c",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S7",
+    "text": "Presentation and storytelling (8 years; Client and board decks)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "b5a168f3-de2a-4d4d-a422-348a494d3085",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S8",
+    "text": "OKR frameworks (3 years; Company OKR system used by 38 teams)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "d441cb90-913a-4fd2-95ef-eaac348d1ea0",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S9",
+    "text": "Power BI and Excel (10 years; Dashboards and models at every role)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "2c13a312-516d-45d2-bf95-cc57b01eee73",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S10",
+    "text": "Annual planning and budgeting (8 years; Owns the planning cycle at Arvento)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "a966c3af-8d9a-4aad-b249-e76e224e93b5",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S11",
+    "text": "Pricing and elasticity analysis (5 years; Postpaid pricing model at Turkcell, conjoint study at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "dfa2ab28-ad20-4fab-94f7-4598fb6a2837",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S12",
+    "text": "SQL (6 years; Pricing dashboard and usage analysis at Turkcell)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "6eabb10d-68c3-4004-b3e7-1729d2d8303e",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S13",
+    "text": "Operating model design (3 years; Retail bank division redesign at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "ac8b89eb-f99d-4d81-8d9a-66b05fcdf644",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S14",
+    "text": "Corporate strategy (8 years; Strategy lead at Arvento, consultant at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "a4c6288c-ce72-4a29-9f1a-4bf6715ef0d8",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S15",
+    "text": "People management (5 years; Team of six at Arvento, teams of 2 to 4 at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "80a9169e-87be-4e55-bc7d-068f6b7dae50",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   },
+   {
+    "id": "S16",
+    "text": "Market sizing (6 years; USD 1.1B SME lending market study at Deloitte)",
+    "kind": "skill",
+    "role": null,
+    "source": {
+     "rowId": "be365c77-3b42-46af-807a-d4cfef7a7c62",
+     "origin": "user",
+     "hasEvidence": false
+    }
+   }
+  ],
+  "baseResume": {
+   "summary": null,
+   "experience": [
+    {
+     "id": "R1",
+     "heading": "Head of Strategy and PMO, Arvento, Istanbul, Turkey, 2022-03 to present",
+     "bullets": [
+      {
+       "id": "R1.1",
+       "text": "Lead the strategy and PMO function for a telematics company with USD 140M revenue, reporting to the CEO, with a team of four strategy managers and two analysts."
+      },
+      {
+       "id": "R1.2",
+       "text": "Designed and ran a 3 year cost transformation program across 4 business units that reduced operating cost by 11 percent (USD 9.2M a year) against a 12 percent target."
+      },
+      {
+       "id": "R1.3",
+       "text": "Own the annual planning cycle: targets, initiative portfolio and budget with product and finance, presented to the board twice a year."
+      },
+      {
+       "id": "R1.4",
+       "text": "Built the company OKR system from scratch in 2023, now used by 38 teams, with a quarterly review cadence chaired by the executive committee."
+      },
+      {
+       "id": "R1.5",
+       "text": "Screened 14 acquisition targets in fleet software and prepared the investment case for the one that closed in 2024 (USD 18M)."
+      },
+      {
+       "id": "R1.6",
+       "text": "Set up the PMO: stage gates, a single initiative register and a monthly steering pack that replaced 6 separate reporting formats."
+      }
+     ]
+    },
+    {
+     "id": "R2",
+     "heading": "Senior Strategy Consultant, Deloitte Turkey, Istanbul, Turkey, 2019-06 to 2022-02",
+     "bullets": [
+      {
+       "id": "R2.1",
+       "text": "Delivered 9 growth and operating model projects for clients in telecoms, retail banking and consumer goods, as workstream lead on the last 5."
+      },
+      {
+       "id": "R2.2",
+       "text": "Led the market entry study for a regional bank's SME lending product: sized a USD 1.1B addressable market and built the 5 year business case adopted by the client's board."
+      },
+      {
+       "id": "R2.3",
+       "text": "Redesigned the operating model of a 2,400 person retail bank division, cutting management layers from 7 to 5 and consolidating 11 regional units into 6."
+      },
+      {
+       "id": "R2.4",
+       "text": "Ran the pricing workstream of a telecom postpaid relaunch, with a conjoint study of 2,000 customers, that lifted ARPU 6 percent in the first year."
+      },
+      {
+       "id": "R2.5",
+       "text": "Managed teams of 2 to 4 consultants and coached 6 analysts through the firm's case review process."
+      }
+     ]
+    },
+    {
+     "id": "R3",
+     "heading": "Business Analyst, Pricing and Market Analysis, Turkcell, Istanbul, Turkey, 2016-09 to 2019-05",
+     "bullets": [
+      {
+       "id": "R3.1",
+       "text": "Built and maintained the pricing model for the consumer postpaid portfolio (12 plans, 20M subscribers), with monthly elasticity updates from usage data."
+      },
+      {
+       "id": "R3.2",
+       "text": "Ran the quarterly competitor and market share analysis presented to the CMO, drawing on regulator filings, panel data and internal churn figures."
+      },
+      {
+       "id": "R3.3",
+       "text": "Wrote the business cases for 3 tariff launches, one of which added 400k net subscribers in its first two quarters."
+      },
+      {
+       "id": "R3.4",
+       "text": "Automated the weekly pricing dashboard in SQL and Power BI, removing about 12 hours of manual work a week for the team."
+      }
+     ]
+    },
+    {
+     "id": "R4",
+     "heading": "Analyst, Strategic Planning, Garanti BBVA, Istanbul, Turkey, 2014-08 to 2016-08",
+     "bullets": [
+      {
+       "id": "R4.1",
+       "text": "Supported the annual strategic plan for the retail banking group: data gathering, branch network analysis and the financial model behind the 3 year targets."
+      },
+      {
+       "id": "R4.2",
+       "text": "Prepared the monthly performance pack for the executive committee, covering 900 branches and 4 product lines."
+      },
+      {
+       "id": "R4.3",
+       "text": "Modelled the branch consolidation scenarios that led to 60 closures with a 2 percent deposit loss against a 5 percent planning assumption."
+      }
+     ]
+    }
+   ],
+   "education": [
+    {
+     "id": "E1",
+     "text": "MBA, Executive MBA, part time, Koc University, 2018-09 to 2020-06. Graduated with distinction. Capstone on subscription pricing in emerging markets."
+    },
+    {
+     "id": "E2",
+     "text": "BSc, Industrial Engineering, Bogazici University, 2010-09 to 2014-06"
+    }
+   ],
+   "skills": [
+    {
+     "id": "S1",
+     "text": "M&A screening and investment cases"
+    },
+    {
+     "id": "S2",
+     "text": "Cost transformation programs"
+    },
+    {
+     "id": "S3",
+     "text": "Board and executive reporting"
+    },
+    {
+     "id": "S4",
+     "text": "PMO leadership"
+    },
+    {
+     "id": "S5",
+     "text": "Financial modelling"
+    },
+    {
+     "id": "S6",
+     "text": "Stakeholder management"
+    },
+    {
+     "id": "S7",
+     "text": "Presentation and storytelling"
+    },
+    {
+     "id": "S8",
+     "text": "OKR frameworks"
+    },
+    {
+     "id": "S9",
+     "text": "Power BI and Excel"
+    },
+    {
+     "id": "S10",
+     "text": "Annual planning and budgeting"
+    },
+    {
+     "id": "S11",
+     "text": "Pricing and elasticity analysis"
+    },
+    {
+     "id": "S12",
+     "text": "SQL"
+    },
+    {
+     "id": "S13",
+     "text": "Operating model design"
+    },
+    {
+     "id": "S14",
+     "text": "Corporate strategy"
+    },
+    {
+     "id": "S15",
+     "text": "People management"
+    },
+    {
+     "id": "S16",
+     "text": "Market sizing"
+    }
+   ]
+  },
+  "baseResumeHash": "38f12fd377428fe026ced1649083aadbb49d62bcdc867696d449645fd3061a54",
+  "baseResumeShapeHash": "38f12fd377428fe026ced1649083aadbb49d62bcdc867696d449645fd3061a54"
+ }
+}

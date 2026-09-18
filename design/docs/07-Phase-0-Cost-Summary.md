@@ -92,6 +92,24 @@ Read that 7.5 percent for what it is. It is not a quality measure and it is not 
 
 **The figure this section used to state, kept because it is what the stored rows carry until the restamp.** The held rate was about three in ten: 24 of 80 packets on the 80 job stratified sample of 18 September 2026, greenhouse 35, ashby 28, lever 13, gem 4, under rules 1 and 2 with the posting noun in claim position and the summary openers (D-023, D-024).
 
+**The r8 restamp, applied 19 September 2026 from merged code (D-036), and what it could not undo.**
+
+Before, r7: 82 ready, 12 held, 13 invalid. After, r8: 82 ready, 12 held, 13 invalid. **No stored row moved.** 94 rows were rewritten at `2026-09-18.r8` with 0 status changes; the 13 invalid ones could not be restamped at all.
+
+That last part is the finding, and it is not a good one. Under r8 every one of those 13 rows passes: 10 would be held and 3 ready. None of them can be promoted, because a packet that goes invalid loses its stored resume, and r7 cleared theirs yesterday. The demotion arrived a day after the rejection that destroyed the work.
+
+**Not one of the 13 is invalid for a fabricated value.** The user asked for the fabricated value on every still invalid packet to be named. There are none to name:
+
+| Revision | Rows | The finding that rejected them | Is it a fabrication |
+|---|---|---|---|
+| r6 | 3 | `value-not-in-cited`, `num:6` | No. That is the cited fact rule D-034 deleted. "6" is on the profile, so under the rule as it stands the value is supported |
+| r7 | 3 | `name-unknown`, `KPI` | No. A word read as a name by its form, which D-036 demoted to a hold |
+| r7 | 7 | `posting-word-unknown`: alignment, analytics, cross-team, execution, experience, members, professionals, relationships, roadmap | No. Ordinary English nouns the posting also uses, which D-036 demoted to a hold |
+
+Nine of those words are "alignment", "analytics", "cross-team", "execution", "experience", "members", "professionals", "relationships" and "roadmap". None is an invented metric, employer, product or qualification. They are the false positive class D-036 exists to stop, caught in the one day the level was hard.
+
+**Seven of the 13 carry a stored change set**, so their resume is rebuildable from the base plus that change set, deterministically. Six do not. Rebuilding them is a separate decision and is not taken here; the report refuses to promote a row whose resume it cannot see, which is the rule from review five finding 6 doing its job.
+
 **The stored packets were restamped under r7 on 18 September 2026, from merged code (D-034).** Before: 61 ready, 42 held, 4 invalid, of 107, all at r6, and the r6 replay reproduced that table exactly. After: 82 ready, 12 held, 13 invalid. 104 rows were written at `2026-09-18.r7`; 3 stayed at r6 because they are invalid with no resume to promote and there is nothing to restamp.
 
 The rows that moved, named:
@@ -109,8 +127,8 @@ Nine rows went from held to rejected and their stored resumes were cleared, whic
 
 | Held rate, 18 September 2026 | Packets |
 |---|---|
-| Stored packets restamped under r8 from merged code (D-036), name findings held rather than rejected | see the r8 table below |
-| Stored packets restamped under r7 from merged code (D-034) | 82 ready, 12 held, 13 invalid, of 107. The 12 are all the unrevalidatable summary. Superseded by r8 the same day |
+| Stored packets restamped under r8 from merged code (D-036) | 82 ready, 12 held, 13 invalid, of 107. No row moved; the 13 all pass under r8 and none can be promoted, because r7 cleared their resumes |
+| Stored packets restamped under r7 from merged code (D-034) | 82 ready, 12 held, 13 invalid, of 107. The 12 are all the unrevalidatable summary. Superseded by r8 the next day |
 | Fresh answers, 80 job cross family sample, the retained attempt as stored by the run, and re-read under the rules as they stand (D-029) | 54 ready, 24 held, 2 invalid, of 80 |
 | The same answers, last attempt only, what the scope table counted; the three that differ are held first answers kept over a rejected retry (D-029) | 54 ready, 21 held, 5 invalid, of 80 |
 | The same answers read under the rule before the narrowing | 21 ready, 54 held, 5 invalid, of 80 |

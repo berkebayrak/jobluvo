@@ -176,6 +176,9 @@ export const ACTIONABLE = new Set([
   "name appears in no confirmed fact",
   "word from the posting appears in no confirmed fact",
   "responsibility is not in the cited facts",
+  "tool is not in the cited facts",
+  "entity is on the profile but not in the cited facts",
+  "qualification appears in no confirmed fact",
   "no fact cited for this line",
   "cited fact does not exist",
 ]);

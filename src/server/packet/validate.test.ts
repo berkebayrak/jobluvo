@@ -184,9 +184,11 @@ describe("a value must be in a cited fact", () => {
     expect(review("Led the OKR system", ["R9.9"])).toEqual([
       expect.objectContaining({ message: "cited fact does not exist", value: "R9.9" }),
       expect.objectContaining({ message: "responsibility is not in the cited facts", value: "system", detail: "the cited facts name no object for it" }),
+      // OKR is on the profile; in a claim position with no real fact cited, the relationship is unsupported (review four, finding 6).
+      expect.objectContaining({ message: "entity is on the profile but not in the cited facts", value: "OKR" }),
     ]);
     expect(hard("Led the OKR system", ["R9.9"])).toEqual([]);
-    expect(review("Led the OKR system", []).map((f) => f.message)).toEqual(["no fact cited for this line", "responsibility is not in the cited facts"]);
+    expect(review("Led the OKR system", []).map((f) => f.message)).toEqual(["no fact cited for this line", "responsibility is not in the cited facts", "entity is on the profile but not in the cited facts"]);
     expect(review("Led the OKR system", ["R1.3"])).toEqual([]);
   });
   it("holds a new entity or responsibility for review, passes a rewording, and no longer reads a capitalised verb as a name", () => {

@@ -56,6 +56,7 @@ describe("signals", () => {
     // The object run ends at "and", so C++ is both the object and a form; .NET is a form; "services" is nothing on its own.
     expect(t("Built C++ and .NET services")).toEqual([
       ["C++", ["object", "form"]],
+      ["services", ["object"]],
       [".NET", ["form"]],
     ]);
     expect(t("Reported to the CMO at Arvento")).toEqual([
@@ -88,7 +89,8 @@ describe("signals", () => {
     // The summary's claims have no verb: "experience in", "experienced in" open a claim position, and so does the third person voice.
     const summaryPost = lemmasOf("governance, issue resolution, experience, leader, operations");
     const summaryPosting = (line: string) => entityTokens(line, summaryPost, profile).filter((x) => x.signals.includes("posting")).map((x) => x.token);
-    expect(summaryPosting("Strategy and PMO leader experienced in issue resolution and governance")).toEqual(["issue", "resolution"]);
+    // "and governance" is a second conjunct of the same claim position (review four, 5B).
+    expect(summaryPosting("Strategy and PMO leader experienced in issue resolution and governance")).toEqual(["issue", "resolution", "governance"]);
     expect(summaryPosting("Strategy and PMO leader with experience in governance")).toEqual(["governance"]);
     expect(entityTokens("Strategy and PMO leader who develops governance", summaryPost, profile).filter((x) => x.signals.includes("posting")).map((x) => [x.token, x.signals])).toEqual([["governance", ["object", "posting"]]]);
     // "leader" and "experience" themselves are the posting's vocabulary in a rewording, not claims; what the experience is in, is.
@@ -131,10 +133,41 @@ describe("findings", () => {
     expect(found("Own annual planning; present progress and recommendations to the board twice a year", "Own the annual planning cycle, presented to the board twice a year.")).toEqual([]);
   });
   it("checks entities against the whole profile and objects against the cited facts", () => {
-    // ARPU is on another fact of the profile: an entity the user owns anywhere is theirs to place, even as the object of "reported".
-    expect(found("Reported ARPU to the CEO", "Built dashboards in Excel")).toEqual([]);
+    // ARPU is on another fact of the profile, so it exists; as the object of "reported" under a fact that never names it, the relationship is
+    // unsupported (review four, finding 6). Outside a claim position it is the user's to place.
+    expect(found("Reported ARPU to the CEO", "Built dashboards in Excel")).toEqual([["ARPU", "responsibility is not in the cited facts", "the cited fact says dashboards"]]);
+    expect(found("Built dashboards in Excel, with ARPU as the headline", "Built dashboards in Excel")).toEqual([]);
     expect(found("Reported EBITDA to the CEO", "Built dashboards in Excel")).toEqual([["EBITDA", "name appears in no confirmed fact", "by its form"]]);
     // "workstream" is on the profile, in a fact this line does not cite: the responsibility is borrowed.
     expect(found("Led the pricing workstream", "Built dashboards in Excel")).toEqual([["workstream", "responsibility is not in the cited facts", "the cited fact says dashboards"]]);
+  });
+  it("review four, findings 5 and 6: a coordinated object, an instrument, a qualification, a global entity in a claim position, and capitalisation", () => {
+    const excel = "Built dashboards in Excel.";
+    const salesforcePosting = lemmasOf("Salesforce, recruitment systems");
+    // 5A: the tool after "using" is a claim position; a posting noun there is held, and so is a tool the cited fact does not name.
+    expect(found("Built dashboards using salesforce data", excel, salesforcePosting).map((f) => f[0])).toEqual(["salesforce"]);
+    expect(found("Built dashboards using Tableau", excel)).toEqual([["Tableau", "name appears in no confirmed fact", "capitalised"]]);
+    expect(found("Built dashboards using Power BI", excel)).toEqual([
+      ["BI", "tool is not in the cited facts", "the cited fact says dashboards"],
+      ["Power", "entity is on the profile but not in the cited facts", "the cited fact says dashboards"],
+    ]);
+    // 5B: every conjunct of a coordinated object is a claim.
+    expect(found("Built dashboards and recruitment systems", excel, salesforcePosting).map((f) => [f[0], f[1]]).sort()).toEqual([
+      ["recruitment", "word from the posting appears in no confirmed fact"],
+      // "systems" is a posting word on no fact of this profile; the first question answers before the second is asked.
+      ["systems", "word from the posting appears in no confirmed fact"],
+    ]);
+    expect(found("Built dashboards and reports", excel)).toEqual([]);
+    // 5C: a qualification word is a claim wherever it stands.
+    expect(found("Certified in Excel", excel)).toEqual([["Certified", "qualification appears in no confirmed fact", "a certification or licence is a claim wherever it stands"]]);
+    expect(found("Used Excel", excel)).toEqual([]);
+    // 6: an entity the profile has, in a claim position under a fact that does not name it, is held; capitalisation changes nothing.
+    expect(found("Built dashboards in Salesforce", excel)).toEqual([["Salesforce", "tool is not in the cited facts", "the cited fact says Excel"]]);
+    expect(found("Built dashboards in Excel", excel)).toEqual([]);
+    expect(found("Led recruitment", excel).map((f) => [f[0], f[1]])).toEqual([["recruitment", "responsibility is not in the cited facts"]]);
+    expect(found("Led RECRUITMENT", excel).map((f) => [f[0], f[1]])).toEqual([["RECRUITMENT", "responsibility is not in the cited facts"]]);
+    // "with" opens an instrument for an entity only: a rewording after it passes, a named tool the fact lacks does not.
+    expect(found("Built dashboards with attention to detail", excel)).toEqual([]);
+    expect(found("Built dashboards with Salesforce", excel)).toEqual([["Salesforce", "entity is on the profile but not in the cited facts", "the cited fact says Excel"]]);
   });
 });

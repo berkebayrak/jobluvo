@@ -151,7 +151,9 @@ added that is not on your profile."
 - Open pull requests with `gh pr create`. On Windows `gh` is not on the bash PATH; use
   `"C:\Program Files\GitHub CLI\gh.exe"` or run it from PowerShell.
 - Before every push, all four must pass: `npx tsc --noEmit`, `npx eslint .`, `npm test`
-  and `npm run build`. Do not push a red build.
+  and `npm run build`. Do not push a red build. Run them with `npm run check`, which
+  refuses a tree that is not clean, so the result describes the commit and not something
+  half saved, and stops at the first non zero exit instead of reading past it.
 - Ask before adding a dependency. Say what it buys and what it costs.
 - Ask before changing a design token. Tokens come from the handoff; if one is wrong, fix
   it in `.claude/skills/jobluvo-design/tokens/` too so the design system and the code
@@ -167,6 +169,7 @@ npm run build        # production build
 npx tsc --noEmit     # typecheck
 npx eslint .         # lint
 npm test             # unit tests (vitest)
+npm run check        # the four checks on the committed tree, stopping on the first failure
 npm run seed         # demo user and the source registry, verifies each feed first
 npm run ingest       # one ingest batch against the live feeds, prints a line per source
 npm run db:generate  # migration from src/db/schema.ts

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "check": "node --import tsx scripts/check.ts",
     "seed": "node --env-file=.env.local --import tsx scripts/seed.ts",
     "ingest": "node --env-file=.env.local --import tsx scripts/ingest.ts",
     "db:generate": "drizzle-kit generate",

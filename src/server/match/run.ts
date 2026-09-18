@@ -64,6 +64,7 @@ export async function loadScoringJobs(db: DbPool | Tx, ids: string[]): Promise<M
       compCurrency: jobs.compCurrency,
       compPeriod: jobs.compPeriod,
       descriptionCore: jobs.descriptionCore,
+      contentHash: jobs.contentHash,
     })
     .from(jobs)
     .where(inArray(jobs.id, ids));

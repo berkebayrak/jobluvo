@@ -2,9 +2,10 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dbPool, type Tx } from "@/db/client";
 import { jobs, packets, sources, users, type PacketFinding, type ResumeDocument } from "@/db/schema";
-import { applyReplay, replayDecision, sameDocument, unverifiable, type ReplayRow } from "./replay";
+import { applyReplay, replayDecision, sameDocument, summaryNotRevalidated, unverifiable, type ReplayRow } from "./replay";
 import { resumeHash } from "./resume";
 import { consumableResume } from "./run";
+import { VALIDATOR_REVISION } from "./validate";
 
 /*
  * The replay decision, the five ways the first restamp went wrong, and
@@ -29,18 +30,19 @@ const docTwoSkills: ResumeDocument = { ...doc, skills: [{ id: "S1", text: "Finan
 /** A resume that is not the base plus the changes: a bullet the change set does not describe. */
 const drifted: ResumeDocument = { ...doc, experience: [{ ...doc.experience[0], bullets: [{ id: "R1.1", text: "Cut cost 40 percent." }] }] };
 
-const row = (over: Partial<ReplayRow>): ReplayRow => ({ id: "p", status: "ready", resume: doc, resumeHash: resumeHash(doc), findings: [], updatedAt: "t", ...over });
+const row = (over: Partial<ReplayRow>): ReplayRow => ({ id: "p", status: "ready", resume: doc, resumeHash: resumeHash(doc), findings: [], changeSet: null, updatedAt: "t", ...over });
+const changeSet = { summary: doc.summary, summaryFacts: ["R1.1"], changes: [{ bullet: "R1.1", text: "Cut cost 11 percent.", facts: ["R1.1"] }], skills: ["S1"] };
 
 describe("replay decision", () => {
   it("derives the status from the retained summary findings as well as the replayed ones", () => {
-    // Held by its summary only, bullets clean: stays held, resume kept.
+    // Held by its summary only, bullets clean: stays held, resume kept; a legacy row with a summary also carries the coverage finding.
     const held = replayDecision(row({ status: "needs_review", findings: [summaryReview] }), [], doc);
-    expect(held).toMatchObject({ kind: "restamp", status: "needs_review", resume: doc });
-    expect(held.kind === "restamp" && held.findings).toEqual([summaryReview]);
+    expect(held).toMatchObject({ kind: "restamp", status: "needs_review", resume: doc, coverage: "bullets" });
+    expect(held.kind === "restamp" && held.findings).toEqual([summaryReview, summaryNotRevalidated()]);
     // Rejected by its summary only: stays invalid, no resume.
-    expect(replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [summaryHard] }), [], null)).toEqual({ kind: "restamp", status: "invalid", findings: [summaryHard], resume: null });
-    // A soft summary finding travels and decides nothing.
-    expect(replayDecision(row({ findings: [summarySoft] }), [], doc)).toMatchObject({ kind: "restamp", status: "ready", findings: [summarySoft], resume: doc });
+    expect(replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [summaryHard] }), [], null)).toEqual({ kind: "restamp", status: "invalid", findings: [summaryHard], resume: null, coverage: "bullets" });
+    // A soft summary finding travels and decides nothing; the legacy summary itself holds the row, since the replay could not read it again.
+    expect(replayDecision(row({ findings: [summarySoft] }), [], doc)).toMatchObject({ kind: "restamp", status: "needs_review", findings: [summarySoft, summaryNotRevalidated()], resume: doc });
   });
 
   it("keeps only the summary's old findings; bullet findings are the replay's", () => {
@@ -49,18 +51,35 @@ describe("replay decision", () => {
     expect(d.kind === "restamp" && d.findings).toEqual([bulletHard, summarySoft]);
   });
 
+  it("names its coverage: a row with a change set is replayed whole and retains nothing, a legacy row with a summary is held on it, one without is fully covered", () => {
+    // Full coverage: the summary's old findings are not retained; what the replay found over the whole change set is the row's findings.
+    expect(replayDecision(row({ changeSet, findings: [summaryReview] }), [], doc)).toEqual({ kind: "restamp", status: "ready", findings: [], resume: doc, coverage: "full" });
+    expect(replayDecision(row({ changeSet, findings: [] }), [summaryHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [summaryHard], resume: null, coverage: "full" });
+    // Bullets only, with a summary: cannot be stamped ready, held with the finding that says why, the old summary findings kept.
+    expect(replayDecision(row({ findings: [summarySoft] }), [], doc)).toEqual({
+      kind: "restamp",
+      status: "needs_review",
+      findings: [summarySoft, summaryNotRevalidated()],
+      resume: doc,
+      coverage: "bullets",
+    });
+    // Bullets only, no summary: nothing was left unread.
+    const noSummary = { ...doc, summary: null };
+    expect(replayDecision(row({ resume: noSummary, resumeHash: resumeHash(noSummary) }), [], noSummary)).toEqual({ kind: "restamp", status: "ready", findings: [], resume: noSummary, coverage: "bullets" });
+  });
+
   it("does not replay a failed packet: an empty change set is no answer, not a clean one", () => {
     expect(replayDecision(row({ status: "failed", resume: null, resumeHash: null }), [], null)).toEqual({ kind: "no_candidate" });
   });
 
   it("does not promote a packet that passes today but has no resume stored", () => {
     const d = replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] }), [], null);
-    expect(d).toEqual({ kind: "no_resume", would: "ready", findings: [] });
+    expect(d).toEqual({ kind: "no_resume", would: "ready", findings: [], coverage: "bullets" });
   });
 
   it("revokes a ready or held row whose stored resume is not the base plus the stored changes, and cannot promote an invalid one", () => {
     // A ready row on a document nothing can verify: revoked, invalid, the resume dropped, a hard finding that says why.
-    expect(replayDecision(row({ resume: drifted }), [], doc)).toEqual({ kind: "revoke", status: "invalid", would: "ready", findings: [unverifiable()], resume: null });
+    expect(replayDecision(row({ resume: drifted, changeSet }), [], doc)).toEqual({ kind: "revoke", status: "invalid", would: "ready", findings: [unverifiable()], resume: null, coverage: "full" });
     // A held row with no resume at all: the same.
     expect(replayDecision(row({ status: "needs_review", resume: null, resumeHash: null, findings: [summaryReview] }), [], null)).toEqual({
       kind: "revoke",
@@ -68,22 +87,25 @@ describe("replay decision", () => {
       would: "needs_review",
       findings: [summaryReview, unverifiable()],
       resume: null,
+      coverage: "bullets",
     });
     // An invalid row that would pass today has nothing to revoke and nothing to promote.
-    expect(replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] }), [], null)).toEqual({ kind: "no_resume", would: "ready", findings: [] });
+    expect(replayDecision(row({ status: "invalid", resume: null, resumeHash: null, findings: [bulletHard] }), [], null)).toEqual({ kind: "no_resume", would: "ready", findings: [], coverage: "bullets" });
   });
 
   it("needs the stored resume to be the base plus the stored changes, up to skill order", () => {
     // The stored resume is not what the changes describe: no candidate to restamp.
     expect(replayDecision(row({ resume: drifted }), [], doc).kind).toBe("revoke");
-    // The model reordered the skills and the change set does not carry that: still the candidate.
-    expect(replayDecision(row({ resume: reordered }), [], docTwoSkills)).toMatchObject({ kind: "restamp", status: "ready", resume: reordered });
+    // The model reordered the skills and a legacy change set does not carry that: still the candidate. No summary, so fully covered.
+    const reorderedNoSummary = { ...reordered, summary: null };
+    expect(replayDecision(row({ resume: reorderedNoSummary }), [], { ...docTwoSkills, summary: null })).toMatchObject({ kind: "restamp", status: "ready", resume: reorderedNoSummary });
     expect(sameDocument(reordered, docTwoSkills)).toBe(true);
     expect(sameDocument(drifted, doc)).toBe(false);
   });
 
   it("stamps invalid whatever the resume, and drops it", () => {
-    expect(replayDecision(row({}), [bulletHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard], resume: null });
+    expect(replayDecision(row({}), [bulletHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard, summaryNotRevalidated()], resume: null, coverage: "bullets" });
+    expect(replayDecision(row({ changeSet }), [bulletHard], doc)).toEqual({ kind: "restamp", status: "invalid", findings: [bulletHard], resume: null, coverage: "full" });
   });
 });
 
@@ -135,7 +157,7 @@ async function withPacket(fn: (tx: Tx, id: string) => Promise<void>) {
 
 const read = async (tx: Tx, id: string): Promise<ReplayRow> => {
   const [r] = await tx
-    .select({ id: packets.id, status: packets.status, resume: packets.resume, resumeHash: packets.resumeHash, findings: packets.findings, updatedAt: sql<string>`${packets.updatedAt}::text` })
+    .select({ id: packets.id, status: packets.status, resume: packets.resume, resumeHash: packets.resumeHash, findings: packets.findings, changeSet: packets.changeSet, updatedAt: sql<string>`${packets.updatedAt}::text` })
     .from(packets)
     .where(eq(packets.id, id));
   return r;
@@ -163,7 +185,9 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(after.status).toBe("invalid");
       expect(after.resume).toBeNull();
       expect(after.resumeHash).toBeNull();
-      expect(after.findings).toEqual([bulletHard, summarySoft]);
+      expect(after.findings).toEqual([bulletHard, summarySoft, summaryNotRevalidated()]);
+      const [stamped] = await tx.select({ validatorRev: packets.validatorRev }).from(packets).where(eq(packets.id, id));
+      expect(stamped.validatorRev).toBe(VALIDATOR_REVISION);
     });
   });
 
@@ -195,7 +219,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       expect(after.status).toBe("invalid");
       expect(after.resume).toBeNull();
       expect(after.resumeHash).toBeNull();
-      expect(after.findings).toEqual([summarySoft, unverifiable()]);
+      expect(after.findings).toEqual([summarySoft, summaryNotRevalidated(), unverifiable()]);
     });
   });
 
@@ -204,7 +228,7 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       const r = await read(tx, id);
       const result = await applyReplay(tx, [
         { row: r, decision: { kind: "no_candidate" } },
-        { row: r, decision: { kind: "no_resume", would: "ready", findings: [] } },
+        { row: r, decision: { kind: "no_resume", would: "ready", findings: [], coverage: "bullets" } },
       ]);
       expect(result).toEqual({ restamped: 0, changedStatus: 0, revoked: 0, stale: 0, untouched: 2 });
       expect((await read(tx, id)).status).toBe("ready");

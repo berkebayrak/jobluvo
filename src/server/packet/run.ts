@@ -1,6 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
-import { costEvents, jobs, packets, type PacketFinding, type ResumeDocument } from "@/db/schema";
+import { costEvents, packets, type PacketFinding, type ResumeDocument } from "@/db/schema";
 import { env } from "@/lib/env";
 import { resumeFacts, type ResumeFacts } from "@/server/match/profile";
 import { loadScoringJobs } from "@/server/match/run";
@@ -8,7 +8,7 @@ import type { ScoringJob } from "@/server/match/score";
 import { applyChanges, applyDocument, baseResume, factEntries, resumeHash, type Applied, type ChangeSet } from "./resume";
 import { parseChanges, parseDocument, tailorCall, TailorError, type TailorMode, type TailorResult } from "./tailor";
 import { lemmasOf } from "./entities";
-import { actionable, factSet, isHard, needsReview, validateChangeSet } from "./validate";
+import { actionable, factSet, isHard, needsReview, validateChangeSet, VALIDATOR_REVISION } from "./validate";
 
 /*
  * One packet: facts and posting in, a validated tailored resume out, or an
@@ -19,8 +19,12 @@ import { actionable, factSet, isHard, needsReview, validateChangeSet } from "./v
  * product path (D-003).
  *
  * Each attempt owns its candidate, its findings and its outcome. The packet
- * is the last attempt, and a resume is stored only when that attempt parsed
- * and passed the validator. Nothing from a rejected attempt is reused: a
+ * is the retained attempt, usually the last, and it stores that attempt's
+ * complete change set, summary and skill order included, its number and
+ * the validator revision it passed or failed under, so a replay can read
+ * the whole candidate again and every report can say which attempt it
+ * describes (review four, findings 2 and 13). A resume is stored only when
+ * that attempt parsed and passed the validator. Nothing from a rejected attempt is reused: a
  * rejected candidate cannot become ready because the retry failed to parse,
  * timed out or came back incomplete. The earlier attempts stay in the error
  * text for diagnostics.
@@ -78,10 +82,14 @@ export interface TailorOutcome {
   status: AttemptOutcome;
   mode: TailorMode;
   attempts: number;
-  /** Every attempt in order; `status`, `findings`, `changes` and `resume` are the last one's. */
+  /** Every attempt in order; `status`, `findings`, `changes` and `resume` are the retained one's. */
   attemptLog: TailorAttempt[];
   /** Each attempt's parsed change set, null where it did not parse, aligned with `attemptLog`. In memory only, for a measurement that re-validates the same answers under another rule. */
   changeSets: (ChangeSet | null)[];
+  /** The index of the retained attempt in `attemptLog` and `changeSets`: the last, unless a held answer's retry came back rejected or failed. */
+  selected: number;
+  /** The retained attempt's complete change set, what the packet stores; null when it did not parse. */
+  changeSet: ChangeSet | null;
   /** The job's posting lemmas the validator saw. */
   posting: Set<string>;
   findings: PacketFinding[];
@@ -153,8 +161,8 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
   const entries = factEntries(facts);
   const base = baseResume(facts);
   const posting = lemmasOf(`${job.title}\n${job.descriptionCore}`);
-  const [jobRow] = await db.select({ contentHash: jobs.contentHash }).from(jobs).where(eq(jobs.id, job.id));
-  const contentHash = jobRow?.contentHash ?? "";
+  // The revision stamped on the packet is the one the posting text was read with, never a second read that ingestion may have moved on.
+  const contentHash = job.contentHash;
   // A validator that throws on the facts is a code defect, and the packet records it as failed with no call made; a run that
   // aborts here would leave no row at all, a hole the cost and citation reports cannot see.
   let set: ReturnType<typeof factSet> | null = null;
@@ -243,6 +251,8 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     attempts: log.filter((a) => a.n > 0).length,
     attemptLog: log.map((a) => ({ n: a.n, outcome: a.outcome, findings: a.findings, changes: a.candidate?.applied.diff.length ?? 0, error: a.error })),
     changeSets: log.map((a) => a.candidate?.cs ?? null),
+    selected: log.indexOf(final),
+    changeSet: final.candidate?.cs ?? null,
     posting,
     findings: final.findings,
     changes: final.candidate?.applied.diff.length ?? 0,
@@ -265,6 +275,9 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
         resume,
         changes,
         findings: final.findings,
+        changeSet: final.candidate?.cs ?? null,
+        attempt: final.n > 0 ? final.n : null,
+        validatorRev: VALIDATOR_REVISION,
         factsHash: facts.factsHash,
         contentHash,
         resumeHash: resume ? resumeHash(resume) : null,
@@ -286,6 +299,9 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           resume,
           changes,
           findings: final.findings,
+          changeSet: final.candidate?.cs ?? null,
+          attempt: final.n > 0 ? final.n : null,
+          validatorRev: VALIDATOR_REVISION,
           factsHash: facts.factsHash,
           contentHash,
           resumeHash: resume ? resumeHash(resume) : null,

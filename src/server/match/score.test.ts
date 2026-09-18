@@ -17,6 +17,7 @@ const job: ScoringJob = {
   compCurrency: "USD",
   compPeriod: "year",
   descriptionCore: "Own the planning cadence.",
+  contentHash: "h",
 };
 
 describe("prompt order", () => {

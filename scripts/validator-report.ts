@@ -3,7 +3,7 @@ import { dbPool } from "@/db/client";
 import { jobs, packets, profileFacts, type PacketFinding } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
 import { lemmasOf } from "@/server/packet/entities";
-import { applyReplay, replayDecision, sameDocument, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
+import { applyReplay, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
 
@@ -63,7 +63,7 @@ async function candidateProfiles(db: ReturnType<typeof dbPool>, userId: string):
 /** The column a packet lands in: the status it would be stamped with, or why it is not stamped. */
 function outcomeOf(d: ReplayDecision | "excluded"): string {
   if (d === "excluded") return "excluded, no profile reproduces the hash";
-  if (d.kind === "restamp") return d.status;
+  if (d.kind === "restamp") return d.coverage === "full" ? d.status : `${d.status}, bullets only`;
   if (d.kind === "no_candidate") return "not replayed, failed, no candidate";
   if (d.kind === "revoke") return `revoked, would pass as ${d.would} but the stored resume is not the base plus the stored changes`;
   return `not promoted, passes as ${d.would} but no resume stored`;
@@ -82,6 +82,9 @@ async function main() {
       resumeHash: packets.resumeHash,
       changes: packets.changes,
       findings: packets.findings,
+      changeSet: packets.changeSet,
+      attempt: packets.attempt,
+      validatorRev: packets.validatorRev,
       factsHash: packets.factsHash,
       error: packets.error,
       updatedAt: sql<string>`${packets.updatedAt}::text`,
@@ -99,7 +102,7 @@ async function main() {
   for (const [userId, ps] of byUser) {
     const candidates = await candidateProfiles(db, userId);
     for (const p of ps) {
-      const row: ReplayRow = { id: p.id, status: p.status, resume: p.resume, resumeHash: p.resumeHash, findings: p.findings, updatedAt: p.updatedAt };
+      const row: ReplayRow = { id: p.id, status: p.status, resume: p.resume, resumeHash: p.resumeHash, findings: p.findings, changeSet: p.changeSet, updatedAt: p.updatedAt };
       const match = candidates.find((c) => c.facts.factsHash === p.factsHash);
       if (!match) {
         perPacket.push({ row, run: p.run ?? "product", status: p.status, edits: p.changes.length, decision: "excluded", findings: p.findings, outcome: outcomeOf("excluded"), hashHolds: null, rebuilds: null });
@@ -109,9 +112,11 @@ async function main() {
       const entries = factEntries(match.facts);
       const set = factSet(entries);
       const base = baseResume(match.facts);
-      const replayed = validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set, lemmasOf(`${p.title}\n${p.posting ?? ""}`));
-      // The candidate the stored changes describe: the base plus the changes, with the summary the stored resume carries. The decision stamps ready only a resume that is this document.
-      const candidate = p.resume ? applyChanges(base, { summary: p.resume.summary, summaryFacts: [], changes: p.changes, skills: [] }).resume : null;
+      // A row with its change set is replayed whole, summary and skill order included; a legacy row has its bullets replayed and its
+      // summary carried as the stored resume has it, and the decision names that coverage (review four, finding 2).
+      const posting = lemmasOf(`${p.title}\n${p.posting ?? ""}`);
+      const replayed = p.changeSet ? validateChangeSet(p.changeSet, base, set, posting) : validateChangeSet({ summary: null, summaryFacts: [], changes: p.changes, skills: [] }, base, set, posting);
+      const candidate = p.changeSet ? applyChanges(base, p.changeSet).resume : p.resume ? applyChanges(base, { summary: p.resume.summary, summaryFacts: [], changes: p.changes, skills: [] }).resume : null;
       const decision = replayDecision(row, replayed, candidate);
       const findings = decision.kind === "no_candidate" ? p.findings : decision.findings;
       const hashHolds = p.resume ? resumeHash(p.resume) === p.resumeHash : null;
@@ -120,6 +125,9 @@ async function main() {
     }
   }
   const replayed = perPacket.filter((p) => p.decision !== "excluded");
+  const full = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind !== "no_candidate" && p.decision.coverage === "full").length;
+  const bulletsOnly = replayed.filter((p) => p.decision !== "excluded" && p.decision.kind !== "no_candidate" && p.decision.coverage === "bullets").length;
+  console.log(`coverage: ${full} packets replayed whole from their stored change set, ${bulletsOnly} bullets only (stored before change sets were kept; a summary on such a row is held, not stamped ready)`);
 
   if (apply) {
     const result = await applyReplay(
@@ -157,12 +165,16 @@ async function main() {
   console.log(
     `stamped: ${stamped("ready")} ready, ${stamped("needs_review")} held for review, ${stamped("invalid")} invalid, of ${withCandidate.length} with a candidate; held is ${withCandidate.length ? ((100 * stamped("needs_review")) / withCandidate.length).toFixed(1) : "0"} percent of them`,
   );
+  // Counted from the decision's status, never from the outcome label, which also names the coverage.
+  const stampedStatus = (p: (typeof perPacket)[number]) => (p.decision !== "excluded" && (p.decision.kind === "restamp" || p.decision.kind === "revoke") ? p.decision.status : null);
   const readyToday = replayed.filter((p) => p.status === "ready");
-  const heldOfReady = readyToday.filter((p) => p.outcome === "needs_review").length;
-  const invalidOfReady = readyToday.filter((p) => p.outcome === "invalid").length;
+  const heldOfReady = readyToday.filter((p) => stampedStatus(p) === "needs_review").length;
+  const invalidOfReady = readyToday.filter((p) => stampedStatus(p) === "invalid").length;
+  const heldByCoverage = readyToday.filter((p) => stampedStatus(p) === "needs_review" && p.findings.some((f) => f.message === SUMMARY_NOT_REVALIDATED)).length;
   console.log(
     `of ${readyToday.length} packets ready today: ${heldOfReady} would be held for review (${readyToday.length ? ((100 * heldOfReady) / readyToday.length).toFixed(1) : "0"} percent), ${invalidOfReady} would be invalid (${readyToday.length ? ((100 * invalidOfReady) / readyToday.length).toFixed(1) : "0"} percent)`,
   );
+  console.log(`of those held, ${heldByCoverage} only because their summary could not be revalidated (no stored change set)`);
 
   const by = (p: (typeof perPacket)[number], l: Level) => p.findings.filter((f) => f.level === l);
   const hard = replayed.flatMap((p) => by(p, "hard"));
@@ -175,27 +187,32 @@ async function main() {
   console.table(count(hard.filter((f) => f.message.startsWith("value does not mean")).map((f) => f.message.replace(/^.*?: /, ""))));
 
   console.log("\nreview findings by reason, edits");
-  const reviewKind = (f: PacketFinding) =>
-    f.message.startsWith("name")
-      ? `name, ${f.detail ?? ""}`
-      : f.message.startsWith("word from the posting")
-        ? "posting word"
-        : f.message.startsWith("responsibility")
-          ? "responsibility"
-          : f.message.startsWith("the fact and the line")
-        ? "metric words differ"
-        : f.message.startsWith("a number phrase")
-          ? "number phrase unreadable, line"
-          : f.message.startsWith("value could not be checked")
-            ? "number phrase unreadable, cited fact"
-            : f.message.startsWith("cited fact does not exist")
-              ? "cited fact does not exist"
-              : f.message.startsWith("no fact cited")
-                ? "no fact cited"
-                : "metric unreadable";
+  // Every review message the validator can write, named. The last branch used to be a
+  // fallback, so each reason added since (the three entity rules, the coverage finding)
+  // was counted as "metric unreadable" and no bucket ever read wrong enough to notice.
+  // An unnamed message now says so and carries its own text (review four, finding 2).
+  const REVIEW_KINDS = new Map<string, string>([
+    ["word from the posting", "posting word"],
+    ["responsibility", "responsibility"],
+    ["tool is not in the cited facts", "tool"],
+    ["entity is on the profile but not", "entity not in the cited facts"],
+    ["qualification appears in no confirmed fact", "qualification"],
+    ["the fact and the line", "metric words differ"],
+    ["value matched on kind, unit and role only", "metric unreadable"],
+    ["a number phrase", "number phrase unreadable, line"],
+    ["value could not be checked", "number phrase unreadable, cited fact"],
+    ["cited fact does not exist", "cited fact does not exist"],
+    ["no fact cited", "no fact cited"],
+    [SUMMARY_NOT_REVALIDATED, "summary not revalidated"],
+  ]);
+  const reviewKind = (f: PacketFinding) => {
+    if (f.message.startsWith("name")) return `name, ${f.detail ?? ""}`;
+    for (const [prefix, kind] of REVIEW_KINDS) if (f.message.startsWith(prefix)) return kind;
+    return `unclassified: ${f.message}`;
+  };
   console.table(count(review.map(reviewKind)));
   console.log("packets held for review by the reasons that hold them");
-  console.table(count(replayed.filter((p) => p.outcome === "needs_review").map((p) => [...new Set(by(p, "review").map(reviewKind))].sort().join(" + "))));
+  console.table(count(replayed.filter((p) => stampedStatus(p) === "needs_review").map((p) => [...new Set(by(p, "review").map(reviewKind))].sort().join(" + "))));
 
   console.log("\nsoft findings by reason, edits");
   console.table(count(soft.map((f) => f.message)));

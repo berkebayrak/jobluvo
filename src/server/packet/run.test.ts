@@ -7,6 +7,7 @@ import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { resumeFacts } from "@/server/match/profile";
 import { unknownCostStats } from "@/server/match/report";
 import { consumableResume, ERROR_STORE, tailorJob } from "./run";
+import { VALIDATOR_REVISION } from "./validate";
 import * as tailor from "./tailor";
 import * as validate from "./validate";
 
@@ -92,6 +93,7 @@ async function withFixture(fn: (tx: Tx, userId: string, job: ScoringJob) => Prom
         compCurrency: null,
         compPeriod: "unknown",
         descriptionCore: "Own planning.",
+        contentHash: "hash-j",
       };
       await fn(tx, user.id, job);
       throw new Rollback();
@@ -149,6 +151,26 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
         { run: "test", kind: "tailor" },
         { run: "test", kind: "tailor" },
       ]);
+    });
+  });
+
+  it("stores the retained attempt's complete change set, its number and the validator revision; a held answer kept over a rejected retry is attempt 1", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      const held = { bullet: "R1.1", text: "Ran a 3 year program with KPI reporting, cutting cost 11 percent.", facts: ["R1.1"] };
+      call()
+        .mockResolvedValueOnce(answer([held], "Strategy lead who cuts cost.", ["R1.1"]))
+        .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Cut cost 14 percent.", facts: ["R1.1"] }]));
+      const out = await tailorJob(tx, facts, job);
+      expect(out.status).toBe("needs_review");
+      expect(out.attempts).toBe(2);
+      expect(out.selected).toBe(0);
+      expect(out.changeSet).toEqual({ summary: "Strategy lead who cuts cost.", summaryFacts: ["R1.1"], changes: [held], skills: [] });
+      const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(p.attempt).toBe(1);
+      expect(p.changeSet).toEqual(out.changeSet);
+      expect(p.validatorRev).toBe(VALIDATOR_REVISION);
+      expect(p.contentHash).toBe("hash-j");
     });
   });
 

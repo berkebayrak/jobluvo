@@ -138,6 +138,85 @@ describe("what a retry did to the answer before it", () => {
     expect(c.dropped).toEqual([]);
   });
 
+  /*
+   * Review five's finding 8: three ways the previous answer lost work that the
+   * classification did not see, because it read the shape of a change set
+   * rather than what the change set does to the document. All three were
+   * reproduced against this module before the rule below was written.
+   */
+
+  it("a tailored summary the retry does not repeat is a dropped line, counted with the rest and put back", () => {
+    const withSummary = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent." }], "Strategy lead who cut cost 14 percent.");
+    const retry = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent." }]);
+    const c = classifyRetry(BASE, withSummary, retry, [hard("R1.1")]);
+    expect(c.dropped).toEqual(["summary"]);
+    expect(c.of).toBe(2);
+    expect(c.clean).toEqual(["summary"]);
+    const merged = mergeRetry(withSummary, retry, c);
+    expect(merged.summary).toBe("Strategy lead who cut cost 14 percent.");
+    expect(merged.summaryFacts).toEqual(["R1"]);
+    // The retry's own line still wins on the line both answers edited.
+    expect(merged.changes.find((x) => x.bullet === "R1.1")!.text).toBe("Led a 3 year cost program that cut cost 11 percent.");
+    expect(describeRetry(c)).toBe("the retry dropped 1 of 2 edited lines; 1 line the validator had not objected to was put back from the answer before it, the summary among them");
+  });
+
+  it("a summary the validator objected to is not put back, and the description does not claim it was", () => {
+    const withSummary = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent." }], "Strategy lead who cut cost 40 percent.");
+    const retry = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent." }]);
+    const c = classifyRetry(BASE, withSummary, retry, [hard("summary")]);
+    expect(c.dropped).toEqual(["summary"]);
+    expect(c.clean).toEqual([]);
+    expect(mergeRetry(withSummary, retry, c).summary).toBeNull();
+    // Two lines edited, R1.1 and the summary; the summary is the one dropped, and no clause claims it came back.
+    expect(c.of).toBe(2);
+    expect(describeRetry(c)).toBe("the retry dropped 1 of 2 edited lines");
+  });
+
+  it("the retry's own summary wins where both answers set one", () => {
+    const withSummary = cs([], "Strategy lead who cut cost 14 percent.");
+    const retry = cs([], "Strategy lead who cut cost 11 percent.");
+    const c = classifyRetry(BASE, withSummary, retry, [hard("summary")]);
+    expect(c.dropped).toEqual([]);
+    expect(mergeRetry(withSummary, retry, c).summary).toBe("Strategy lead who cut cost 11 percent.");
+  });
+
+  it("a line the retry rewrote to the base text is dropped and put back, not refused because an entry for it exists", () => {
+    const first = cs([
+      { bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent." },
+      { bullet: "R1.2", text: "Own the annual planning cycle end to end." },
+    ]);
+    // The retry returns the base text for R1.2 rather than omitting it, which is not an edit.
+    const retry = cs([
+      { bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent." },
+      { bullet: "R1.2", text: "Own the annual planning cycle." },
+    ]);
+    const c = classifyRetry(BASE, first, retry, [hard("R1.1")]);
+    expect(c.dropped).toEqual(["R1.2"]);
+    expect(c.clean).toEqual(["R1.2"]);
+    const merged = mergeRetry(first, retry, c);
+    // One entry for R1.2, and it is the previous answer's line: the description's claim is now true of the merge.
+    expect(merged.changes.filter((x) => x.bullet === "R1.2")).toHaveLength(1);
+    expect(merged.changes.find((x) => x.bullet === "R1.2")!.text).toBe("Own the annual planning cycle end to end.");
+    expect(describeRetry(c)).toBe("the retry dropped 1 of 2 edited lines; 1 line the validator had not objected to was put back from the answer before it");
+  });
+
+  it("a skill order the retry replaced with the base order is dropped and put back, not only one it left empty", () => {
+    const withSkills = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent." }], null, ["S2", "S1"]);
+    const retry = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent." }], null, ["S1", "S2"]);
+    const c = classifyRetry(BASE, withSkills, retry, [hard("R1.1")]);
+    expect(c.droppedSkillOrder).toBe(true);
+    expect(mergeRetry(withSkills, retry, c).skills).toEqual(["S2", "S1"]);
+    expect(describeRetry(c)).toBe("the retry kept every edited line, substituted; the skill order was dropped and put back");
+  });
+
+  it("a skill order the retry changed to a third order is the retry's own, and is not put back", () => {
+    const withSkills = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent." }], null, ["S2", "S1"]);
+    const retry = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent." }], null, ["S2"]);
+    const c = classifyRetry(BASE, withSkills, retry, [hard("R1.1")]);
+    expect(c.droppedSkillOrder).toBe(false);
+    expect(mergeRetry(withSkills, retry, c).skills).toEqual(["S2"]);
+  });
+
   it("says what it did, as a soft finding that does not hold the packet", () => {
     const retry = cs([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent." }]);
     const c = classifyRetry(BASE, first, retry, [hard("R1.1")]);

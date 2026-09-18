@@ -25,8 +25,10 @@ import { actionable, factSet, isHard, needsReview, validateChangeSet, VALIDATOR_
  * complete change set, summary and skill order included, its number and
  * the validator revision it passed or failed under, so a replay can read
  * the whole candidate again and every report can say which attempt it
- * describes (review four, findings 2 and 13). A resume is stored only when
- * that attempt parsed and passed the validator. Nothing from a rejected attempt is reused: a
+ * describes (review four, findings 2 and 13). A resume is stored whenever
+ * that attempt parsed, rejected or not: a rejection blocks the document, it
+ * does not delete it, and `consumableResume` is the one door it would have
+ * to leave through (D-038). Nothing from a rejected attempt is reused: a
  * rejected candidate cannot become ready because the retry failed to parse,
  * timed out or came back incomplete. The earlier attempts stay in the error
  * text for diagnostics.
@@ -54,8 +56,9 @@ export interface TailorOptions {
 /**
  * ready: parsed and passed. needs_review: parsed, no hard finding, held
  * for a person on a review finding, with its resume stored but not
- * consumable. invalid: a hard finding after the retry, no resume. failed:
- * no answer to validate.
+ * consumable. invalid: a hard finding after the retry, with its resume
+ * stored and not consumable either (D-038). failed: no answer to validate,
+ * so there is no document to store.
  */
 export type AttemptOutcome = "ready" | "needs_review" | "invalid" | "failed";
 
@@ -257,14 +260,14 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     if (!(outcome === "invalid" || (outcome === "needs_review" && findings.some(actionable)))) break;
   }
 
-  // The packet is the last attempt. A resume exists only when that attempt itself parsed and had no hard finding;
-  // a held packet keeps its resume for the review screen, an invalid one keeps its changes and findings, a failed one keeps neither.
+  // The packet is the last attempt. A resume exists whenever that attempt parsed, whatever the validator said about it:
+  // blocking consumption is the status's job, not the absence of the document (D-038). A failed attempt parsed nothing and has none.
   const last = log[log.length - 1];
   const before = log[log.length - 2];
   // A retry of a held answer that came back rejected or failed does not replace it: the held answer was validated.
   const final = before?.outcome === "needs_review" && (last.outcome === "invalid" || last.outcome === "failed") ? before : last;
   const status = final.outcome;
-  const resume = (final.outcome === "ready" || final.outcome === "needs_review") && final.candidate ? final.candidate.applied.resume : null;
+  const resume = final.candidate ? final.candidate.applied.resume : null;
   const error = last.error ? storedError(log) : undefined;
   const changes = final.candidate?.cs.changes ?? [];
   const outcome: TailorOutcome = {

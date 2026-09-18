@@ -78,7 +78,7 @@ export type ReplayCoverage = "full" | "bullets";
 
 export type ReplayDecision =
   | { kind: "restamp"; status: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument | null; coverage: ReplayCoverage }
-  | { kind: "revoke"; status: "invalid"; would: ReplayStatus; findings: PacketFinding[]; resume: null; coverage: ReplayCoverage }
+  | { kind: "revoke"; status: "invalid"; would: ReplayStatus; findings: PacketFinding[]; resume: ResumeDocument | null; coverage: ReplayCoverage }
   /** The row could not be revalidated at all, so it is held and its resume kept: not consumable, not destroyed. */
   | { kind: "hold"; status: "needs_review"; findings: PacketFinding[]; resume: ResumeDocument | null; why: string }
   | { kind: "no_candidate" }
@@ -98,7 +98,7 @@ export const profileNotReproducible = (): PacketFinding => ({ level: "review", b
 export const POSTING_MOVED = "posting moved: the job's text has changed since this packet was written, so the words the model was given cannot be read again";
 export const postingMoved = (): PacketFinding => ({ level: "review", bullet: null, code: "posting-moved", message: POSTING_MOVED });
 
-/** The hard finding a revoked row carries: nothing can verify the document it stored. */
+/** The hard finding a revoked row carries: nothing can verify the document it stored. The document itself is kept; the status is what stops it (D-038). */
 export const UNVERIFIABLE_RESUME = "stored resume is not the base plus the stored changes";
 export const unverifiable = (): PacketFinding => ({ level: "hard", bullet: null, code: "unverifiable-resume", message: UNVERIFIABLE_RESUME });
 
@@ -139,10 +139,12 @@ export function replayDecision(row: ReplayRow, replayed: PacketFinding[], candid
   const legacySummary = coverage === "bullets" && !!row.resume?.summary;
   const findings = [...(coverage === "full" ? replayed : [...replayed, ...retainedFindings(row.findings), ...(legacySummary ? [summaryNotRevalidated()] : [])]), ...extra];
   const status = statusOf(findings);
-  if (status === "invalid") return { kind: "restamp", status, findings, resume: null, coverage };
+  // A restamp that rejects keeps the document it rejected. Clearing it here is what destroyed ten tailored resumes on
+  // 18 September, a day before the findings that did it were demoted, and left nothing for the demotion to promote (D-038).
+  if (status === "invalid") return { kind: "restamp", status, findings, resume: row.resume, coverage };
   if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) {
     // A row that is consumable or reviewable today on a document nothing can verify is revoked.
-    if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: null, coverage };
+    if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: row.resume, coverage };
     // A rejected row whose resume was cleared, but which stores the change set it was built from, is rebuilt
     // from the base plus that change set and stamped on what the validator says about it now (D-037). This is
     // not a promotion on evidence nothing can check, which is what review five's finding 6 forbids: base plus

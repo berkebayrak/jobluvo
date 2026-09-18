@@ -343,12 +343,72 @@ function main() {
     out(`| ${which === "first" ? "First attempt" : "Retained attempt"} | ${t.cited} | ${CITATION_KINDS.map((k) => t.byKind[k]).join(" | ")} | ${t.any} | ${t.cited ? ((100 * t.any) / t.cited).toFixed(2) : "0"} | ${t.unrecognised} |`);
   }
   out();
-  // The rate falls, and most of the fall is the denominator. Said here so the table is not read as the retry fixing citations.
-  const lost = totals.first.cited - totals.retained.cited;
-  if (lost > 0) {
-    out(
-      `The retained attempt has ${lost} fewer cited lines than the first, ${((100 * lost) / totals.first.cited).toFixed(0)} percent of them, because a retry that drops a line drops its citation problem with it (finding 14). Read the two rates against that: a line deleted is not a line corrected. The merge rule of finding 14 puts back the lines the validator had not objected to, so a run under it does not lose the denominator this way.`,
-    );
+  // What became of each unsupported line, which is the only thing that says whether the retry corrected anything.
+  // A rate cannot answer it: a smaller denominator RAISES a rate when the numerator holds, so a falling rate over a
+  // falling denominator says nothing on its own. Review five, finding 18B; the earlier "39 percent of the fall is the
+  // denominator" line was arithmetically backwards and is withdrawn.
+  out("### What became of the first attempt's unsupported lines");
+  out();
+  const unsupported = (cs: ChangeSet, o: SavedOutcome) => {
+    const m = new Map<string, string[]>();
+    for (const f of validateChangeSet(cs, base, set, posting(o))) {
+      if (!f.bullet || f.bullet === "summary") continue;
+      const code = codeOf(f);
+      if (!code || !CITATION_KIND[code]) continue;
+      m.set(f.bullet, [...(m.get(f.bullet) ?? []), `${code}:${f.value ?? ""}`].sort());
+    }
+    return m;
+  };
+  const edited = (cs: ChangeSet) => new Set(applyChanges(base, cs).diff.filter((d) => d.bullet !== "summary").map((d) => d.bullet));
+  const fate = { corrected: 0, deleted: 0, retained: 0, replaced: 0 };
+  let appeared = 0;
+  let firstTotal = 0;
+  let retainedTotal = 0;
+  const fateLines: string[] = [];
+  for (const o of saved) {
+    const firstCs = o.changeSets[0];
+    const retainedCs = o.changeSets[retainedIndex(o.attemptLog.map(outcomeOf))];
+    if (!firstCs || !retainedCs) continue;
+    const before = unsupported(firstCs, o);
+    const after = unsupported(retainedCs, o);
+    const stillEdited = edited(retainedCs);
+    firstTotal += before.size;
+    retainedTotal += after.size;
+    for (const [bullet, codes] of before) {
+      const now = after.get(bullet);
+      let which: keyof typeof fate;
+      if (!stillEdited.has(bullet)) which = "deleted";
+      else if (!now) which = "corrected";
+      else if (now.join("|") === codes.join("|")) which = "retained";
+      else which = "replaced";
+      fate[which] += 1;
+      if (fateLines.length < 12) fateLines.push(`- ${o.jobId.slice(0, 8)} ${bullet} ${which}: was ${codes.join(", ")}${now ? `, now ${now.join(", ")}` : ""}`);
+    }
+    for (const bullet of after.keys()) if (!before.has(bullet)) appeared += 1;
+  }
+  out(`Unsupported lines on the first attempt: ${firstTotal}. On the retained attempt: ${retainedTotal}. What became of each of the ${firstTotal}:`);
+  out();
+  out("| What became of it | Lines | Share of the first attempt's |");
+  out("|---|---|---|");
+  for (const k of ["corrected", "deleted", "retained", "replaced"] as const) {
+    out(`| ${k === "corrected" ? "Corrected, the line is still there and is now supported" : k === "deleted" ? "Deleted, the line is gone and its problem with it" : k === "retained" ? "Retained, the same unsupported claim" : "Replaced by a different unsupported claim"} | ${fate[k]} | ${firstTotal ? ((100 * fate[k]) / firstTotal).toFixed(1) : "0"} percent |`);
+  }
+  out();
+  const share = (n: number) => (firstTotal ? Math.round((100 * n) / firstTotal) : 0);
+  out(`**The retry corrects about ${share(fate.corrected) >= 45 && share(fate.corrected) <= 55 ? "half" : `${share(fate.corrected)} percent`} of what it is sent back for and deletes about ${share(fate.deleted) >= 37 && share(fate.deleted) <= 43 ? "two fifths" : `${share(fate.deleted)} percent`} of it.**`);
+  out();
+  out(
+    `Unsupported lines on the retained attempt that were not unsupported on the first: ${appeared}. The retained total ${retainedTotal} is ${fate.retained} retained plus ${fate.replaced} replaced plus ${appeared} new, which is how the two counts reconcile.`,
+  );
+  out();
+  out(
+    `Correction to an earlier reading of these same numbers: it said 39 percent of the fall in the rate was the denominator. That is arithmetically backwards. A smaller denominator raises a rate when the numerator holds: ${firstTotal} over the retained attempt's ${totals.retained.cited} cited lines would be ${totals.retained.cited ? ((100 * firstTotal) / totals.retained.cited).toFixed(2) : "0"} per 100, above the first attempt's ${totals.first.cited ? ((100 * firstTotal) / totals.first.cited).toFixed(2) : "0"}. The whole fall came from the numerator. What the denominator hides is not the rate but the deletions, which the table above counts directly.`,
+  );
+  out();
+  if (fateLines.length) {
+    out("First few, line by line:");
+    out();
+    for (const x of fateLines) out(x);
     out();
   }
 

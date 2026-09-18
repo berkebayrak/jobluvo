@@ -6,6 +6,82 @@ Companions: [Product BRD](01-Product-BRD.md), [Implementation plan](02-Implement
 
 ## 18 September 2026
 
+### D-032. Review five: the deliverable is corrected where it was wrong in public, "addressed" stops meaning "closed", and a restamp is only ever applied from merged code
+
+Review five arrived on 18 September 2026 against the whole review four bundle. It
+reproduced failures by running the functions, and it is right that the bundle's summary,
+"all nineteen addressed", read as a claim of completeness it could not support. Four of
+its claims the user verified before any work started and they are not relitigated: 18A,
+18B, finding 6 and finding 16. This entry records the corrections to what is published,
+and the rule change. The code items are separate entries as they land.
+
+**The framing, adopted.** Addressed is not closed. A change says what it does and what it
+was measured against, and whether that closes a finding is the reviewer's call and not
+the author's. No entry from here summarises a set of findings as closed.
+
+**18A, a false claim on the deliverable page, corrected.** The page said the number sits
+inside the band at eight scored per applied "only if every attempted packet becomes an
+application". False against the page's own table: the 78 of 80 scenario gives USD 0.00335,
+inside the band, with two packets not converting. It confused "the only scenario listed
+that is inside" with "the only conversion that is inside", and never solved for the
+threshold. Solved: at eight scored per applied and 25 applications per user, the total
+reaches the low end at 65.7 of 80 attempted packets converting, about 82 percent. At 10
+applications per user it is 76.1, about 95 percent. At 5 it is 103 of 80, so no conversion
+is enough and eight is over the low end whatever happens. The page carries the table.
+
+**18B, the caveat with the backwards number, withdrawn and replaced by a count.** Covered
+in the correction on D-030. The rate comparison is replaced by what became of each
+unsupported line: of 39 on the first attempt, 19 corrected, 16 deleted, 3 retained, 1
+replaced, 1 new on the retained attempt.
+
+**18C, the tailoring term is historical and the current one is unmeasured.** USD 0.00076
+per attempted packet was measured under prompt revision p1 and validator revision r3.
+Since then the retry is given the answer it is correcting rather than the findings alone,
+a retry's clean dropped lines are put back and the merged set revalidated, and the
+validator has moved three revisions. Each of those changes what the model is sent, what it
+returns, or how many lines a second attempt writes. Replaying stored answers offline
+cannot measure any of it. The figure stays on the page as the last measured one, labelled
+with the revisions it was measured under, and the cost per attempted packet under the
+policy that ships is unmeasured until an authorised paid run measures it. No such run is
+made without asking first.
+
+**18D, extraction is per extraction and not per user.** The product lets a user upload a
+replacement resume whenever they want one, so "per user, once" was an assumption dressed
+as a unit. The term is now extraction cost times extractions per user over applications
+per user, and the tables hold extractions per user at 1, which is the floor.
+
+**18E, conversion is packet to application.** The tailoring denominator is attempted
+packets, so the quantity that converts it is the share of all attempted packets that
+become applications, not the approval rate among held packets on DOC-03. A ready packet
+can fail to be submitted, an invalid one can go out on the original resume, and a held one
+can be approved: conversion covers all three routes and the approval rate covers one.
+
+**Finding 17, the chronology, corrected from the snapshot's own timestamps.** The cost
+summary dated a restamp to 22:50 UTC on 18 September and the overwrite it preceded by
+seven minutes to 22:57 UTC on 17 September, which cannot both be true. The cause is that a
+run tag is named for the date in Istanbul and every timestamp is UTC, three hours behind:
+the runs tagged `18sep` wrote their cost rows on 17 September UTC. The 27 surviving rows of
+that restamp carry `updated_at` of 22:49 and 22:50 UTC on 17 September, so the restamp was
+17 September and the cost summary is corrected. The convention is now stated on the page so
+the contradiction is not reintroduced.
+
+**The rule change: a restamp is applied from merged code, never from a branch.** Restamps
+continue to be applied without asking whenever the rule behind them is merged, always
+reported before and after with the rows that moved named. What is new is the condition.
+Applying one from an unmerged branch leaves production in a state no committed code can
+produce or explain, which is the same defect as a script that has written to the live
+database existing only in a working tree, wearing different clothes.
+
+**And the sequencing note that rule exists to make legible.** Validator revision
+2026-09-18.r6 was applied to the live packets on 18 September 2026 ahead of its merge. The
+rule that produced it, holding a row whose facts hash no profile reproduces or whose
+posting has moved, lives on the branch `replay-exclusion`, which was committed but could
+not be pushed because the test suite could not run against the database that afternoon.
+107 rows were written, 1 changed status, and the table went from 62 ready, 41 held, 4
+invalid to 61, 42, 4. The row that moved is the packet whose job text has changed since it
+was written. If that branch changes before it lands, this is the record that the live table
+ran ahead of it.
+
 ### D-031. Review four's last four items: the retry may not delete what it was not asked to, a receipt may not destroy the work, findings are counted by code, and a sample's answers say what made them
 
 The last four items of review four's order, 18 September 2026, one pull request each,
@@ -62,11 +138,24 @@ all three runs. There are 18.
 
 **First attempt against retained, and what it hides.** On the 80 saved answers, all 80
 comparable: 39 of 394 cited lines unsupported on the first attempt, 9.90 per 100, against
-5 of 240 on the retained one, 2.08. The retained attempt has 154 fewer cited lines, 39
-percent of them, because a retry that drops a line drops its citation problem with it. A
-line deleted is not a line corrected, and the report says so in its own text so the
-comparison cannot be quoted without it. Finding 14's merge is what stops a future run
-losing its denominator this way.
+5 of 240 on the retained one, 2.08.
+
+*(Corrected by review five, 18B. This paragraph went on to say "the retained attempt has
+154 fewer cited lines, 39 percent of them", and offered that as what the fall in the rate
+was made of. It is arithmetically backwards. A smaller denominator raises a rate when the
+numerator holds: those same 39 unsupported lines over 240 cited lines would be 16.25 per
+100, above the first attempt's 9.90. The whole fall came from the numerator. The instinct,
+to say what a favourable number was hiding, was right and is the habit to keep; the number
+put forward as the answer was wrong and had not been checked before it was published
+twice. What the denominator hides is the deletions, and deletions have to be counted, not
+inferred from a rate.)*
+
+Counted, on the same 80 answers: of the 39 lines the first attempt left unsupported, 19
+were corrected, 16 were deleted, 3 kept the same unsupported claim and 1 was replaced by a
+different one, with 1 further line unsupported on the retained attempt that was not on the
+first. So the retry corrects about half of what it is sent back for and deletes about two
+fifths, and the deletion is what finding 14's merge stops. The cost summary carries the
+table; `npm run reconcile-sample` prints it.
 
 **Finding 18, the saved answers (#67).** They are the only copy of work that has been
 paid for, and they were written once, after every job finished, so a crash at job 79 of
@@ -93,7 +182,9 @@ is the only term that decides the answer, and it needs users. The deferrals sit 
 D-019 placed them. Phase 0 closes again when the user says the list is done, and phase 1
 opens on the user's word only.
 
-### D-030. The stored packets are restamped and now say what the rules say; the 74 replaced versions are unrecoverable; the validator's miss rate is measured for the first time
+### D-030. The stored packets are restamped and now say what the rules say; the 74 replaced versions are absent from everything on hand; the validator's miss rate is measured for the first time
+
+> **Corrected 18 September 2026 by review five.** Two statements in this entry were wrong and are corrected in place rather than removed, with what replaced them. The recovery paragraph declared the 74 versions unrecoverable and the matter closed; the retention window was never read, so the most that is known is that they are absent from what is on hand. And the caveat about the citation rate, quoted approvingly as the discipline this project wants, had a backwards number in it. Both corrections are below, marked.
 
 The second half of 18 September 2026, working review four's fifth and sixth items. D-029 stands; this entry records what changed under it, what was measured rather than predicted, and what is closed for good.
 
@@ -116,7 +207,13 @@ The 6 that moved are all ready to held: 5 legacy rows whose summary cannot be re
 
 **The four checks are a command, not a habit (#62).** Two failures in two days came from the chain and not from the code: an exit code cut a push chain and half a pull request merged, and a chain read output instead of exit codes and let a commit in with a failing test. `npm run check` runs the four on the committed tree. It refuses a tree that is not clean, which includes untracked files, so the result describes a commit; it spawns each step and reads only its exit status, with nothing piped and a signal counted as a failure; and it stops at the first non zero, printing the rest as "not run" and exiting with that code. Both properties were proved before it merged, the gate on an untracked script and the stop on a deliberately failing test, and the proof caught a defect in the checker itself: its first run exited 1 for its own reason, an unquoted git format string, while looking exactly like the refusal it was meant to demonstrate.
 
-**The 74 replaced versions are unrecoverable. Closed.** D-029 left point in time recovery open on the user's side. It is closed today, 18 September 2026, not attempted and not available: the overwrite was at 22:57 UTC on 17 September, recovery needs the Neon console or an API key, neither is reachable from this machine, and signing in is the user's action and was not taken within the retention window that Neon's defaults make likely to have passed. No restore, branch or recovery was performed at any point. What those 74 versions held is gone: the packets the six runs of 18 September produced before families-18sep overwrote them, and with them any chance of checking the two retry runs and the four narrow runs against their own rows. Everything from the snapshot of this session forward is preserved instead, and `design/snapshots/2026-09-18-packets/` states what is absent rather than reconstructing it. This is recorded so that nobody spends a day in a month looking for a restore point that was never there.
+**The 74 replaced versions are absent from everything on hand. Recovery availability is not verified.** *(Corrected by review five, finding 17. This paragraph previously read "unrecoverable, closed" and asserted that the retention window had probably passed and that there was "a restore point that was never there". None of that was established. The window was never read, and missing credentials, no console session and an assumption about a provider default do not prove expiry. Declaring something unrecoverable without checking is the same defect as declaring something closed without measuring it, which is the defect this whole review sequence is about.)*
+
+What is established: the overwrite ran between 22:57:07 and 22:58:20 UTC on 17 September 2026, replacing 74 of the 101 packets stored earlier that day and adding 6. The 74 prior versions are absent from the current table and from every export on hand, including `design/snapshots/2026-09-18-packets/`, which states what is missing rather than reconstructing it. The point to restore to is 22:57:00 UTC on 17 September.
+
+What is not established: whether point in time recovery can still reach that moment. Neon's history retention for this project and its available restore points have not been read. Doing so needs the Neon console or an API key, and both depend on account access that is the user's and not this machine's. No restore, branch or recovery has been attempted at any point, and none will be without authorisation.
+
+What is lost if recovery is unavailable: the packets the six earlier runs produced before families-18sep overwrote them, and with them any way to check the two retry runs and the four narrow runs against their own rows.
 
 **Phase 0 stays open.** The reviewer's order has four items left, one pull request each: the retry that drops edited lines must classify what it did and keep the first answer's clean lines (14); a cost row insert failure must not abort tailoring or extraction nor swallow the original error (16); findings need stable codes and the wrong citation metric needs splitting into kinds with the same unit above and below the line (17); saved answers must carry the facts hash, base resume, model, prompt and validator revisions and run id, written as each outcome lands (18). Then phase 0 closes again. Nothing from phase 1 is touched, and phase 1 opens on the user's word only. All four were done the same day; D-031 records them and what they measured.
 

@@ -31,12 +31,24 @@ is for, which is why every review found a new seam and why nobody could judge wh
 proposed rule was right or merely effective on the one case that prompted it. Five
 reviews and thirty odd findings is what that costs.
 
-**Case 1. Stronger wording, the same claim. Allowed.** "Helped deliver" to "delivered",
-"improved" to "drove", the posting's vocabulary in place of the resume's. This is what
-tailoring is for, and a rule that blocks it is wrong however many inventions it also
-catches. This is not hypothetical: rule 1's first design held 67 of 90 packets and was
-withdrawn for exactly this, because it measured rewording and tailoring is rewording
-(D-022).
+**Case 1. Stronger wording, the same claim. Allowed.** Shortening, using the posting's word
+where the fact already supports it, and leading with a different fact. This is what tailoring
+is for, and a rule that blocks it is wrong however many inventions it also catches. This is
+not hypothetical: rule 1's first design held 67 of 90 packets and was withdrawn for exactly
+this, because it measured rewording and tailoring is rewording (D-022).
+
+| The fact says | A case 1 rewrite | What changed |
+|---|---|---|
+| "Made a tool for tracking candidate pipelines" | "Built a candidate pipeline tracker" | shorter, and the posting's noun. Same actor, same scope |
+| "Presented findings to the executive committee every quarter" | "Reported quarterly to the executive committee" | the posting's verb. Same frequency, same audience |
+| "Ran the pricing workstream of a telecom relaunch, with a conjoint study of 2,000 customers" | "Ran a conjoint study of 2,000 customers for a telecom pricing relaunch" | a different fact leads. Same claim |
+
+**These replace two examples that contradicted case 3, corrected on 19 September 2026
+(D-041).** This paragraph used to offer "helped deliver" to "delivered" and "improved" to
+"drove" as permitted strengthening. Both are promotions on this log's own reading: dropping
+"helped" claims sole responsibility, and "drove" claims the person led the thing. Case 3 two
+paragraphs below forbids precisely that, and the prompt's own rule says "contributed to does
+not become owned". The examples were wrong, not the cases.
 
 **Case 2. The same number attached to a different thing. Not allowed.** "Reduced churn
 by 11 percent and cut acquisition cost by 5" becoming "reduced acquisition cost by 11
@@ -119,6 +131,48 @@ is recorded here on the user's instruction: getting two labels wrong and saying 
 more than getting them right quietly.
 
 ## 19 September 2026
+
+### D-041. The case 1 examples contradicted case 3, and two truthful controls sit close to the same line
+
+The user's call on the replacements, from the sixth review's item 4, which is why they were
+put to him before shipping rather than chosen here: case 1 is his rule.
+
+**What was wrong.** Case 1 offered "helped deliver" to "delivered" and "improved" to "drove"
+as examples of permitted strengthening. Both read as promotions. Dropping "helped" claims
+sole responsibility for something the fact says was shared, and "drove" claims the person led
+it. Case 3, three paragraphs later, forbids exactly that, and `RULES` in
+`src/server/packet/tailor.ts` says "contributed to does not become owned" in as many words.
+The principle was sound and its own illustrations broke it.
+
+**The replacements, chosen by the user from three offered.** They change wording, structure
+and the order facts are given in, and none of them touches the actor, the scope, the level,
+a number or a polarity. They are in the case 1 paragraph above.
+
+**A correction to where the review placed this.** The review said the prompt offers those
+examples. It does not: they were only ever in this log, and `RULES` has no case 1 example at
+all, only the four prohibitions with one example each. So the contradiction was between this
+document and itself, and the prompt was never sent either line. The prompt is unchanged by
+this entry, deliberately: adding a positive example would change the input of every paid call
+and nobody asked for that. If it should be there, it is one more change and it is the user's.
+
+**Found while doing this, recorded rather than fixed, because it is the user's to decide.**
+`pairs.test.ts` asserts that 26 truthful lines must pass, and they are case 1 by definition.
+Two of them sit close to the case 3 line:
+
+| The fact says | The control that must pass | The question |
+|---|---|---|
+| "Used Salesforce for the sales pipeline." | "Used Salesforce to run the sales pipeline." | the fact does not say the person ran the pipeline |
+| "Delivered 9 growth projects for banks, using a conjoint study of 2,000 customers..." | "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent." | "using" becomes "ran": the fact does not say who ran the study |
+
+Neither is forced into a case here and neither is removed, which the file's own rule forbids.
+They are named because of what they would cost later: every one of those 26 is a line a
+future rule must not block, so a control that is really a case 3 line would quietly veto any
+rule built to catch case 3, which is the thinnest column in the set. A third, "Ran the
+pricing review" becoming "Led the pricing review", was considered and is not listed: those two
+verbs sit at the same authority and the fact already says the person ran it.
+
+The header of `pairs.test.ts` now names the two, so nobody reads "26 of 26 truthful pass" as
+evidence that the control set is conservative.
 
 ### D-040. A figure is certain only when the profile's own figures could be read, so `value-unknown` holds when any of them could not
 

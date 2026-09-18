@@ -118,6 +118,26 @@ Retried packets with two parsed answers: 48.
 | 11e5c420 | ready | needs_review > ready | 0 | true | dropped 5 of 6 edited lines; retained attempt 2 |
 | 986548a1 | needs_review | needs_review > needs_review | 0 | true | dropped 5 of 6 edited lines; retained attempt 2 |
 
+## What the merge rule of finding 14 changes on these answers
+
+Retried packets with two parsed answers: 48, of which 45 kept the retry as the packet and are what the rule touches. The other 3 kept the first answer because the retry came back rejected or failed, and the merge does not apply to them.
+
+| What the retry did | Packets | Lines dropped | Of those, clean |
+|---|---|---|---|
+| dropped edited lines | 35 | 146 | 125 |
+| edited a different set of lines | 5 | 9 | 8 |
+| reverted to the base resume | 3 | 16 | 12 |
+| kept every edited line, substituted | 2 | 0 | 0 |
+
+Lines put back in all: 145 across 42 packets. A dropped line the validator had objected to is never put back; the difference between the two columns above is those.
+
+| Status of the retained answer | Ready | Held | Invalid |
+|---|---|---|---|
+| The retry as it came back, today's rule | 22 | 21 | 2 |
+| The retry with its clean dropped lines put back | 22 | 21 | 2 |
+
+Packets whose status moves: 0.
+
 ## Spend, every cost row tied to an attempt
 
 Cost rows 128, USD 0.0610 in all; 128 rows tie one to one to an attempt of a packet in the run; 0 rows belong to no packet of the run. Rows recorded by our own client from the provider's usage field; the provider's bill is not in the snapshot and completeness against it is not established here.

@@ -7,6 +7,7 @@ import { loadScoringJobs } from "@/server/match/run";
 import type { ScoringJob } from "@/server/match/score";
 import { applyChanges, applyDocument, baseResume, factEntries, resumeHash, type Applied, type ChangeSet } from "./resume";
 import { parseChanges, parseDocument, tailorCall, TailorError, type TailorMode, type TailorResult } from "./tailor";
+import { classifyRetry, describeRetry, mergeRetry, retryFinding, type RetryClassification } from "./retry";
 import { lemmasOf } from "./entities";
 import { actionable, factSet, isHard, needsReview, validateChangeSet, VALIDATOR_REVISION } from "./validate";
 
@@ -75,6 +76,8 @@ export interface TailorAttempt {
   findings: PacketFinding[];
   changes: number;
   error?: string;
+  /** What this attempt did to the answer before it, in words, on a retry that parsed (finding 14). */
+  retry?: string;
 }
 
 export interface TailorOutcome {
@@ -126,6 +129,8 @@ interface Attempt {
   candidate: { cs: ChangeSet; applied: Applied } | null;
   findings: PacketFinding[];
   error?: string;
+  /** What this attempt did to the answer before it, on a retry that parsed. */
+  retry?: RetryClassification;
 }
 
 /** What packets.error holds. */
@@ -201,9 +206,12 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     // A rejection carries its hard findings into the retry; a held answer carries the findings the model can act on. A parse failure gets a second chance with nothing to fix.
     const retryOf =
       previous?.outcome === "invalid" ? previous.findings.filter((f) => f.level === "hard") : previous?.outcome === "needs_review" ? previous.findings.filter(actionable) : undefined;
+    // The retry is given the answer it is correcting, not the findings alone. Without it the model rewrites from the
+    // posting and drops lines it can no longer see; the prompt told it not to and nothing showed it what they were.
+    const previousAnswer = retryOf ? (previous?.candidate?.cs ?? undefined) : undefined;
     let call: TailorResult;
     try {
-      call = await tailorCall(entries, job, { mode, model, retryOf });
+      call = await tailorCall(entries, job, { mode, model, retryOf, previousAnswer });
     } catch (e) {
       const err = e instanceof TailorError ? e : new TailorError(e instanceof Error ? e.message : String(e), model, null, 0, 0);
       if (err.usage) await cost({ usage: err.usage, usd: err.usd, ms: err.ms });
@@ -218,6 +226,16 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
       log.push({ n, outcome: "failed", candidate: null, findings: [], error: e instanceof Error ? e.message : String(e) });
       continue;
     }
+    // A retry may not delete a line the validator did not object to: that line was validated and nothing asked it to
+    // change, and dropping it is how a retry passes by removing the claim (finding 14). Such lines are put back from
+    // the answer before it, the retry's own text always winning where both edited the same line, and the merged set is
+    // validated whole so a restored line is read again rather than trusted because it passed once.
+    let classification: RetryClassification | null = null;
+    if (previous?.candidate) {
+      classification = classifyRetry(base, previous.candidate.cs, candidate.cs, previous.findings);
+      const merged = mergeRetry(previous.candidate.cs, candidate.cs, classification);
+      if (merged !== candidate.cs) candidate = { cs: merged, applied: applyChanges(base, merged) };
+    }
     let findings: PacketFinding[];
     try {
       findings = validateChangeSet(candidate.cs, base, set, posting);
@@ -226,11 +244,13 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
       log.push({ n, outcome: "failed", candidate: null, findings: [], error: `validator failed: ${e instanceof Error ? e.message : String(e)}` });
       break;
     }
+    // Provenance, not a defect: a soft finding never holds the packet, and it says how this answer was reached.
+    if (classification) findings = [...findings, retryFinding(classification)];
     // A hard finding earns the retry, and so does a review finding the model can act on: both name what to replace. A
     // review finding that expresses uncertainty does not; a retry cannot resolve what the validator could not read, it
     // can only make the model drop the line, an omission with nobody deciding it.
     const outcome: AttemptOutcome = isHard(findings) ? "invalid" : needsReview(findings) ? "needs_review" : "ready";
-    log.push({ n, outcome, candidate, findings });
+    log.push({ n, outcome, candidate, findings, ...(classification ? { retry: classification } : {}) });
     if (!(outcome === "invalid" || (outcome === "needs_review" && findings.some(actionable)))) break;
   }
 
@@ -249,7 +269,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     status,
     mode,
     attempts: log.filter((a) => a.n > 0).length,
-    attemptLog: log.map((a) => ({ n: a.n, outcome: a.outcome, findings: a.findings, changes: a.candidate?.applied.diff.length ?? 0, error: a.error })),
+    attemptLog: log.map((a) => ({ n: a.n, outcome: a.outcome, findings: a.findings, changes: a.candidate?.applied.diff.length ?? 0, error: a.error, ...(a.retry ? { retry: describeRetry(a.retry) } : {}) })),
     changeSets: log.map((a) => a.candidate?.cs ?? null),
     selected: log.indexOf(final),
     changeSet: final.candidate?.cs ?? null,

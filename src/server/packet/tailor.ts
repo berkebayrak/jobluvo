@@ -137,9 +137,18 @@ export function factsBlock(entries: FactEntry[]): string {
   return ["CANDIDATE FACTS, each with its id", "", ...entries.map((e) => `${e.id}: ${e.text}`)].join("\n");
 }
 
-export function buildMessages(facts: string, job: string, retryOf?: PacketFinding[]): PromptMessage[] {
+/** The answer the retry is correcting, printed so the model edits it rather than writing a new one from the posting. */
+function previousBlock(cs: ChangeSet): string {
+  const lines = [
+    ...(cs.summary ? [`- summary: ${cs.summary}`] : []),
+    ...cs.changes.map((c) => `- ${c.bullet}: ${c.text}${c.facts.length ? ` [facts: ${c.facts.join(", ")}]` : ""}`),
+  ];
+  return `\n\nYOUR PREVIOUS ANSWER, the lines you returned last time:\n${lines.length ? lines.join("\n") : "- no lines"}\nReturn all of these lines again, with only the ones named below changed. A line not named below must come back exactly as it is above.`;
+}
+
+export function buildMessages(facts: string, job: string, retryOf?: PacketFinding[], previousAnswer?: ChangeSet): PromptMessage[] {
   const posting = retryOf?.length
-    ? `${job}\n\nYour previous answer did not pass the validator. Fix these and answer again. Where a finding names a word, replace that word with the cited fact's own word; where it names a value, use the cited fact's value and its meaning; where it says no fact is cited, cite the fact the line draws on. Keep every line and every value: do not drop a line, a number or a claim to pass the check.\n${retryOf.map((f) => `- ${f.bullet ?? "summary"}: ${f.message}${f.value ? ` (${f.value})` : ""}${f.detail ? `; ${f.detail}` : ""}`).join("\n")}`
+    ? `${job}${previousAnswer ? previousBlock(previousAnswer) : ""}\n\nYour previous answer did not pass the validator. Fix these and answer again. Where a finding names a word, replace that word with the cited fact's own word; where it names a value, use the cited fact's value and its meaning; where it says no fact is cited, cite the fact the line draws on. Keep every line and every value: do not drop a line, a number or a claim to pass the check.\n${retryOf.map((f) => `- ${f.bullet ?? "summary"}: ${f.message}${f.value ? ` (${f.value})` : ""}${f.detail ? `; ${f.detail}` : ""}`).join("\n")}`
     : job;
   return [
     { role: "developer", content: facts },
@@ -171,7 +180,7 @@ export class TailorError extends Error {
 export async function tailorCall(
   entries: FactEntry[],
   job: ScoringJob,
-  opts: { mode: TailorMode; model?: string; retryOf?: PacketFinding[] },
+  opts: { mode: TailorMode; model?: string; retryOf?: PacketFinding[]; previousAnswer?: ChangeSet },
 ): Promise<TailorResult> {
   const model = opts.model ?? DEFAULT_MODEL;
   const started = Date.now();
@@ -179,7 +188,7 @@ export async function tailorCall(
     const call = await structuredCall({
       model,
       instructions: INSTRUCTIONS[opts.mode],
-      input: buildMessages(factsBlock(entries), jobBlock(job), opts.retryOf),
+      input: buildMessages(factsBlock(entries), jobBlock(job), opts.retryOf, opts.previousAnswer),
       schemaName: opts.mode === "changes" ? "resume_changes" : "resume_document",
       schema: opts.mode === "changes" ? CHANGES_SCHEMA : DOCUMENT_SCHEMA,
       maxOutputTokens: MAX_OUTPUT_TOKENS[opts.mode],

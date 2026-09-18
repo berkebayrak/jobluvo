@@ -20,6 +20,8 @@ vi.mock("./validate", async (importOriginal) => {
   return { ...real, factSet: vi.fn(real.factSet), validateChangeSet: vi.fn(real.validateChangeSet) };
 });
 const call = () => vi.mocked(tailor.tailorCall);
+/** The findings that say something about the answer, without the soft provenance line a retry carries (finding 14). */
+const holding = <T extends { message: string }>(fs: T[]): T[] => fs.filter((f) => f.message !== "this answer is a retry");
 const realValidate = await vi.importActual<typeof import("./validate")>("./validate");
 
 /*
@@ -123,6 +125,56 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
     }
   });
 
+  it("puts back a clean line the retry dropped, validates the merged set, and says the packet is a retry", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call()
+        // The first answer invents a value on R1.1 and edits R1.2 cleanly.
+        .mockResolvedValueOnce(
+          answer([
+            { bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent.", facts: ["R1.1"] },
+            { bullet: "R1.2", text: "Own the annual planning cycle end to end.", facts: ["R1.2"] },
+          ]),
+        )
+        // The retry fixes R1.1 and silently drops R1.2, which is the behaviour finding 14 is about.
+        .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      const out = await tailorJob(tx, facts, job, { run: "retry-merge" });
+      expect(out.status).toBe("ready");
+      // The clean line the retry dropped is in the packet, with the first answer's text.
+      const bullets = out.changeSet!.changes.map((c) => c.bullet).sort();
+      expect(bullets).toEqual(["R1.1", "R1.2"]);
+      expect(out.changeSet!.changes.find((c) => c.bullet === "R1.2")!.text).toBe("Own the annual planning cycle end to end.");
+      // The invented value is gone: the retry's text won on the line it was asked to fix.
+      expect(out.changeSet!.changes.find((c) => c.bullet === "R1.1")!.text).toContain("11 percent");
+      // The packet says how it was reached, and a soft finding does not hold it.
+      const retry = out.findings.find((f) => f.message === "this answer is a retry");
+      expect(retry?.level).toBe("soft");
+      expect(retry?.detail).toBe("the retry dropped 1 of 2 edited lines; 1 line the validator had not objected to was put back from the answer before it");
+      expect(out.attemptLog[1]!.retry).toBe(retry?.detail);
+      const [row] = await tx.select({ status: packets.status, changes: packets.changes }).from(packets).where(eq(packets.jobId, job.id));
+      expect(row.status).toBe("ready");
+      expect(row.changes.map((c) => c.bullet).sort()).toEqual(["R1.1", "R1.2"]);
+    });
+  });
+
+  it("does not put back a line the validator objected to, so a rejected claim cannot return through the merge", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call()
+        // Both edited lines invent a value, so neither is clean.
+        .mockResolvedValueOnce(
+          answer([
+            { bullet: "R1.1", text: "Led a 3 year cost program that cut cost 14 percent.", facts: ["R1.1"] },
+            { bullet: "R1.2", text: "Own the annual planning cycle for 7 business units.", facts: ["R1.2"] },
+          ]),
+        )
+        .mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Led a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      const out = await tailorJob(tx, facts, job, { run: "retry-merge-objected" });
+      expect(out.changeSet!.changes.map((c) => c.bullet)).toEqual(["R1.1"]);
+      expect(out.findings.find((f) => f.message === "this answer is a retry")?.detail).toBe("the retry dropped 1 of 2 edited lines");
+    });
+  });
+
   it("rejects an invented value, retries once with the findings, and stores the corrected answer as ready", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
@@ -206,10 +258,12 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       const retry = call().mock.calls[1][2];
       expect(retry.retryOf?.map((f) => f.value)).toEqual(["num:3", "KPI"]);
       // "with KPI reporting" attaches words to the 3 year program that its fact does not have, and "KPI" is on no fact: two holds, one packet.
-      expect(held.findings.map((f) => [f.level, f.value])).toEqual([
+      expect(holding(held.findings).map((f) => [f.level, f.value])).toEqual([
         ["review", "num:3"],
         ["review", "KPI"],
       ]);
+      // The retry returned the same answer, so nothing was dropped and nothing was put back; the packet still says it is a retry.
+      expect(held.findings.find((f) => f.message === "this answer is a retry")?.detail).toBe("the retry kept every edited line, substituted");
       expect(held.resume?.experience[0].bullets[0].text).toBe("Ran a 3 year program with KPI reporting, cutting cost 11 percent.");
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("needs_review");
@@ -230,7 +284,8 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       const cleared = await tailorJob(tx, facts, job);
       expect(cleared.status).toBe("ready");
       expect(cleared.attempts).toBe(2);
-      expect(cleared.findings).toEqual([]);
+      expect(holding(cleared.findings)).toEqual([]);
+      expect(cleared.findings.map((f) => f.level)).toEqual(["soft"]);
       expect(cleared.attemptLog.map((a) => a.outcome)).toEqual(["needs_review", "ready"]);
       expect(cleared.resume?.experience[0].bullets[0].text).toBe("Ran a 3 year cost program that cut cost 11 percent.");
 

@@ -18,7 +18,7 @@ Why it exists. On 17 September at 22:57 UTC (18 September 01:57 in Istanbul) the
 | matches.json | 101 | the user's score rows on those jobs |
 | profiles.json | 2 | the fact sets the packets were built on, rebuilt from their rows and checked by facts hash, with the base resume and its shape hash |
 | families-18sep-saved-answers.json | 80 | the 80 job sample's answers as `tailor-sample --save` wrote them: every attempt's change set, posting lemmas, attempt log and cost |
-| meta.json | | counts (workingTreeClean is false there because the snapshot files themselves were untracked when it was taken); counts read from the database by their own queries, a manifest with the sha256 of each file, what is absent, and the verification result |
+| meta.json | | counts read from the database by their own queries, a manifest with the sha256 of each file, what is absent, and the verification result; workingTreeClean is false there because the snapshot files themselves were untracked when it was taken |
 
 ## Profiles
 

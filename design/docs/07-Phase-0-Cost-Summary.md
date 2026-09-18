@@ -110,7 +110,28 @@ One further line is unsupported on the retained attempt that was not on the firs
 
 An earlier entry, D-031, read the same two rates as "39 percent of that fall is the denominator". That was arithmetically backwards and is withdrawn: a smaller denominator raises a rate when the numerator holds, and 39 unsupported lines over the retained attempt's 240 cited lines would be 16.25 per 100, above the first attempt's 9.90. The whole fall came from the numerator. The instinct to say what a favourable number was hiding was right; the number offered as the answer was wrong and had not been checked. The table above is what that caveat should have been.
 
-**The miss rate, the first measurement in this project that counts the other direction.** `src/server/packet/pairs.test.ts` is a paired evaluation set: 28 deliberately false lines, each an invention the validator is supposed to catch, and 26 truthful lines built from the same facts, each one the validator must let through. It catches 28 of 28 and passes 26 of 26, a miss rate of 0 and a false positive rate of 0 on that set, asserted on every run of `npm test` and printed by it. Every held rate above this line measures how often the validator fired; this is the only number that measures what it lets past. Its limit is the whole of its weight: the set is small, and one author wrote both the rules and the examples, so it shows the rules do what that author meant and cannot show what none of them thought to write down. It is not the diverse labelled set review four asked for, and it does not license a claim about the validator's accuracy on real resumes. A zero here is a floor under the rules as they stand, not evidence of correctness.
+**What the validator lets past, which is the measurement that matters and the one this page got wrong.** Two numbers, and the order they are read in is the point.
+
+`src/server/packet/pairs.test.ts` is a paired evaluation set: 28 deliberately false lines, each an invention the validator is supposed to catch, and 26 truthful lines built from the same facts, each one it must let through. It catches 28 of 28 and passes 26 of 26, asserted on every run of `npm test`. **That result is not wrong and is not withdrawn. It measures what it measures**, which is that the rules do what their author meant on the cases their author thought of, and it is a real regression floor: a rule change that breaks one of those 54 lines is caught the same day.
+
+On 18 September 2026 a second author, reading the implementation and writing against it, produced 14 false lines of their own. **The validator missed all 14**, before any of the fixes that followed. Every one was reproduced against the real validator before anything was changed. `pairs.test.ts` marks each case with who wrote it and prints the two counts separately, never summed; the 14 join it as each rule change lands, so the independent count reads 0 of 0 until then and the file says so.
+
+| Evaluation set | False lines caught |
+|---|---|
+| Written by the rules' author | 28 of 28 |
+| Written by a second author, independently | **0 of 14** |
+
+So this page previously said the miss rate was 0. It was 0 on one author's fixtures and the page did not say the second half loudly enough, because the second half did not exist yet. **The only miss rate measured against someone who did not write the rules is 14 of 14 missed**, from the one independent attempt anyone has made. The paired set demonstrates coverage of its own fixtures and says nothing about the general rate. Neither number is an accuracy claim about real resumes, and the diverse labelled set review four asked for still does not exist.
+
+One of those 14 is worth its own line, because it is narrower and stranger than it was reported. The normaliser reads three dash characters three different ways, and only one of them turns a loss into a gain:
+
+| Written | Read as | Effect |
+|---|---|---|
+| `-11 percent` hyphen minus | `-11 percent` | sign kept |
+| `–11 percent` en dash | `11 percent` | **a loss silently becomes a gain** |
+| `‒11 percent` figure dash | unread | held, not silently changed |
+
+A resume pasted from a word processor is exactly where an en dash comes from. Whatever the rule becomes, it needs a test per dash character rather than one test for "a negative number".
 
 And of the 48 retries in the 80 job sample, 2 substituted words as the prompt asks, 2 reverted to the base resume and 37 dropped edited lines (D-029, `design/snapshots/2026-09-18-packets/reconciliation.md`): a ready packet after a retry is not evidence that the held claim was corrected.
 

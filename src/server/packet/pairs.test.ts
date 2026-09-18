@@ -12,8 +12,18 @@ import { checkLine, factSet } from "./validate";
  * should have fired and did not. A false line that passes is a miss, and
  * the miss rate is printed with the pass rate on the truthful lines.
  *
- * Each case names the review finding it came from. Add a pair whenever a
- * miss is found in the wild; never remove one.
+ * Each case names the review finding it came from and who wrote it, and the
+ * second of those matters more than it looks. A set written by the person who
+ * wrote the rules measures whether the rules do what that person meant. It
+ * cannot measure what nobody thought of, and on 18 September 2026 that stopped
+ * being a caveat and became a result: this set caught 28 of its own 28, and a
+ * second author who had read the implementation wrote 14 false lines that the
+ * validator missed, all 14. So the counts are printed by author, and a total
+ * across both would hide the only number that has ever said anything about
+ * what the validator lets past.
+ *
+ * Add a pair whenever a miss is found in the wild, with its author; never
+ * remove one.
  */
 
 const RESUME = { rowId: "r", origin: "upload" as const, hasEvidence: true };
@@ -58,8 +68,17 @@ const FACTS: ResumeFacts = {
 const set = factSet(factEntries(FACTS));
 const posting = lemmasOf("Salesforce, recruitment systems, dashboards, analytics");
 
+/**
+ * Who wrote the case. "rules" is someone who had written or read the rules
+ * before writing the example, which is most of these. "independent" is
+ * someone reviewing the implementation from outside, whose misses are the
+ * only evidence here about what nobody thought of.
+ */
+type Author = "rules" | "independent";
+
 interface Pair {
   finding: string;
+  author: Author;
   bullet: string;
   cited: string[];
   /** Lines that must pass with no hard or review finding. */
@@ -71,6 +90,7 @@ interface Pair {
 const PAIRS: Pair[] = [
   {
     finding: "3A, a value paired with a sibling value's measure",
+    author: "rules",
     bullet: "R1.1",
     cited: ["R1.1"],
     truthful: ["Cut churn 11 percent and reduced acquisition cost 5 percent.", "Reduced churn by 11 percent while cutting acquisition cost by 5 percent."],
@@ -78,6 +98,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "3B, the opening verb is a relationship",
+    author: "rules",
     bullet: "R1.2",
     cited: ["R1.2"],
     truthful: ["Coached 6 analysts.", "Trained six analysts."],
@@ -85,6 +106,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "3C, a denial",
+    author: "rules",
     bullet: "R1.3",
     cited: ["R1.3"],
     truthful: ["Did not manage the 6 analysts."],
@@ -92,6 +114,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "3D, a change against a level",
+    author: "rules",
     bullet: "R1.4",
     cited: ["R1.4"],
     truthful: ["Cut churn by 11 percent.", "Reduced churn by about 11 percent."],
@@ -99,6 +122,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "3E, the sign",
+    author: "rules",
     bullet: "R1.5",
     cited: ["R1.5"],
     truthful: ["Revenue growth of -11 percent.", "Achieved revenue growth of -11 percent."],
@@ -106,6 +130,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "4A, the frequency of a period",
+    author: "rules",
     bullet: "R1.6",
     cited: ["R1.6"],
     truthful: ["Presented reports twice yearly.", "Presented reports 2 times a year."],
@@ -113,6 +138,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "4B, a period bound to its predicate",
+    author: "rules",
     bullet: "R1.7",
     cited: ["R1.7"],
     truthful: ["Cut costs by 11 percent and reviewed budgets annually.", "Reviewed budgets annually; cut costs by 11 percent."],
@@ -120,6 +146,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "7, numbers the normaliser reads",
+    author: "rules",
     bullet: "R1.9",
     cited: ["R1.9"],
     truthful: ["Grew the team from four to nine people.", "Grew the team from 4 to 9 people."],
@@ -127,6 +154,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "a four digit count is not a year",
+    author: "rules",
     bullet: "R2.3",
     cited: ["R2.3"],
     truthful: ["Delivered 9 growth projects for banks, with a study of 2,000 customers.", "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent."],
@@ -134,6 +162,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "5A, the tool after using or in is a claim",
+    author: "rules",
     bullet: "R1.8",
     cited: ["R1.8"],
     truthful: ["Built Excel dashboards.", "Built dashboards in Excel for the sales team.", "Built dashboards with attention to detail."],
@@ -141,6 +170,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "5B, every conjunct of a coordinated object",
+    author: "rules",
     bullet: "R1.8",
     cited: ["R1.8"],
     truthful: ["Built dashboards and reports in Excel."],
@@ -148,6 +178,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "5C, a qualification",
+    author: "rules",
     bullet: "R2.1",
     cited: ["R2.1"],
     truthful: ["Worked in Salesforce for the sales pipeline.", "Used Salesforce to run the sales pipeline."],
@@ -155,6 +186,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "6, a global entity does not support a relationship, and capitalisation changes nothing",
+    author: "rules",
     bullet: "R1.8",
     cited: ["R1.8"],
     truthful: ["Built dashboards in Excel."],
@@ -162,6 +194,7 @@ const PAIRS: Pair[] = [
   },
   {
     finding: "D-021, rewordings that must keep passing",
+    author: "rules",
     bullet: "R1.10",
     cited: ["R1.10"],
     truthful: ["Led the pricing review across 3 markets.", "Ran pricing reviews across three markets."],
@@ -178,20 +211,32 @@ describe("paired evaluation set", () => {
   it("catches every false line and passes every truthful one, and prints the miss rate", () => {
     const misses: string[] = [];
     const falseHolds: string[] = [];
-    let falseLines = 0;
-    let truthfulLines = 0;
+    const tally: Record<Author, { falseLines: number; caught: number; truthful: number; passed: number }> = {
+      rules: { falseLines: 0, caught: 0, truthful: 0, passed: 0 },
+      independent: { falseLines: 0, caught: 0, truthful: 0, passed: 0 },
+    };
     for (const p of PAIRS) {
       for (const line of p.false) {
-        falseLines += 1;
+        tally[p.author].falseLines += 1;
         if (level(p.bullet, line, p.cited) === "ready") misses.push(`${p.finding}: "${line}" passed`);
+        else tally[p.author].caught += 1;
       }
       for (const line of p.truthful) {
-        truthfulLines += 1;
+        tally[p.author].truthful += 1;
         const l = level(p.bullet, line, p.cited);
         if (l !== "ready") falseHolds.push(`${p.finding}: "${line}" ${l} ${JSON.stringify(checkLine(line, p.bullet, p.cited, set, posting).filter((f) => f.level !== "soft").map((f) => [f.message, f.value]))}`);
+        else tally[p.author].passed += 1;
       }
     }
-    console.log(`evaluation set: ${falseLines - misses.length} of ${falseLines} false lines caught (${misses.length} missed), ${truthfulLines - falseHolds.length} of ${truthfulLines} truthful lines passed`);
+    // By author, never summed: a total would let the rules' author's own cases carry the independent ones.
+    for (const author of ["rules", "independent"] as const) {
+      const t = tally[author];
+      if (!t.falseLines && !t.truthful) {
+        console.log(`evaluation set, ${author}: no cases yet`);
+        continue;
+      }
+      console.log(`evaluation set, ${author}: ${t.caught} of ${t.falseLines} false lines caught, ${t.passed} of ${t.truthful} truthful lines passed`);
+    }
     expect(misses).toEqual([]);
     expect(falseHolds).toEqual([]);
   });

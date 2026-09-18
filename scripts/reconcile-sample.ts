@@ -4,6 +4,7 @@ import type { Packet, PacketFinding } from "@/db/schema";
 import { parseFlags } from "@/lib/cli";
 import type { ResumeFacts } from "@/server/match/profile";
 import { applyChanges, baseResume, factEntries, resumeHash, shapedResume, type ChangeSet } from "@/server/packet/resume";
+import { classifyRetry, mergeRetry } from "@/server/packet/retry";
 import { factSet, isHard, needsReview, validateChangeSet } from "@/server/packet/validate";
 
 /*
@@ -222,6 +223,64 @@ function main() {
   out("| Packet | Stored | Attempts as run | Bullet edits stored | Whole document changed | Retry |");
   out("|---|---|---|---|---|---|");
   for (const r of retried) out(`| ${r.id.slice(0, 8)} | ${r.stored} | ${r.outcomes.join(" > ")} | ${r.bulletEdits} | ${r.wholeDocumentChanged} | ${r.retry} |`);
+  out();
+
+  // Finding 14's rule, measured on these answers before it ships: the retry's clean dropped lines put back, the merged
+  // set validated whole. Attempt 1's findings are recomputed under the rules as they stand, so this is the delta of the
+  // merge alone. The prompt change that shows the retry its previous answer cannot be measured here; it needs a paid run.
+  out("## What the merge rule of finding 14 changes on these answers");
+  out();
+  type Merge = { id: string; retainedIsRetry: boolean; kind: string; dropped: number; of: number; clean: number; before: Status | null; after: Status | null };
+  const merges: Merge[] = [];
+  for (const p of packets) {
+    const o = byJob.get(p.jobId);
+    if (!o) continue;
+    const [cs1, cs2] = [o.changeSets[0], o.changeSets[1]];
+    if (o.changeSets.length !== 2 || !cs1 || !cs2) continue;
+    const f1 = validateChangeSet(cs1, base, set, posting(o));
+    const c = classifyRetry(base, cs1, cs2, f1);
+    const merged = mergeRetry(cs1, cs2, c);
+    const retained = retainedIndex(o.attemptLog.map(outcomeOf));
+    merges.push({
+      id: p.id,
+      retainedIsRetry: retained === 1,
+      kind: c.kind,
+      dropped: c.dropped.length,
+      of: c.of,
+      clean: c.clean.length,
+      before: statusOf(validateChangeSet(cs2, base, set, posting(o))),
+      after: statusOf(validateChangeSet(merged, base, set, posting(o))),
+    });
+  }
+  const applies = merges.filter((m) => m.retainedIsRetry);
+  const restoring = applies.filter((m) => m.clean > 0);
+  out(`Retried packets with two parsed answers: ${merges.length}, of which ${applies.length} kept the retry as the packet and are what the rule touches. The other ${merges.length - applies.length} kept the first answer because the retry came back rejected or failed, and the merge does not apply to them.`);
+  out();
+  out("| What the retry did | Packets | Lines dropped | Of those, clean |");
+  out("|---|---|---|---|");
+  const byKind = new Map<string, Merge[]>();
+  for (const m of applies) byKind.set(m.kind, [...(byKind.get(m.kind) ?? []), m]);
+  for (const [k, ms] of [...byKind].sort((a, b) => b[1].length - a[1].length)) {
+    out(`| ${k} | ${ms.length} | ${ms.reduce((a, m) => a + m.dropped, 0)} | ${ms.reduce((a, m) => a + m.clean, 0)} |`);
+  }
+  out();
+  out(`Lines put back in all: ${applies.reduce((a, m) => a + m.clean, 0)} across ${restoring.length} packets. A dropped line the validator had objected to is never put back; the difference between the two columns above is those.`);
+  out();
+  out("| Status of the retained answer | Ready | Held | Invalid |");
+  out("|---|---|---|---|");
+  const cb = count(applies.map((m) => m.before));
+  const ca = count(applies.map((m) => m.after));
+  out(`| The retry as it came back, today's rule | ${cb.ready} | ${cb.held} | ${cb.invalid} |`);
+  out(`| The retry with its clean dropped lines put back | ${ca.ready} | ${ca.held} | ${ca.invalid} |`);
+  out();
+  const moved = applies.filter((m) => m.before !== m.after);
+  out(`Packets whose status moves: ${moved.length}.`);
+  if (moved.length) {
+    out();
+    out("| Packet | Lines put back | Was | Becomes |");
+    out("|---|---|---|---|");
+    for (const m of moved) out(`| ${m.id.slice(0, 8)} | ${m.clean} | ${m.before} | ${m.after} |`);
+  }
   out();
 
   out("## Spend, every cost row tied to an attempt");

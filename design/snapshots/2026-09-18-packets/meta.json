@@ -1,0 +1,237 @@
+{
+ "takenAt": "2026-09-18T08:54:04.978Z",
+ "revision": "71158a906afed0bcb88fe31e0c15a7eb0c1a3468",
+ "workingTreeClean": false,
+ "database": "postgresql://***@ep-icy-field-auzpsn17-pooler.c-10.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+ "dbCounts": {
+  "packets": 107,
+  "cost_events": 1085,
+  "users": 1,
+  "profile_facts": 53,
+  "profile_documents": 1,
+  "jobs_referenced": 227,
+  "packets_by_run_status": [
+   {
+    "run": "(null)",
+    "status": "ready",
+    "n": 1
+   },
+   {
+    "run": "families-18sep-changes",
+    "status": "ready",
+    "n": 54
+   },
+   {
+    "run": "families-18sep-changes",
+    "status": "needs_review",
+    "n": 24
+   },
+   {
+    "run": "families-18sep-changes",
+    "status": "invalid",
+    "n": 2
+   },
+   {
+    "run": "sample-2026-09-17-changes",
+    "status": "ready",
+    "n": 13
+   },
+   {
+    "run": "sample-2026-09-17-changes",
+    "status": "needs_review",
+    "n": 11
+   },
+   {
+    "run": "sample-2026-09-17-changes",
+    "status": "invalid",
+    "n": 2
+   }
+  ],
+  "cost_by_run": [
+   {
+    "run": "sample-2026-09-17-prefix",
+    "kind": "score",
+    "calls": 100,
+    "refs": 100,
+    "usd": "0.056903"
+   },
+   {
+    "run": "sample-2026-09-17-nocache",
+    "kind": "score",
+    "calls": 100,
+    "refs": 100,
+    "usd": "0.056942"
+   },
+   {
+    "run": "sample-2026-09-17b-prefix",
+    "kind": "score",
+    "calls": 100,
+    "refs": 100,
+    "usd": "0.031094"
+   },
+   {
+    "run": "sample-2026-09-17b-nocache",
+    "kind": "score",
+    "calls": 100,
+    "refs": 100,
+    "usd": "0.057272"
+   },
+   {
+    "run": "sample-2026-09-17-changes",
+    "kind": "tailor",
+    "calls": 101,
+    "refs": 100,
+    "usd": "0.053792"
+   },
+   {
+    "run": "sample-2026-09-17-document",
+    "kind": "tailor",
+    "calls": 100,
+    "refs": 100,
+    "usd": "0.096903"
+   },
+   {
+    "run": "probe-2026-09-17-pdf",
+    "kind": "extract",
+    "calls": 1,
+    "refs": 1,
+    "usd": "0.002175"
+   },
+   {
+    "run": "sample-2026-09-17-pdf",
+    "kind": "extract",
+    "calls": 5,
+    "refs": 5,
+    "usd": "0.009157"
+   },
+   {
+    "run": "sample-2026-09-17-text",
+    "kind": "extract",
+    "calls": 5,
+    "refs": 5,
+    "usd": "0.009705"
+   },
+   {
+    "run": "sample-2026-09-17c-changes",
+    "kind": "tailor",
+    "calls": 26,
+    "refs": 20,
+    "usd": "0.015608"
+   },
+   {
+    "run": "sample-2026-09-17b-pdf",
+    "kind": "extract",
+    "calls": 5,
+    "refs": 5,
+    "usd": "0.009367"
+   },
+   {
+    "run": "retry-18sep-changes",
+    "kind": "tailor",
+    "calls": 39,
+    "refs": 20,
+    "usd": "0.021340"
+   },
+   {
+    "run": "retry-18sep-b-changes",
+    "kind": "tailor",
+    "calls": 39,
+    "refs": 20,
+    "usd": "0.016244"
+   },
+   {
+    "run": "narrow-18sep-a-changes",
+    "kind": "tailor",
+    "calls": 36,
+    "refs": 20,
+    "usd": "0.014827"
+   },
+   {
+    "run": "narrow-18sep-b-changes",
+    "kind": "tailor",
+    "calls": 31,
+    "refs": 20,
+    "usd": "0.013894"
+   },
+   {
+    "run": "narrow-18sep-c-changes",
+    "kind": "tailor",
+    "calls": 34,
+    "refs": 20,
+    "usd": "0.013891"
+   },
+   {
+    "run": "narrow-18sep-d-changes",
+    "kind": "tailor",
+    "calls": 37,
+    "refs": 20,
+    "usd": "0.015345"
+   },
+   {
+    "run": "families-18sep-changes",
+    "kind": "tailor",
+    "calls": 128,
+    "refs": 80,
+    "usd": "0.060999"
+   }
+  ]
+ },
+ "manifest": {
+  "packets.json": {
+   "bytes": 766087,
+   "sha256": "c47e46ae96e51aef36779b4bb3e29534292d2ab330b14d3eb77185b73b92e377",
+   "rows": 107
+  },
+  "cost_events.json": {
+   "bytes": 406130,
+   "sha256": "4733ab54d1e34469dd9a723b7e17c0ce785dd49f83cdd436226e62f89fbb8fdf",
+   "rows": 1085
+  },
+  "users.json": {
+   "bytes": 209,
+   "sha256": "a5e7ddd1fc3ab1d27da399c27444fa831418030c529ca9d1924d0c0c853cf487",
+   "rows": 1
+  },
+  "profile_facts.json": {
+   "bytes": 32628,
+   "sha256": "1e01cb6356800f93e617e1758a8f7e15b186ad7346844b0cc1c181de8e37ad65",
+   "rows": 53
+  },
+  "profile_documents.json": {
+   "bytes": 370,
+   "sha256": "78a8cad2fb4f7b51ed067f5c26f825307b5b1c863243ef15da3f1b9a5121247c",
+   "rows": 1
+  },
+  "jobs.json": {
+   "bytes": 2192756,
+   "sha256": "b0529b289178f88d3940a00fb1888ccdee954fd903f29dea5cdd88755a9c4981",
+   "rows": 107
+  },
+  "sources.json": {
+   "bytes": 42900,
+   "sha256": "ed7f9b4ef42c3da6dd848fe008c9f28c17fb42c5a135b21980c67118dd9a02fc",
+   "rows": 7
+  },
+  "matches.json": {
+   "bytes": 133971,
+   "sha256": "96b5e543aa5ffbe59371fe253ee701368dad526eab92e475d0dd072728291e74",
+   "rows": 101
+  },
+  "profiles.json": {
+   "bytes": 60333,
+   "sha256": "5b539eaf6ed1b143b48a613f87f241ead7a7e3cb12c2a48ee2625b405b2e60e6",
+   "rows": null
+  },
+  "families-18sep-saved-answers.json": {
+   "bytes": 308358,
+   "sha256": "a36579dc176603b3047836db8fed734a9833ead764e6d86de412707192028bb9",
+   "rows": 80
+  }
+ },
+ "absent": [
+  "profile_documents.bytes_phase0, the PDF itself, is not exported; its length and sha256 are",
+  "120 job ids referenced by cost rows have no jobs row (0 of them on a packet); cost rows by run: sample-2026-09-17-prefix score 100, sample-2026-09-17b-prefix score 100, (cron) score 20",
+  "1 packets carry a content_hash their job no longer has, so the posting text the model saw is not the stored one: packet ids 5800d1c7-a66c-4ff3-a681-c087b2b40909"
+ ],
+ "problems": []
+}

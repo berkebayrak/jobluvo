@@ -18,6 +18,15 @@
  * digits before "hundred" scale like digits before "thousand", every
  * thousands separator is dropped however many there are, and a minus sign
  * before a digit is part of the number, not a hyphen to open.
+ *
+ * The sixth review, item 3, second case: a comma between digits that is not a
+ * thousands separator was read silently and wrongly. "USD 9,2 million" came
+ * out as USD 9 and a separate 2000000, so a truthful line saying "USD 9.2
+ * million" matched nothing on the profile and was rejected as a fabricated
+ * figure. Whether that comma is a decimal point or a typed separator cannot be
+ * told from the text, and guessing either way invents a value the user did not
+ * write, so the phrase is reported as unreadable and the caller holds the line
+ * instead of rejecting it (D-040).
  */
 
 const UNITS = new Map<string, number>([
@@ -57,6 +66,10 @@ export function readNumbers(text: string): NumberReading {
   let t = text.toLowerCase().replace(/[–—]/g, " ");
   // Thousands separators, however many groups: a comma between digits goes when only whole groups of three follow it, "1,234,567,890,123" and never "1,2345".
   t = t.replace(/(?<=\d),(?=\d{3}(?:,\d{3})*(?!\d))/g, "");
+  // Whatever commas are left between digits were not separators. The scale word after one is taken with it, so the
+  // phrase reads as it was written: "9,2 million", not "9,2". Nothing below tries to give it a value.
+  // Longest scale word first, so the phrase is reported as it was written: "9,2 million", not "9,2 m".
+  const commas = [...t.matchAll(/\d+(?:,\d+)+(?:\s?(?:million|billion|thousand|mn|bn|k|m|b))?/g)].map((m) => m[0]);
   // A hyphen before a digit that follows nothing alphanumeric is a sign, "-11 percent", and stays. Every other hyphen carries no value:
   // "3-year", "three-year", "two-thirds", "2019-2023" all open up. The one in a YYYY-MM date stays.
   t = t.replace(/(^|[^a-z0-9)])-(?=\d)/g, "$1\u2212");
@@ -180,5 +193,5 @@ export function readNumbers(text: string): NumberReading {
   }
   if (pendingAnd) phrase.pop();
   flush();
-  return { text: out.join("").replace(/\s+/g, " ").trim(), unreadable };
+  return { text: out.join("").replace(/\s+/g, " ").trim(), unreadable: [...commas, ...unreadable] };
 }

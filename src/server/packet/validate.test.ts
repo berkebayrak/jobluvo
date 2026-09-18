@@ -3,7 +3,7 @@ import type { ResumeFacts } from "@/server/match/profile";
 import { baseResume, factEntries } from "./resume";
 import { readNumbers } from "./normalise";
 import type { FactEntry } from "./resume";
-import { checkLine, factSet, normaliseNumbers, validateChangeSet, valuesOf } from "./validate";
+import { actionable, checkLine, factSet, normaliseNumbers, validateChangeSet, valuesOf } from "./validate";
 
 /*
  * The validator against deliberate near misses. Every rejection here is a
@@ -177,8 +177,13 @@ describe("the lookup is profile wide, not against the cited facts", () => {
     const entry = (id: string, text: string): FactEntry => ({ id, text, kind: "employment", role: "R1", source: FROM_RESUME });
     const odd = factSet([entry("R1", "Head of Strategy, Arvento"), entry("R1.1", "Raised five thousand two million dollars for the fund."), entry("R1.2", "Managed three and five teams.")]);
     expect(checkLine("Raised five thousand two million dollars.", "R1.1", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["review", "five thousand two million"]]);
-    // "three and five" is 3 and 5: 8 is an invention and is rejected, not a sum.
-    expect(checkLine("Managed 8 teams.", "R1.2", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["hard", "num:8"]]);
+    // "three and five" is 3 and 5, so 8 is an invention and the finding is still raised. Its LEVEL changed with
+    // D-040 and this is the price of that rule, stated rather than hidden: this profile carries a number phrase
+    // nothing could read, so no absence of a match on it is certain, and an invention on it is held for a person
+    // instead of rejected. The same line on a profile whose numbers all read is still rejected, asserted below.
+    expect(checkLine("Managed 8 teams.", "R1.2", ["R1.2"], odd).map((f) => [f.level, f.value])).toEqual([["review", "num:8"]]);
+    const readable = factSet([entry("R1", "Head of Strategy, Arvento"), entry("R1.2", "Managed 3 and 5 teams.")]);
+    expect(checkLine("Managed 8 teams.", "R1.2", ["R1.2"], readable).map((f) => [f.level, f.value])).toEqual([["hard", "num:8"]]);
     expect(checkLine("Managed 3 and 5 teams.", "R1.2", ["R1.2"], odd)).toEqual([]);
     // A word the tables do not know but Object.prototype does is a word.
     expect(checkLine("Used constructor injection across the teams.", "R1.2", ["R1.2"], odd).filter((f) => f.level !== "soft")).toEqual([]);
@@ -204,6 +209,74 @@ describe("the lookup is profile wide, not against the cited facts", () => {
     expect(hard("Oversight of four managers and two analysts")).toEqual([]);
     // The same claim opened by a verb the list knows is not flagged at all.
     expect(review("Oversaw four managers and two analysts")).toEqual([]);
+  });
+});
+
+describe("a value is rejected only when the profile's own numbers could all be read", () => {
+  /*
+   * The sixth review's item 3. `value-unknown` is the one finding D-036 lets
+   * reject, and the argument for that is "a figure either appears on the
+   * profile or it does not". The lookup runs over parsed values, so a fact
+   * whose own number the normaliser could not read contributes nothing to
+   * compare against, and the certainty the level rests on is not there.
+   * Both cases below were reproduced against this module before the fix.
+   */
+
+  const entry = (id: string, text: string): FactEntry => ({ id, text, kind: "employment", role: "R1", source: FROM_RESUME });
+  const cleanSet = factSet([entry("R1.1", "Joined the company in 2010."), entry("R1.2", "Raised USD 9.2 million in Series B.")]);
+  const wordSet = factSet([entry("R1.1", "Joined the company in twenty ten."), entry("R1.2", "Raised USD 9.2 million in Series B.")]);
+  const commaSet = factSet([entry("R1.1", "Joined the company in 2010."), entry("R1.2", "Raised USD 9,2 million in Series B.")]);
+  const levels = (line: string, f: ReturnType<typeof factSet>) => checkLine(line, "R1.1", ["R1.1", "R1.2"], f).filter((x) => x.code === "value-unknown").map((x) => x.level);
+
+  it("reports a comma between digits that was not a thousands separator, because nothing can say which it is", () => {
+    // "9,2" is a decimal comma or a typed separator and the text does not say. Guessing either way invents a value.
+    expect(readNumbers("Raised USD 9,2 million").unreadable).toEqual(["9,2 million"]);
+    expect(readNumbers("a study of 2,000 customers").unreadable).toEqual([]);
+    expect(readNumbers("150,000 to 175,000").unreadable).toEqual([]);
+    expect(readNumbers("1,234,567 rows").unreadable).toEqual([]);
+    expect(readNumbers("4, 5 and 6 teams").unreadable).toEqual([]);
+    // The phrase reads as it was written, scale word included.
+    expect(readNumbers("9,2m and 3,4 thousand").unreadable).toEqual(["9,2m", "3,4 thousand"]);
+  });
+
+  it("rejects a value nowhere on a profile whose numbers all read", () => {
+    expect(levels("Joined the company in 2010.", cleanSet)).toEqual([]);
+    expect(levels("Joined the company in 1998.", cleanSet)).toEqual(["hard"]);
+  });
+
+  it("holds rather than rejects when a fact carries a word number the grammar could not read", () => {
+    // The first reproduced case. "Joined in twenty ten" parses to no value at all, so the truthful line matches
+    // nothing. Before this it was a hard finding and the packet lost its document over a fact the profile carries.
+    expect(levels("Joined the company in 2010.", wordSet)).toEqual(["review"]);
+    // And the finding says why, rather than claiming the value is on no fact.
+    const f = checkLine("Joined the company in 2010.", "R1.1", ["R1.1"], wordSet).find((x) => x.code === "value-unknown")!;
+    expect(f.message).toBe("value matches no readable fact, and a number phrase on the profile could not be read");
+    expect(f.detail).toContain("twenty ten");
+  });
+
+  it("holds rather than rejects when a fact carries a decimal comma", () => {
+    // The second reproduced case, and the one the review's own prescription did not reach: "USD 9,2 million" parsed
+    // silently into USD 9 and a separate 2000000, so nothing marked it and the truthful line was rejected.
+    expect(levels("Raised USD 9.2 million in Series B.", commaSet)).toEqual(["review"]);
+    expect(levels("Raised USD 9.2 million in Series B.", cleanSet)).toEqual([]);
+  });
+
+  it("holds every unmatched value on such a profile, not only the one the unreadable fact would have supported", () => {
+    // The lookup is profile wide, so the fact that would have supported a line need not be the one it cites, and
+    // nothing here can say which unreadable fact was the missing match. Every unmatched value is held (D-040).
+    expect(levels("Joined in 1998 and raised USD 400 million.", wordSet)).toEqual(["review", "review"]);
+    expect(levels("Joined in 1998 and raised USD 400 million.", cleanSet)).toEqual(["hard", "hard"]);
+  });
+
+  it("does not buy a second paid call with a held value, because a retry cannot make a fact readable", () => {
+    const held = checkLine("Joined the company in 2010.", "R1.1", ["R1.1"], wordSet).filter((f) => f.code === "value-unknown");
+    expect(held.every((f) => !actionable(f))).toBe(true);
+  });
+
+  it("names the phrases on the profile once each, however many facts repeat them", () => {
+    const twice = factSet([entry("R1.1", "Joined in twenty ten."), entry("R1.2", "Left in twenty ten.")]);
+    expect(twice.unreadablePhrases).toEqual(["twenty ten"]);
+    expect(cleanSet.unreadablePhrases).toEqual([]);
   });
 });
 

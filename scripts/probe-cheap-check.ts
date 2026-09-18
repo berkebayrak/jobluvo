@@ -174,7 +174,7 @@ function holdRate(dir: string, run: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Part 2a: the 28 false lines already in pairs.test.ts, which are all caught today.
+// Part 2a: the 30 false lines already in pairs.test.ts. Two of them were truthful controls until D-044.
 // Copied from src/server/packet/pairs.test.ts. The copy is checked below by
 // reproducing that file's published counts before anything is removed.
 // ---------------------------------------------------------------------------
@@ -239,10 +239,10 @@ const PAIRS: Pair[] = [
   { finding: "4A, the frequency of a period", case: "case 2", bullet: "R1.6", cited: ["R1.6"], truthful: ["Presented reports twice yearly.", "Presented reports 2 times a year."], false: ["Presented reports once a year.", "Presented reports annually.", "Presented reports quarterly."] },
   { finding: "4B, a period bound to its predicate", case: "case 2", bullet: "R1.7", cited: ["R1.7"], truthful: ["Cut costs by 11 percent and reviewed budgets annually.", "Reviewed budgets annually; cut costs by 11 percent."], false: ["Cut costs by 11 percent annually."] },
   { finding: "7, numbers the normaliser reads", case: "invention", bullet: "R1.9", cited: ["R1.9"], truthful: ["Grew the team from four to nine people.", "Grew the team from 4 to 9 people."], false: ["Grew the team from 4 to 19 people.", "Grew the team to 4 people."] },
-  { finding: "a four digit count is not a year", case: "invention", bullet: "R2.3", cited: ["R2.3"], truthful: ["Delivered 9 growth projects for banks, with a study of 2,000 customers.", "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent."], false: ["Ran a conjoint study of 2,000 users that lifted ARPU 6 percent.", "Ran a conjoint study of 2,000 customers that lifted ARPU 16 percent."] },
+  { finding: "a four digit count is not a year", case: "invention", bullet: "R2.3", cited: ["R2.3"], truthful: ["Delivered 9 growth projects for banks, with a study of 2,000 customers."], false: ["Ran a conjoint study of 2,000 users that lifted ARPU 6 percent.", "Ran a conjoint study of 2,000 customers that lifted ARPU 16 percent.", { line: "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent.", case: "case 3" }] },
   { finding: "5A, the tool after using or in is a claim", case: "invention", bullet: "R1.8", cited: ["R1.8"], truthful: ["Built Excel dashboards.", "Built dashboards in Excel for the sales team.", "Built dashboards with attention to detail."], false: ["Built dashboards using salesforce data.", "Built dashboards using Tableau.", "Built dashboards in Salesforce."] },
   { finding: "5B, every conjunct of a coordinated object", case: "invention", bullet: "R1.8", cited: ["R1.8"], truthful: ["Built dashboards and reports in Excel."], false: ["Built dashboards and recruitment systems.", "Built dashboards and pricing models in Excel."] },
-  { finding: "5C, a qualification", case: "invention", bullet: "R2.1", cited: ["R2.1"], truthful: ["Worked in Salesforce for the sales pipeline.", "Used Salesforce to run the sales pipeline."], false: ["Certified in Salesforce.", "Salesforce certified, ran the sales pipeline."] },
+  { finding: "5C, a qualification", case: "invention", bullet: "R2.1", cited: ["R2.1"], truthful: ["Worked in Salesforce for the sales pipeline."], false: ["Certified in Salesforce.", "Salesforce certified, ran the sales pipeline.", { line: "Used Salesforce to run the sales pipeline.", case: "case 3" }] },
   { finding: "6, a global entity does not support a relationship", case: "invention", bullet: "R1.8", cited: ["R1.8"], truthful: ["Built dashboards in Excel."], false: ["Led recruitment.", "Led RECRUITMENT.", "Reported ARPU in Excel."] },
   { finding: "D-021, rewordings that must keep passing", case: "invention", bullet: "R1.10", cited: ["R1.10"], truthful: ["Led the pricing review across 3 markets.", "Ran pricing reviews across three markets."], false: ["Ran the pricing review across 30 markets.", "Ran the pricing review across 3 regions."] },
 ];
@@ -269,7 +269,7 @@ function pairsTable() {
       if (statusOf(checkLine(line, p.bullet, p.cited, PAIR_SET, PAIR_POSTING)) === "ready") caseOnePassed += 1;
     }
   }
-  console.log("\n## 2a. The 28 false lines already in pairs.test.ts, which the validator catches today\n");
+  console.log("\n## 2a. The 30 false lines already in pairs.test.ts, and what the validator does with them\n");
   console.log("| Case | False lines | Caught now | Caught by the cheap check |");
   console.log("|---|---|---|---|");
   let lines = 0;
@@ -404,14 +404,19 @@ function main() {
   console.log(`# What the validator says with only the cheap check\n\nRead from ${dir}. Nothing written. The cheap check keeps: ${INVENTION.join(", ")}, plus the change set integrity codes and the codes the replay and the run write.`);
   holdRate(dir, run);
   const p = pairsTable();
-  // The copy of pairs.test.ts above must still hold that file's 28 false lines and
-  // 26 truthful ones, or the copy has drifted and every number under it is worthless.
-  // The caught count is no longer 28: that is the measurement, not a drift.
-  if (p.lines !== 28 || p.caseOne !== 26) {
-    throw new Error(`the copy of pairs.test.ts has drifted: ${p.lines} false lines and ${p.caseOne} truthful, expected 28 and 26`);
+  // The copy of pairs.test.ts above must still hold that file's 30 false lines and
+  // 24 truthful ones, or the copy has drifted and every number under it is worthless.
+  // The caught count is not 30: that is the measurement, not a drift.
+  //
+  // This guard compares the copy with a constant, not with pairs.test.ts, so it can only
+  // catch an edit to the copy and never an edit to the file the copy mirrors. D-044 moved
+  // two lines in that file and this guard passed unchanged, which is exactly the failure it
+  // reads as though it prevents. Placed in phase 1 with the other measurement defects.
+  if (p.lines !== 30 || p.caseOne !== 24) {
+    throw new Error(`the copy of pairs.test.ts has drifted: ${p.lines} false lines and ${p.caseOne} truthful, expected 30 and 24`);
   }
   console.log(`
-The copy holds pairs.test.ts's 28 false lines and 26 truthful ones, so it has not drifted. Caught: ${p.cheap} of 28. Case 1: ${p.caseOnePassed} of 26 pass.`);
+The copy holds 30 false lines and 24 truthful ones, which is what pairs.test.ts held when this constant was last set by hand. The guard compares the copy with that constant and not with the file, so it cannot see an edit to the file. Flagged: ${p.cheap} of 30. Case 1: ${p.caseOnePassed} of 24 pass.`);
   fourteenTable();
 }
 

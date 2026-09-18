@@ -37,12 +37,13 @@ import { checkLine, factSet } from "./validate";
  * Add a pair whenever a miss is found in the wild, with its author; never
  * remove one.
  *
- * One thing to know before relying on the 26. They are case 1 by definition,
- * so every one of them is a line a future rule must not block, and a control
- * that is really a case 3 line would quietly veto any rule built to catch
- * case 3, which is the thinnest column in the set. Two sit close to that line
- * and are named here rather than reclassified, because which side they fall on
- * is the user's call and not this file's (D-041):
+ * Every truthful line is case 1 by definition, so every one of them is a line
+ * a future rule must not block. A control that is really a case 3 line would
+ * quietly veto any rule built to catch case 3, which is the thinnest column in
+ * the set, so the controls are worth reading with as much suspicion as the
+ * false lines.
+ *
+ * Two were wrong and were moved on 19 September 2026, the user's call (D-044):
  *
  *   "Used Salesforce for the sales pipeline."
  *     -> "Used Salesforce to run the sales pipeline."
@@ -51,10 +52,17 @@ import { checkLine, factSet } from "./validate";
  *   "Delivered 9 growth projects for banks, using a conjoint study of 2,000
  *    customers that lifted ARPU 6 percent."
  *     -> "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent."
- *        "using" becomes "ran": the fact does not say who ran the study.
+ *        Running a study and using one are different work.
  *
- * So "26 of 26 truthful pass" is not evidence that the control set is
- * conservative. It says these 26 pass.
+ * Both are the same work at a higher authority, which is case 3, and both now
+ * sit in the false lines of their pairs. That moves the set from 28 false and
+ * 26 truthful to 30 and 24, and case 3 from 1 line to 3. Neither is caught by
+ * the code, which is the ordinary state of a case 3 line here and the reason
+ * the column is worth having at all.
+ *
+ * So "24 of 24 truthful pass" is not evidence that the control set is
+ * conservative. It says these 24 pass, and two of the previous 26 did not
+ * deserve to be in it.
  */
 
 const RESUME = { rowId: "r", origin: "upload" as const, hasEvidence: true };
@@ -224,8 +232,16 @@ const PAIRS: Pair[] = [
     case: "invention",
     bullet: "R2.3",
     cited: ["R2.3"],
-    truthful: ["Delivered 9 growth projects for banks, with a study of 2,000 customers.", "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent."],
-    false: ["Ran a conjoint study of 2,000 users that lifted ARPU 6 percent.", "Ran a conjoint study of 2,000 customers that lifted ARPU 16 percent."],
+    truthful: ["Delivered 9 growth projects for banks, with a study of 2,000 customers."],
+    false: [
+      "Ran a conjoint study of 2,000 users that lifted ARPU 6 percent.",
+      "Ran a conjoint study of 2,000 customers that lifted ARPU 16 percent.",
+      // Reclassified from truthful on 19 September 2026 (D-044). The fact says the projects were delivered USING a
+      // conjoint study. Running a study and using one are different work, so this is the same work at a higher
+      // authority, which is case 3 by the principle's own definition. It was a control that a rule catching case 3
+      // would have had to let through.
+      { line: "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent.", case: "case 3" },
+    ],
   },
   {
     finding: "5A, the tool after using or in is a claim",
@@ -251,8 +267,14 @@ const PAIRS: Pair[] = [
     case: "invention",
     bullet: "R2.1",
     cited: ["R2.1"],
-    truthful: ["Worked in Salesforce for the sales pipeline.", "Used Salesforce to run the sales pipeline."],
-    false: ["Certified in Salesforce.", "Salesforce certified, ran the sales pipeline."],
+    truthful: ["Worked in Salesforce for the sales pipeline."],
+    false: [
+      "Certified in Salesforce.",
+      "Salesforce certified, ran the sales pipeline.",
+      // Reclassified from truthful on 19 September 2026 (D-044). The fact says the person used Salesforce FOR the
+      // sales pipeline, not that they ran the pipeline. Case 3, for the same reason as the conjoint study above.
+      { line: "Used Salesforce to run the sales pipeline.", case: "case 3" },
+    ],
   },
   {
     // Not case 3: leading recruitment is on the profile, under another role. Claiming it on this bullet attributes
@@ -373,7 +395,8 @@ describe("paired evaluation set", () => {
         if (l !== "ready") held.push(`case 1 ${p.finding}: "${line}" ${l}`);
       }
     }
-    expect(caseOne).toBe(26);
+    // 24 since D-044, not 26: two lines that were in here were case 3 and are now false lines of their pairs.
+    expect(caseOne).toBe(24);
     expect(held).toEqual([]);
   });
 
@@ -425,6 +448,8 @@ describe("paired evaluation set", () => {
     for (const s of passing) console.log(`  ${s}`);
     // Deliberately no expectation on `passing`. Asserting it would turn a record of what is
     // not checked into a claim that it is checked, which is the thing this file must not say.
-    expect(byAuthor.rules.falseLines + byAuthor.independent.falseLines).toBe(42);
+    // 44 since D-044: 30 written by the rules' author and 14 by a second author. It was 42 while two case 3 lines
+    // were miscounted as truthful controls.
+    expect(byAuthor.rules.falseLines + byAuthor.independent.falseLines).toBe(44);
   });
 });

@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ChangeSet } from "@/server/packet/resume";
 
 /*
  * Phase 0 schema: discovery, profile facts, matches and the cost worksheet.
@@ -335,6 +336,12 @@ export const packets = pgTable(
     resume: jsonb("resume").$type<ResumeDocument>(),
     changes: jsonb("changes").$type<ResumeChange[]>().notNull().default([]),
     findings: jsonb("findings").$type<PacketFinding[]>().notNull().default([]),
+    /** The retained attempt's complete change set, summary, its cited facts, bullet edits and skill order, so a replay revalidates the whole candidate (review four, finding 2). Null on a packet stored before it was kept. */
+    changeSet: jsonb("change_set").$type<ChangeSet>(),
+    /** Which attempt the packet is, 1 based: the retained one, not always the last (finding 13). Null on a packet stored before it was kept. */
+    attempt: integer("attempt"),
+    /** The validator revision the packet was last stamped under, so a stamp says which rules it passed. Null before revisions were stamped. */
+    validatorRev: text("validator_rev"),
     factsHash: text("facts_hash").notNull(),
     contentHash: text("content_hash").notNull(),
     resumeHash: text("resume_hash"),

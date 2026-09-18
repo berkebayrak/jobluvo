@@ -22,7 +22,8 @@ import { factSet, isHard, needsReview, validateChangeSet } from "@/server/packet
  */
 
 type Status = "ready" | "needs_review" | "invalid";
-type SavedOutcome = { jobId: string; status: string; attempts: number; usd: number; attemptLog: string[]; changeSets: (ChangeSet | null)[]; posting: string[] };
+type SavedOutcome = { jobId: string; status: string; attempts: number; usd: number; attemptLog: (string | { outcome: string })[]; changeSets: (ChangeSet | null)[]; posting: string[] };
+const outcomeOf = (a: string | { outcome: string }) => (typeof a === "string" ? a : a.outcome);
 type Profile = { factsHash: string; facts: ResumeFacts; baseResumeShapeHash: string };
 type CostRow = { refId: string | null; run: string | null; usd: number; createdAt: string; tokensIn: number; tokensOut: number };
 
@@ -89,7 +90,7 @@ function main() {
       continue;
     }
     const reread = o.changeSets.map((cs) => (cs ? statusOf(validateChangeSet(cs, base, set, posting(o))) : null));
-    const retained = retainedIndex(o.attemptLog);
+    const retained = retainedIndex(o.attemptLog.map(outcomeOf));
     const retainedReread = reread[retained] ?? null;
     const lastReread = reread[reread.length - 1] ?? null;
     let category: string;
@@ -115,7 +116,7 @@ function main() {
       else retry = "edited a different set of lines";
       retry += `; retained attempt ${retained + 1}`;
     }
-    rows.push({ id: p.id, stored: p.status as Status, storedAttempts: p.attempts, outcomes: o.attemptLog, retained, reread, retainedReread, lastReread, category, wholeDocumentChanged, bulletEdits: p.changes.length, retry });
+    rows.push({ id: p.id, stored: p.status as Status, storedAttempts: p.attempts, outcomes: o.attemptLog.map(outcomeOf), retained, reread, retainedReread, lastReread, category, wholeDocumentChanged, bulletEdits: p.changes.length, retry });
   }
 
   out("## Statuses, three readings of the same 80 answers");
@@ -153,7 +154,7 @@ function main() {
   for (const p of packets) {
     const o = byJob.get(p.jobId);
     if (!o) continue;
-    const retained = retainedIndex(o.attemptLog);
+    const retained = retainedIndex(o.attemptLog.map(outcomeOf));
     const cs = o.changeSets[retained];
     if (!cs) continue;
     const now = validateChangeSet(cs, base, set, posting(o)).filter((f) => f.level !== "soft");
@@ -179,7 +180,7 @@ function main() {
     for (const p of packets) {
       const o = byJob.get(p.jobId);
       if (!o) continue;
-      const cs = o.changeSets[retainedIndex(o.attemptLog)];
+      const cs = o.changeSets[retainedIndex(o.attemptLog.map(outcomeOf))];
       if (!cs) continue;
       const now = validateChangeSet(cs, base, set, posting(o)).filter((f) => f.level !== "soft");
       const wasKeys = new Set(p.findings.map((f) => `${f.level}|${f.bullet}|${f.message}|${f.value ?? ""}`));

@@ -68,10 +68,10 @@ function scopes(facts: ResumeFacts, outcomes: TailorOutcome[]) {
   const set = factSet(factEntries(facts));
   const base = baseResume(facts);
   const status = (findings: ReturnType<typeof validateChangeSet>) => (isHard(findings) ? "invalid" : needsReview(findings) ? "needs_review" : "ready");
-  const count = (which: "first" | "final", scope: "anywhere" | "claim") => {
+  const count = (which: "first" | "last" | "retained", scope: "anywhere" | "claim") => {
     const out = { ready: 0, needs_review: 0, invalid: 0, failed: 0 };
     for (const o of outcomes) {
-      const i = which === "first" ? 0 : o.changeSets.length - 1;
+      const i = which === "first" ? 0 : which === "last" ? o.changeSets.length - 1 : o.selected;
       const cs = o.changeSets[i];
       if (!cs) {
         out.failed += 1;
@@ -82,16 +82,20 @@ function scopes(facts: ResumeFacts, outcomes: TailorOutcome[]) {
     return out;
   };
   console.log("  posting scope on the same answers, packets:");
+  // Three attempts are reported apart: the first, the last, and the retained one the packet stores, which differs from the last when a
+  // held answer was kept over a rejected retry (review four, finding 13).
   console.table({
     "first answers, anywhere": count("first", "anywhere"),
     "first answers, claim position": count("first", "claim"),
-    "final answers, anywhere": count("final", "anywhere"),
-    "final answers, claim position": count("final", "claim"),
+    "last answers, anywhere": count("last", "anywhere"),
+    "last answers, claim position": count("last", "claim"),
+    "retained answers, anywhere": count("retained", "anywhere"),
+    "retained answers, claim position": count("retained", "claim"),
   });
   // What the narrowing releases: posting words that fire anywhere and not in a claim position, on the final answers, by word.
   const released = new Map<string, number>();
   for (const o of outcomes) {
-    const cs = o.changeSets[o.changeSets.length - 1];
+    const cs = o.changeSets[o.selected];
     if (!cs) continue;
     const wide = validateChangeSet(cs, base, set, o.posting, "anywhere").filter((f) => f.message.startsWith("word from the posting"));
     const narrow = new Set(validateChangeSet(cs, base, set, o.posting, "claim").filter((f) => f.message.startsWith("word from the posting")).map((f) => `${f.bullet}:${f.value}`));
@@ -100,7 +104,7 @@ function scopes(facts: ResumeFacts, outcomes: TailorOutcome[]) {
   console.log("  posting words released by the claim position, final answers, by word:", JSON.stringify(Object.fromEntries([...released.entries()].sort((a, b) => b[1] - a[1]))));
   const lines: string[] = [];
   for (const o of outcomes) {
-    const cs = o.changeSets[o.changeSets.length - 1];
+    const cs = o.changeSets[o.selected];
     if (!cs) continue;
     const wide = validateChangeSet(cs, base, set, o.posting, "anywhere").filter((f) => f.message.startsWith("word from the posting"));
     const narrow = new Set(validateChangeSet(cs, base, set, o.posting, "claim").filter((f) => f.message.startsWith("word from the posting")).map((f) => `${f.bullet}:${f.value}`));
@@ -197,7 +201,7 @@ async function main() {
       writeFileSync(
         save,
         JSON.stringify(
-          outcomes.map((o) => ({ jobId: o.jobId, status: o.status, attempts: o.attempts, usd: o.usd, attemptLog: o.attemptLog.map((a) => a.outcome), changeSets: o.changeSets, posting: [...o.posting] })),
+          outcomes.map((o) => ({ jobId: o.jobId, status: o.status, attempts: o.attempts, selected: o.selected, usd: o.usd, attemptLog: o.attemptLog, changeSets: o.changeSets, posting: [...o.posting] })),
         ),
       );
       console.log(`saved ${outcomes.length} outcomes to ${save}`);

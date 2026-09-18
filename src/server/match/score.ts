@@ -73,6 +73,8 @@ export interface ScoringJob {
   compCurrency: string | null;
   compPeriod: string;
   descriptionCore: string;
+  /** The revision of the posting these fields were read from, loaded in the same read, so a packet is stamped with the text the model saw (review four, finding 15). */
+  contentHash: string;
 }
 
 export function jobBlock(j: ScoringJob): string {

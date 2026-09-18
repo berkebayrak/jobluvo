@@ -6,6 +6,15 @@ import type { ChangeSet, FactEntry } from "./resume";
 
 export { normaliseNumbers } from "./normalise";
 
+/**
+ * The revision of the rules as they stand. Stamped on every packet the run
+ * or a replay writes, so a status says which rules it passed. Bumped with
+ * every change to claims.ts, entities.ts, normalise.ts or this file;
+ * `npm run validator-report` restamps the stored packets under the new
+ * one (D-017).
+ */
+export const VALIDATOR_REVISION = "2026-09-18.r4";
+
 /*
  * The guarantee behind "nothing is added that is not on your profile".
  *

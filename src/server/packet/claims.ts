@@ -1,4 +1,4 @@
-import { normaliseNumbers } from "./normalise";
+import { readNumbers } from "./normalise";
 import type { FactSource } from "@/server/match/profile";
 
 /*
@@ -125,13 +125,23 @@ const VALUE = new RegExp(VALUE_SOURCE, "g");
  * asks which predicate a value belongs to any more, and reading the text
  * whole keeps the pattern's own lookbehinds intact at boundaries a split
  * would have broken.
+ *
+ * A value found inside a span the normaliser could not read is skipped, on
+ * both sides of the check: such a span supplies no confirmed value to a fact
+ * and no fabricated value to a line. Everything else in the same text is read
+ * as usual, so one unreadable amount does not silence the rest of a sentence.
  */
 export function claimsOf(text: string): Claim[] {
   const out: Claim[] = [];
-  const norm = normaliseNumbers(text);
+  const { text: norm, unreadableSpans } = readNumbers(text);
   for (const m of norm.matchAll(VALUE)) {
     const g = m.groups ?? {};
     const at = m.index!;
+    // A value read out of a span the normaliser could not read is not a value. Marking the span uncertain and then
+    // harvesting figures from it is worse than either alone, because the figures come out looking like confirmed
+    // evidence: "USD 9,2 million" yielded USD 9 and 2000000, neither of which anybody wrote (D-046). Overlap rather
+    // than containment, because a currency match starts before the digits it reads.
+    if (unreadableSpans.some(([from, to]) => at < to && at + m[0].length > from)) continue;
     // A sign the normaliser kept: "-11 percent" is not 11 percent.
     const negative = at > 0 && norm[at - 1] === "-" && !/[a-z0-9]/.test(norm[at - 2] ?? "");
     const signed = (n: number) => (negative ? -n : n);

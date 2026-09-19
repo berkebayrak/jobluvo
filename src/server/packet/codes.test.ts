@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CITATION_KIND, codeOf, FINDING_CODES, type FindingCode } from "./codes";
+import { CITATION_KIND, codeOf, FINDING_CODES, FINDING_LABELS, labelOf, type FindingCode } from "./codes";
 
 /*
  * Finding 17. A report counts codes, so the codes have to be complete and
@@ -45,6 +45,36 @@ describe("every finding carries a stable code", () => {
 
   it("names every code it declares a citation failure", () => {
     for (const code of Object.keys(CITATION_KIND)) expect(FINDING_CODES).toContain(code);
+  });
+
+  it("has a label for every code, and no two codes share one", () => {
+    /*
+     * D-061. The report's label map was partial with a fallback, so a code with no entry printed "unclassified"
+     * and the table kept its shape. Four codes had drifted into that state and one of them, `posting-moved`, is a
+     * live reason a row is held, so the report read before a restamp could not name a reason in front of the
+     * reader.
+     *
+     * The type makes an unlabelled code a typecheck failure, which catches it in `npm run check` before it prints
+     * anything. This asserts the same at run time, and asserts the labels are distinct, because two codes sharing
+     * a label is the other way a count table merges two reasons into one bucket without saying so.
+     */
+    const unlabelled = FINDING_CODES.filter((c) => !FINDING_LABELS[c]?.trim());
+    expect(unlabelled).toEqual([]);
+    const labels = FINDING_CODES.map((c) => FINDING_LABELS[c]);
+    const shared = labels.filter((l, i) => labels.indexOf(l) !== i);
+    expect(shared).toEqual([]);
+    // And the four that were printing as unclassified are named, by the names the review asked for.
+    for (const code of ["posting-moved", "profile-not-reproducible", "assessment-not-run", "resume-repaired"] as const) {
+      expect(FINDING_LABELS[code]).not.toContain("unclassified");
+      expect(labelOf({ code, message: "anything at all" })).toBe(FINDING_LABELS[code]);
+    }
+  });
+
+  it("names a finding that carries no code this build knows as codeless, rather than as one of the labels", () => {
+    // The other half, and it is not the same defect: a row written before codes existed whose message no legacy
+    // prefix matches is genuinely unknown, and saying so is right. What is forbidden is a KNOWN code with no label.
+    expect(labelOf({ message: "a rule nobody has written yet" })).toBe("no code: a rule nobody has written yet");
+    expect(labelOf({ message: "posting moved: the job's text has changed" })).toBe(FINDING_LABELS["posting-moved"]);
   });
 
   it("reads a finding that carries its code, and never rewrites it from the message", () => {

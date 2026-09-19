@@ -5,7 +5,7 @@ import { parseFlags } from "@/lib/cli";
 import { jobs, packets, profileFacts, type PacketFinding, type ResumeDocument } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
 import { lemmasOf } from "@/server/packet/entities";
-import { codeOf, type FindingCode } from "@/server/packet/codes";
+import { codeOf, labelOf } from "@/server/packet/codes";
 import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, unreplayable, type RepairSource, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
@@ -234,41 +234,26 @@ async function main() {
   const soft = replayed.flatMap((p) => by(p, "soft"));
 
   console.log("\nhard findings by reason, edits");
-  console.table(count(hard.map((f) => codeOf(f) ?? `unclassified: ${f.message}`)));
+  console.table(count(hard.map(labelOf)));
   console.log("hard findings, the contradictions named");
   console.table(count(hard.filter((f) => f.message.startsWith("value does not mean")).map((f) => f.message.replace(/^.*?: /, ""))));
 
   console.log("\nreview findings by reason, edits");
-  // Named by stable code, never by message (finding 17). This table used to match message
-  // prefixes and ended in a fallback branch, so each reason added since it was written was
-  // counted as "metric unreadable". A code this build does not know says so and carries
-  // itself, rather than joining a real bucket.
-  const REVIEW_LABELS = new Map<FindingCode, string>([
-    ["posting-word-unknown", "posting word"],
-    ["responsibility-not-in-cited", "responsibility"],
-    ["tool-not-in-cited", "tool"],
-    ["entity-not-in-cited", "entity not in the cited facts"],
-    ["qualification-unsupported", "qualification"],
-    ["metric-differs", "metric words differ"],
-    ["metric-unreadable", "metric unreadable"],
-    ["number-unreadable", "number phrase unreadable, line"],
-    ["value-uncheckable", "number phrase unreadable, cited fact"],
-    ["cited-fact-missing", "cited fact does not exist"],
-    ["no-fact-cited", "no fact cited"],
-    ["summary-not-revalidated", "summary not revalidated"],
-  ]);
-  const reviewKind = (f: PacketFinding) => {
-    const code = codeOf(f);
-    if (code === "name-unknown") return `name, ${f.detail ?? ""}`;
-    const label = code ? REVIEW_LABELS.get(code) : undefined;
-    return label ?? `unclassified: ${code ?? f.message}`;
-  };
+  // Named by stable code, never by message (finding 17), from the one label map in src/server/packet/codes.ts.
+  // It used to be a partial map here with a fallback branch, so a code with no entry printed "unclassified" and
+  // the table kept its shape and its length: four codes had drifted into that state, one of them `posting-moved`,
+  // which is a live reason a row is held today. The map is exhaustive by type now, so an unlabelled code fails
+  // the typecheck rather than printing a word (D-061). A finding carrying no code this build knows still says so,
+  // which is a different thing and stays.
+  const reviewKind = (f: PacketFinding) => (codeOf(f) === "name-unknown" ? `name, ${f.detail ?? ""}` : labelOf(f));
   console.table(count(review.map(reviewKind)));
   console.log("packets held for review by the reasons that hold them");
   console.table(count(replayed.filter((p) => stampedStatus(p) === "needs_review").map((p) => [...new Set(by(p, "review").map(reviewKind))].sort().join(" + "))));
 
   console.log("\nsoft findings by reason, edits");
-  console.table(count(soft.map((f) => f.message)));
+  // By code like the other two. Counting these by message is the coupling codes.ts exists to remove, and it is
+  // why `resume-repaired` had never appeared in this report under a name of its own (D-061).
+  console.table(count(soft.map(labelOf)));
 
   const sample = (label: string, pick: (f: PacketFinding) => boolean, n = 12) => {
     const xs = review.filter(pick).map((f) => `${f.value ?? ""}  |  ${f.detail ?? ""}`);

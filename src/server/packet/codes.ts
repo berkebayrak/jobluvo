@@ -126,3 +126,68 @@ export function codeOf(f: { code?: string; message: string }): FindingCode | nul
   for (const [prefix, code] of LEGACY) if (f.message.startsWith(prefix)) return code;
   return null;
 }
+
+/**
+ * The short name a report prints for each code, one per code and no two the
+ * same.
+ *
+ * **`Record` and not `Partial<Record>`, which is the whole point of it being
+ * here** (D-061). The label map used to live inside `scripts/validator-report.ts`
+ * as a partial map with a fallback branch, so a code with no entry printed
+ * "unclassified" and the table stayed the right shape and the right length.
+ * Four codes had drifted into that state, one of them `posting-moved`, which is
+ * a live reason a row is held, so **the report read to decide whether a restamp
+ * is safe could not name one of the reasons in front of the reader.**
+ *
+ * Typed exhaustively, a code added to `FINDING_CODES` without a label is a
+ * typecheck failure, so it is caught by `npm run check` before it can print
+ * anything. `codes.test.ts` asserts the same at run time and asserts the labels
+ * are distinct, because two codes sharing a label is the other way a table
+ * quietly merges two reasons into one bucket.
+ *
+ * A finding with no code at all is a different thing and still prints: it is a
+ * row written before codes existed whose message no legacy prefix matches, and
+ * it is named as codeless rather than as one of these.
+ */
+export const FINDING_LABELS: Record<FindingCode, string> = {
+  // Citations: what the line points at.
+  "no-fact-cited": "no fact cited",
+  "cited-fact-missing": "cited fact does not exist",
+  "wrong-role": "fact cited from another role",
+  // Values: what the line claims a number is.
+  "value-unknown": "value in no confirmed fact",
+  "value-uncited": "value with no fact cited for it",
+  "value-not-in-cited": "value not in the cited facts",
+  "value-contradicts": "value contradicts the fact",
+  "value-uncheckable": "number phrase unreadable, cited fact",
+  "value-from-edit": "value from a line the user typed",
+  "metric-differs": "metric words differ",
+  "metric-unreadable": "metric unreadable",
+  "number-unreadable": "number phrase unreadable, line",
+  // Entities: what the line names.
+  "name-unknown": "name",
+  "posting-word-unknown": "posting word",
+  "qualification-unsupported": "qualification",
+  "responsibility-not-in-cited": "responsibility",
+  "tool-not-in-cited": "tool",
+  "entity-not-in-cited": "entity not in the cited facts",
+  // The change set itself.
+  "line-missing": "edit to a line the resume does not have",
+  "line-edited-twice": "line edited twice",
+  "empty-line": "empty line",
+  "skill-missing": "skill the resume does not have",
+  // Written by the replay and the run rather than the validator.
+  "summary-not-revalidated": "summary not revalidated",
+  "resume-repaired": "resume restored from outside the row",
+  "assessment-not-run": "original assessment failed, held for a person",
+  "profile-not-reproducible": "profile not reproducible",
+  "posting-moved": "posting moved since the packet was written",
+  "unverifiable-resume": "stored resume is not the base plus the stored changes",
+  "retry-provenance": "this answer is a retry",
+};
+
+/** The label for a finding, or a name saying it carries no code this build knows. */
+export const labelOf = (f: { code?: string; message: string }): string => {
+  const code = codeOf(f);
+  return code ? FINDING_LABELS[code] : `no code: ${f.message}`;
+};

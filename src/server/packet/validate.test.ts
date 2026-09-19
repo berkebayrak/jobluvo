@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PacketFinding } from "@/db/schema";
 import type { ResumeFacts } from "@/server/match/profile";
 import { baseResume, factEntries } from "./resume";
 import { readNumbers } from "./normalise";
@@ -610,6 +611,31 @@ describe("change set validation", () => {
       ["review", "summary", "name appears in no confirmed fact"],
     ]);
   });
+  it("decides a retry on the code, so rewording a message cannot silently stop a paid call being made", () => {
+    /*
+     * D-067. `ACTIONABLE` was two message strings matched against `f.message`. Rewording either one would have
+     * stopped its finding earning a retry, and the failure is invisible: **a paid call quietly not made**, with
+     * nothing reporting it and the packet simply staying held.
+     *
+     * It was correct on the day, so this removes fragility rather than fixing a live defect, and that distinction
+     * is the claim being made here rather than a larger one.
+     */
+    const f = (over: Partial<PacketFinding>): PacketFinding => ({ level: "review", bullet: "R1.1", message: "no fact cited for this line", ...over });
+    expect(actionable(f({ code: "no-fact-cited" }))).toBe(true);
+    // The same finding, reworded past all recognition, is still the same finding.
+    expect(actionable(f({ code: "no-fact-cited", message: "this line cites nothing at all" }))).toBe(true);
+    expect(actionable(f({ code: "cited-fact-missing", message: "reworded entirely, twice" }))).toBe(true);
+    // A finding that is not on the list is not actionable however it is worded, which is the half a message match
+    // got wrong in the other direction.
+    expect(actionable(f({ code: "number-unreadable" }))).toBe(false);
+    expect(actionable(f({ code: "value-unknown" }))).toBe(false);
+    // A hard finding earns its retry elsewhere and is never actionable here.
+    expect(actionable(f({ level: "hard", code: "no-fact-cited" }))).toBe(false);
+    // And a row stored before codes existed is still read, from its message, through the legacy table.
+    expect(actionable(f({}))).toBe(true);
+    expect(actionable(f({ message: "a rule nobody has written yet" }))).toBe(false);
+  });
+
   it("reports an edit to a line that does not exist and a skill that does not exist as soft, never as a pass", () => {
     const f = validateChangeSet({ summary: null, summaryFacts: [], changes: [{ bullet: "R7.1", text: "Anything", facts: [] }], skills: ["S9"] }, base, set);
     expect(f.map((x) => [x.level, x.message])).toEqual([

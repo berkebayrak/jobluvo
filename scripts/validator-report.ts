@@ -5,7 +5,7 @@ import { parseFlags } from "@/lib/cli";
 import { jobs, packets, profileFacts, type PacketFinding, type ResumeDocument } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
 import { lemmasOf } from "@/server/packet/entities";
-import { codeOf, describeFindingsRead, labelOf, readFindings } from "@/server/packet/codes";
+import { codeOf, describeFindingsRead, FINDING_LABELS, labelOf, readFindings, RETIRED_CODES, type FindingCode } from "@/server/packet/codes";
 import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, unreplayable, type RepairSource, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
@@ -260,22 +260,43 @@ async function main() {
   // why `resume-repaired` had never appeared in this report under a name of its own (D-061).
   console.table(count(soft.map(labelOf)));
 
-  const sample = (label: string, pick: (f: PacketFinding) => boolean, n = 12) => {
-    const xs = review.filter(pick).map((f) => `${f.value ?? ""}  |  ${f.detail ?? ""}`);
+  /*
+   * The live samples, keyed by code. These used to match message prefixes, which is the coupling codes.ts exists
+   * to remove and which had already failed twice; one of them was also mislabelled, calling itself "metric
+   * unreadable" while matching `number-unreadable` on the words "could not be read" (D-067).
+   */
+  const sample = (code: FindingCode, label: string, n = 12) => {
+    const xs = review.filter((f) => codeOf(f) === code).map((f) => `${f.value ?? ""}  |  ${f.detail ?? ""}`);
     console.log(`\n${label}: ${xs.length} in all, first ${Math.min(n, xs.length)}`);
     for (const x of [...new Set(xs)].slice(0, n)) console.log("  " + x);
   };
-  sample("metric words differ, fact against line", (f) => f.message.startsWith("the fact and the line"));
-  sample("metric unreadable, fact against line", (f) => f.message.includes("could not be read"));
+  sample("number-unreadable", "number phrases the normaliser could not read, on the line");
   console.log("\nnames in no fact, by name and reason, edits");
-  console.table(count(review.filter((f) => f.message.startsWith("name")).map((f) => `${f.value} (${f.detail ?? ""})`)));
+  console.table(count(review.filter((f) => codeOf(f) === "name-unknown").map((f) => `${f.value} (${f.detail ?? ""})`)));
   console.log("words from the posting in no fact, by word, edits");
-  console.table(count(review.filter((f) => f.message.startsWith("word from the posting")).map((f) => String(f.value))));
-  console.log("responsibilities not in the cited facts, by object and hint, edits");
-  console.table(count(review.filter((f) => f.message.startsWith("responsibility")).map((f) => `${f.value}, ${f.detail ?? ""}`)));
-  const hardSample = hard.map((f) => `${f.bullet}  ${f.message}${f.value ? ` (${f.value})` : ""}  ${f.detail ?? ""}`);
+  console.table(count(review.filter((f) => codeOf(f) === "posting-word-unknown").map((f) => String(f.value))));
+  const hardSample = hard.map((f) => `${f.bullet}  ${labelOf(f)}${f.value ? ` (${f.value})` : ""}  ${f.detail ?? ""}`);
   console.log(`\nhard, first ${Math.min(12, hardSample.length)} of ${hardSample.length}`);
   for (const x of [...new Set(hardSample)].slice(0, 12)) console.log("  " + x);
+
+  /*
+   * Everything above describes what the replay says about these packets TODAY. Everything below describes findings
+   * still written on the rows by rules that have since been withdrawn. They are two different populations and the
+   * sixth review's mistake was reading one as the other, so they do not share a heading (D-067).
+   */
+  const stored = rows.flatMap((p) => p.findings);
+  console.log(`\n${"=".repeat(96)}`);
+  console.log("HISTORICAL. The current validator does not perform any of the checks below.");
+  console.log(
+    `Counted over the ${stored.length} findings STORED on all ${rows.length} packet rows, which is not the population any table above describes: those are the replay's verdict today, these are what the rows still carry. Most of these rules went with the meaning comparison (D-034). A zero here means no stored row carries that finding, never that a check ran and found nothing.`,
+  );
+  const retired = [...RETIRED_CODES].map((code) => ({ code, findings: stored.filter((f) => codeOf(f) === code) }));
+  console.table(Object.fromEntries(retired.map((r) => [FINDING_LABELS[r.code], { code: r.code, storedFindings: r.findings.length, onRows: new Set(rows.filter((p) => p.findings.some((f) => codeOf(f) === r.code)).map((p) => p.id)).size }])));
+  for (const { code, findings } of retired) {
+    if (!findings.length) continue;
+    console.log(`\n${FINDING_LABELS[code]} (${code}), ${findings.length} stored, by value and hint`);
+    console.table(count(findings.map((f) => `${f.value ?? ""}, ${f.detail ?? ""}`)));
+  }
 }
 
 main()

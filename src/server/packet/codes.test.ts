@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CITATION_KIND, codeOf, describeFindingsRead, FINDING_CODES, FINDING_LABELS, isFindingCode, labelOf, readFindings, unknownCodeOf, type FindingCode } from "./codes";
+import { CITATION_KIND, codeOf, describeFindingsRead, FINDING_CODES, FINDING_LABELS, isFindingCode, labelOf, readFindings, RETIRED_CODES, unknownCodeOf, type FindingCode } from "./codes";
 
 /*
  * Finding 17. A report counts codes, so the codes have to be complete and
@@ -91,6 +91,33 @@ describe("every finding carries a stable code", () => {
     for (const f of SOURCES) for (const m of read(f).matchAll(/code: "([a-z-]+)"/g)) used.add(m[1]!);
     expect([...used].filter((c) => !(FINDING_CODES as readonly string[]).includes(c))).toEqual([]);
     expect(new Set(FINDING_CODES).size).toBe(FINDING_CODES.length);
+  });
+
+  it("knows exactly which declared codes no live rule writes, so a retired check cannot be described as current", () => {
+    /*
+     * D-067. The report had three sections filtering on the message text of rules D-034 deleted. None of them
+     * could ever fire, and a retired check printing an unexplained zero reads as "we checked and found nothing",
+     * in the report the restamp is judged from.
+     *
+     * The retired set is derived here rather than trusted: the codes this build declares, less the codes its
+     * sources actually write. A rule withdrawn without being added to `RETIRED_CODES` fails this, which is the
+     * only thing that stops the report drifting back into describing a check nobody runs.
+     */
+    const written = new Set<string>();
+    for (const f of SOURCES) {
+      for (const line of read(f).split("\n")) {
+        const i = line.indexOf("code:");
+        if (i < 0) continue;
+        // A quoted code anywhere after `code:` on the line, so the ternary in entities.ts contributes both arms.
+        for (const m of line.slice(i).matchAll(/"([a-z][a-z-]+)"/g)) written.add(m[1]!);
+      }
+    }
+    // A scan that found nothing would make every code look retired. The floor again.
+    expect(written.size).toBeGreaterThanOrEqual(15);
+    const declaredButUnwritten = FINDING_CODES.filter((c) => !written.has(c)).sort();
+    expect(declaredButUnwritten).toEqual([...RETIRED_CODES].sort());
+    // And nothing is in both, which would be a rule described as retired while it is still writing findings.
+    expect([...RETIRED_CODES].filter((c) => written.has(c))).toEqual([]);
   });
 
   it("names every code it declares a citation failure", () => {

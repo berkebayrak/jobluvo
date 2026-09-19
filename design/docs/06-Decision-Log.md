@@ -132,6 +132,70 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-067. The retired checks are marked historical with their population named, and retry eligibility stops depending on a message
+
+The tenth review's item 5, and the reason the user gave for it is the whole of it: **this report is
+the instrument the migration is judged with, and a retired check printing an unexplained zero reads
+as "we checked and found nothing".**
+
+**Three sections filtered on the message text of rules D-034 deleted**: `value-contradicts` in the
+hard table, `metric-differs` and `responsibility-not-in-cited` in the review samples. None of them
+could fire. A fourth was worse than dead, it was **mislabelled**: the sample calling itself "metric
+unreadable, fact against line" matched on the words "could not be read", which is
+`number-unreadable`'s message and a live rule. It has been printing one rule's findings under
+another rule's name.
+
+**Marked historical, not dropped, and the evidence decided that.** Dropping them was the other
+option offered and it is the wrong one, because **two of those codes are still on stored rows**:
+
+| Code | Stored findings | On rows |
+|---|---|---|
+| `value-not-in-cited` | 2 | 2 |
+| `responsibility-not-in-cited` | 2 | 2 |
+| the other nine retired codes | 0 | 0 |
+
+Dropping the sections would make four stored findings invisible in the instrument, which is the same
+defect as the unexplained zero pointed the other way.
+
+**Two conditions from the user, both structural rather than cosmetic.**
+
+1. **The population is named next to every count.** The tables above the heading are the replay's
+   verdict on these packets today; the historical table counts the findings **stored** on the rows,
+   which is a different population. Reading one as the other is the sixth review's finding, so the
+   heading says in as many words what was counted and over which rows: "counted over the 155 findings
+   stored on all 107 packet rows", and "a zero here means no stored row carries that finding, never
+   that a check ran and found nothing".
+2. **They are under their own heading, after everything live**, behind a rule of equals signs, not
+   inline between two current sections. A historical section sitting between two live ones is read as
+   live however it is labelled.
+
+**The retired set is derived, not listed by hand.** `RETIRED_CODES` is in `codes.ts`, and
+`codes.test.ts` computes the written set by scanning the sources and fails if the declared codes less
+the written ones are not exactly that set. **A rule withdrawn without being added there fails the
+build.** That is the only thing that stops the report drifting back into describing a check nobody
+runs, which is what it had done three times over.
+
+**The two live sections that were message keyed are now keyed by code**: names by `name-unknown`,
+posting words by `posting-word-unknown`. The mislabelled sample is now `number-unreadable` under its
+own name.
+
+**`ACTIONABLE`, and the claim being made about it is narrow.** It was a set of two message strings
+matched against `f.message` in `actionable()`. Rewording either message would have stopped its
+finding earning a retry, and **the failure is invisible: a paid call quietly not made**, with nothing
+reporting it and the packet simply staying held. It reads `ACTIONABLE_CODES` now, through `codeOf`,
+so a row stored before codes existed is still read from its message through the legacy table.
+
+**It was correct today. This removes fragility rather than fixing a live defect**, and those are
+different claims. The test asserts the property rather than the strings: the same finding reworded
+past recognition is still actionable, a finding not on the list is not actionable however it is
+worded, a hard one never is, and a legacy codeless one still works.
+
+**Proved by breaking both**, and both breaks are the exact drift each guard exists to catch.
+
+**Nothing stored moves.** The report is read only, no rule changed, and the validator revision is
+untouched. **The stored state remains 83 ready, 22 held and 2 invalid, 105 rows at `2026-09-19.r11`
+and 2 at `2026-09-18.r6`.** The 81 ready and 24 held are what a restamp would write.
+
 ### D-066. An unknown code is checked where a finding is read and named where it is printed, and the scan stops trusting a list of filenames
 
 The tenth review's item 4, verified by the user against the code, and item B folded in because it is

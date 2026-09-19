@@ -1,5 +1,6 @@
 import type { PacketFinding, ResumeDocument } from "@/db/schema";
 import { claimsOf, fmt, sameValue, type Claim, type FactClaim } from "./claims";
+import { ACTIONABLE_CODES, codeOf } from "./codes";
 import { entityFindings, lemmasOf, type PostingScope } from "./entities";
 import { readNumbers } from "./normalise";
 import type { ChangeSet, FactEntry } from "./resume";
@@ -169,16 +170,20 @@ export function checkLine(line: string, bullet: string | null, cited: string[], 
 
 /**
  * Review findings the model can act on. A hard finding always earns its
- * retry; this list is the held ones a second call could still fix. Both that
- * remain are about the citation, which the model can simply supply. Not on
- * the list: a number phrase the normaliser could not read, which a second
- * call cannot resolve.
+ * retry; this decides which held ones a second call could still fix.
+ *
+ * **Read by code, from `ACTIONABLE_CODES`** (D-067). It used to match two
+ * message strings against `f.message`, so rewording either one would have
+ * silently stopped its finding earning a retry: **a paid call quietly not
+ * made, and nothing would have reported it.** It was correct on the day and
+ * this is fragility being removed rather than a live defect being fixed, which
+ * is worth saying plainly because the two are not the same claim.
  */
-export const ACTIONABLE = new Set([
-  "no fact cited for this line",
-  "cited fact does not exist",
-]);
-export const actionable = (f: PacketFinding) => f.level === "review" && ACTIONABLE.has(f.message);
+export const actionable = (f: PacketFinding) => {
+  if (f.level !== "review") return false;
+  const code = codeOf(f);
+  return !!code && ACTIONABLE_CODES.has(code);
+};
 
 export function validateChangeSet(cs: ChangeSet, base: ResumeDocument, facts: FactSet, posting: Set<string> = new Set(), scope: PostingScope = "claim"): PacketFinding[] {
   const out: PacketFinding[] = [];

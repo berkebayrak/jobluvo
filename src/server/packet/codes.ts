@@ -122,6 +122,51 @@ const LEGACY: [string, FindingCode][] = [
 
 const KNOWN: ReadonlySet<string> = new Set(FINDING_CODES);
 
+/**
+ * Codes this build **declares but no longer writes**: rules that existed, were
+ * removed, and whose findings are still on stored rows.
+ *
+ * Most of them went with the meaning comparison (D-034). They are kept in
+ * `FINDING_CODES` because stored findings carry them and a report must be able
+ * to name what it is looking at; they are listed here so a report can say which
+ * of its sections describe a check the current validator does not perform
+ * (D-067).
+ *
+ * **This list cannot drift.** `codes.test.ts` derives the written set by
+ * scanning the sources and fails if the declared codes minus the written ones
+ * are not exactly these. A rule withdrawn without being added here fails the
+ * build, which is the only way a report stops quietly describing a check
+ * nobody runs.
+ */
+export const RETIRED_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
+  "wrong-role",
+  "value-uncited",
+  "value-not-in-cited",
+  "value-contradicts",
+  "value-uncheckable",
+  "value-from-edit",
+  "metric-differs",
+  "metric-unreadable",
+  "responsibility-not-in-cited",
+  "tool-not-in-cited",
+  "entity-not-in-cited",
+]);
+
+/**
+ * The review findings a second call could still act on, by code.
+ *
+ * **By code and not by message** (D-067). This was a set of two message
+ * strings matched against `f.message`, so rewording either one would have
+ * silently stopped its finding earning a retry: a paid call quietly not made,
+ * which nothing would have reported. It is correct today and was fragility
+ * rather than a live defect, which is why it is said that way.
+ *
+ * Both are about the citation, which the model can simply supply. A number
+ * phrase the normaliser could not read is deliberately not here: a second call
+ * cannot resolve what the validator could not read, it can only drop the line.
+ */
+export const ACTIONABLE_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>(["no-fact-cited", "cited-fact-missing"]);
+
 /** True when this build declares the code. The one place that decides it. */
 export const isFindingCode = (code: string): code is FindingCode => KNOWN.has(code);
 

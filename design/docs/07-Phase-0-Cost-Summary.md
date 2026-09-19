@@ -70,7 +70,8 @@ value; both carry `value-not-in-cited` on `num:6`, from a rule D-034 deleted.
 |---|---|---|---|---|
 | 32 false lines, written by the rules' author | 8 | 4 | 4 | 24 |
 | 14 false lines, written by a second author | 0 | 0 | 0 | 14 |
-| 22 truthful case 1 lines, which must pass, 4 of them unadjudicated | 0 | 0 | 0 | 22 |
+| 18 lines labelled supported, which must pass | 0 | 0 | 0 | 18 |
+| 4 lines pending adjudication, asserted about nowhere | 0 | 0 | 0 | 4 today |
 
 **Eight of forty six are flagged, four of them rejected.** Earlier wording said "four of forty
 two", which counted only the rejections and understated what the check does; and a held packet
@@ -312,9 +313,9 @@ An earlier entry, D-031, read the same two rates as "39 percent of that fall is 
 
 **What the validator lets past, which is the measurement that matters and the one this page got wrong.** Two numbers, and the order they are read in is the point.
 
-`src/server/packet/pairs.test.ts` is a paired evaluation set: 32 deliberately false lines the validator is supposed to catch, and 22 truthful lines built from the same facts, each one it must let through. It was 28 and 26 until 19 September 2026, when four lines counted as truthful were found not to be supported by the facts they cite and moved (D-044, D-047).
+`src/server/packet/pairs.test.ts` is a paired evaluation set. **The population, in one place: 18 lines labelled supported, 4 pending adjudication, 32 unsupported lines written by the rules' author and 14 by a second author.** It was 26 controls and 28 false lines until 19 September 2026, when four controls were found not to be supported by the facts they cite and moved (D-044, D-047) and four more were separated out as unplaced (D-052).
 
-**Superseded on 18 September 2026 by D-034, and this paragraph still described it as current until 19 September.** It read: "It catches 28 of 28 and passes 26 of 26, asserted on every run of `npm test`. That result is not wrong and is not withdrawn." The first half stopped being true when the meaning comparison was removed. The file asserts 22 of 22 truthful and names the lines the invention check still rejects; it asserts nothing about the other 38, on purpose, under a header saying it is not evidence that fabrication is caught. The regression floor it provides is now a floor under the truthful controls and the few rejections, not under the whole set.
+**Superseded on 18 September 2026 by D-034, and this paragraph still described it as current until 19 September.** It read: "It catches 28 of 28 and passes 26 of 26, asserted on every run of `npm test`. That result is not wrong and is not withdrawn." The first half stopped being true when the meaning comparison was removed. The file asserts 18 of 18 supported lines pass and names the lines the invention check still rejects; it asserts nothing about the 32 unsupported lines, nothing about the second author's 14, and nothing about the 4 pending, on purpose, under a header saying it is not evidence that fabrication is caught. The regression floor it provides is now a floor under the truthful controls and the few rejections, not under the whole set.
 
 The 28 of 28 was a real result on 17 and 18 September 2026, under the claim validator that D-034 removed. Population: one author's fixtures, that author being the author of the rules.
 

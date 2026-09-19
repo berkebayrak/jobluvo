@@ -184,14 +184,22 @@ describe("replay decision", () => {
     expect(replayDecision(legacy, [], null)).toMatchObject({ kind: "revoke", status: "invalid" });
   });
 
-  it("says the same thing about a row however many times it is read", () => {
-    // The general property. Each shape is read three times, feeding each decision back onto the row, and the
-    // status and the presence of a document must settle on the first pass and stay there.
+  it("says the same thing about a row however many times it is read, findings included", () => {
+    /*
+     * The general property. Each shape is read three times, feeding each decision back onto the row, and
+     * everything the row carries must settle on the first pass and stay there.
+     *
+     * **Everything, not the status.** The ninth review's finding 6: this compared the status and whether a
+     * document was present, and D-049 recorded it as asserting that reading a row twice says the same thing. It
+     * did not assert that. `summaryNotRevalidated` carries bullet "summary", `retainedFindings` keeps everything
+     * with that bullet, and a fresh copy is appended on top, so a legacy row with a summary gained one copy per
+     * pass while all three passes agreed on the status and passed the test.
+     */
     const apply = (r: ReplayRow, d: ReplayDecision): ReplayRow =>
       d.kind === "no_resume" || d.kind === "no_candidate"
         ? r
         : { ...r, status: d.status, resume: "resume" in d ? (d.resume as ResumeDocument | null) : r.resume, findings: "findings" in d ? d.findings : r.findings };
-    const state = (r: ReplayRow) => `${r.status}/${r.resume ? "document" : "none"}`;
+    const state = (r: ReplayRow) => JSON.stringify({ status: r.status, resume: r.resume, findings: r.findings });
     const shapes: [string, ReplayRow, ResumeDocument | null][] = [
       ["ready, no resume, full change set", row({ status: "ready", resume: null, resumeHash: null, findings: [], changeSet }), doc],
       ["ready, no resume, bullets only", row({ status: "ready", resume: null, resumeHash: null, findings: [] }), null],
@@ -199,6 +207,10 @@ describe("replay decision", () => {
       ["invalid, no resume, full change set", row({ status: "invalid", resume: null, resumeHash: null, findings: [], changeSet }), doc],
       ["ready, resume matches", row({ changeSet }), doc],
       ["failed, parsed candidate never assessed", row({ status: "failed", resume: doc, findings: [], changeSet }), doc],
+      // The shape the old assertions could not see, and the one 27 stored rows are in: no change set, a summary
+      // the replay cannot read again, and a summary finding of its own that must survive every pass exactly once.
+      ["ready, bullets only, with a summary", row({ findings: [summaryReview] }), doc],
+      ["held, bullets only, with a summary and a soft finding", row({ status: "needs_review", findings: [summarySoft, summaryReview] }), doc],
     ];
     for (const [name, start, candidate] of shapes) {
       const first = apply(start, replayDecision(start, [], candidate));
@@ -207,6 +219,20 @@ describe("replay decision", () => {
       expect(`${name}: ${state(second)}`).toBe(`${name}: ${state(first)}`);
       expect(`${name}: ${state(third)}`).toBe(`${name}: ${state(first)}`);
     }
+  });
+
+  it("derives the coverage finding again on every pass rather than retaining the last pass's copy", () => {
+    // The mechanism behind the shape above, asserted directly so a failure says what broke. The derived finding
+    // is the replay's own and is never carried forward as though the run had written it; the row's genuine
+    // summary findings are, which is the half a filter by code would have got wrong.
+    const legacy = row({ findings: [summaryReview] });
+    const once = replayDecision(legacy, [], doc);
+    const carried = once.kind === "restamp" ? once.findings : [];
+    expect(carried.filter((f) => f.code === "summary-not-revalidated")).toHaveLength(1);
+    const twice = replayDecision({ ...legacy, findings: carried }, [], doc);
+    expect(twice.kind === "restamp" && twice.findings.filter((f) => f.code === "summary-not-revalidated")).toHaveLength(1);
+    // And the row's own summary finding is still there, once, on both passes.
+    expect(twice.kind === "restamp" && twice.findings.filter((f) => f.message === summaryReview.message)).toHaveLength(1);
   });
 
   /*

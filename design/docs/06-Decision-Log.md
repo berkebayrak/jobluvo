@@ -132,6 +132,60 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-056. A finding this module derives is derived again, never retained, and the test that was said to establish idempotence did not
+
+The ninth review's finding 6, confirmed by the user by reading the code. **The ordering fix of D-049
+is right and stands. What is corrected here is the claim made for the test that came with it.**
+
+**The defect.** `summaryNotRevalidated` carries bullet `"summary"`. `retainedFindings` kept every
+finding with that bullet. The replay then appended a fresh copy on top of the retained one. So a
+legacy row with a summary gained **one copy of the coverage finding per pass**, for ever.
+
+**The status never moved**, which is why nothing noticed. One review finding and eleven review
+findings with the same message earn the same `needs_review`, so all three passes of the repeated
+replay test agreed and the test passed while the row grew.
+
+**Measured on the live rows before the fix, because this one left a trace.** Read 19 September 2026:
+
+| Copies of `summary-not-revalidated` on one row | Rows |
+|---|---|
+| 10 | 11 |
+| 6 | 2 |
+
+**122 copies across 13 rows, of which 109 are duplicates.** The counts are the restamps those rows
+have lived through, which is the mechanism confirming itself rather than a second argument for it.
+The report's own review table falls from **148 findings to 13** under this change, one per row that
+has a summary it cannot read again.
+
+**The fix is a replacement, not a deduplication by code**, and the distinction is the reason it is
+written this way. Deduplicating by code would be wrong: findings legitimately share a code, and a
+line with three unknown values carries three `value-unknown` findings that all belong on the row.
+What is dropped is the small set of codes **only this file produces**, each at most one per row by
+construction: `summary-not-revalidated`, `assessment-not-run`, `profile-not-reproducible`,
+`posting-moved`, `unverifiable-resume`. They are not retained; they are derived again from the
+inputs the pass has. **Every finding the run wrote about the summary survives untouched**, which is
+the half a code filter would have destroyed.
+
+Read through `codeOf`, so a row stored before codes existed is recognised by its message rather than
+silently kept as a genuine historical finding.
+
+**The claim being corrected, and it is this project's own.** D-049 says "The property that was
+missing, now asserted. Not a case but an invariant: reading a row twice says the same thing", and
+then, in the same paragraph, that the test asserts the status and the presence of a document settle.
+The second sentence is what the test did. The first is what it was recorded as establishing, and the
+gap between them is exactly where this defect lived. The paragraph is corrected in place rather than
+deleted.
+
+**What the test asserts now.** The same shapes, read three times, comparing the whole row: status,
+document and findings. Two shapes are added, a legacy row with a summary and a legacy row with a
+summary and a soft finding, because that is the shape 13 stored rows are in and the matrix had none
+of it. A second test asserts the mechanism directly, that the derived finding appears once after two
+passes and the row's own summary finding also appears once, so a failure says which half broke.
+
+**The order of the restamp.** D-055 deliberately held its restamp for this entry. One restamp is
+applied from merged code once both are in, and it collapses the 109 duplicates rather than adding a
+110th.
+
 ### D-055. A suppressed number must carry the finding that suppressed it, because a silent suppression is a rejection
 
 The ninth review's finding 1, verified by the user against the code before it reached me, and
@@ -482,6 +536,12 @@ still revoked exactly as before.
 says the same thing. `replay.test.ts` reads five shapes three times each, feeding every decision
 back onto the row, and asserts the status and the presence of a document settle on the first pass
 and stay:
+
+*(Corrected 19 September 2026 by D-056. **The second sentence is what the test did and the first is
+what it was recorded as establishing**, and the gap between them is where the ninth review's finding
+6 lived: the findings were growing by one copy per pass under assertions that read the status only.
+The test now compares the whole row and the shape that was missing from its matrix is in it. The
+ordering fix below is unaffected and stands.)*
 
 | Shape | Before | After |
 |---|---|---|

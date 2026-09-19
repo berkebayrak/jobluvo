@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
 import { packets, type PacketFinding, type ResumeDocument } from "@/db/schema";
+import { codeOf, type FindingCode } from "./codes";
 import { resumeHash, shapedResume, type ChangeSet } from "./resume";
 import { isHard, needsReview, VALIDATOR_REVISION } from "./validate";
 
@@ -162,8 +163,40 @@ export const repairedFrom = (source: string, hash: string): PacketFinding => ({
 export const UNVERIFIABLE_RESUME = "stored resume is not the base plus the stored changes";
 export const unverifiable = (): PacketFinding => ({ level: "hard", bullet: null, code: "unverifiable-resume", message: UNVERIFIABLE_RESUME });
 
-/** The findings that survive a replay: the summary's, which nothing can replay. */
-export const retainedFindings = (stored: PacketFinding[]): PacketFinding[] => stored.filter((f) => f.bullet === "summary");
+/**
+ * The findings this module writes onto a row itself, rather than reading them
+ * off an answer the model gave.
+ *
+ * A derived finding is never carried forward as though the run had written it.
+ * It is dropped when the row is read again and derived afresh from the inputs
+ * this pass has, which is what makes reading a row twice say the same thing.
+ *
+ * **This is a replacement and not a deduplication by code**, and the
+ * difference matters (D-056). Findings legitimately share a code: a line with
+ * three unknown values carries three `value-unknown` findings and all three
+ * belong on the row. What is dropped here is the set of codes only this file
+ * produces, each of which is at most one per row by construction, and every
+ * finding the run wrote about the summary survives untouched.
+ */
+export const DERIVED_CODES = new Set<FindingCode>(["summary-not-revalidated", "assessment-not-run", "profile-not-reproducible", "posting-moved", "unverifiable-resume"]);
+
+/** True when this row's finding was written by a previous pass of this module rather than by the run. Read through `codeOf`, so a row stored before codes existed is recognised by its message. */
+export const isDerived = (f: PacketFinding): boolean => {
+  const code = codeOf(f);
+  return !!code && DERIVED_CODES.has(code);
+};
+
+/**
+ * The findings that survive a replay: the summary's, which nothing can replay,
+ * less the ones a previous pass derived.
+ *
+ * Without that second half the replay was not idempotent over its own output.
+ * `summaryNotRevalidated` carries bullet "summary", so it was retained here and
+ * a fresh copy was appended on top of it, and a legacy row with a summary gained
+ * one copy per pass. The status never moved, which is why three passes agreed
+ * and the test that read only the status passed (the ninth review's finding 6).
+ */
+export const retainedFindings = (stored: PacketFinding[]): PacketFinding[] => stored.filter((f) => f.bullet === "summary" && !isDerived(f));
 
 /** The status a set of findings earns, the same reading the run gives a fresh attempt. */
 export const statusOf = (findings: PacketFinding[]): ReplayStatus => (isHard(findings) ? "invalid" : needsReview(findings) ? "needs_review" : "ready");

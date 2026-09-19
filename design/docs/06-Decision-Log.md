@@ -225,6 +225,20 @@ The pass direction D-063 opened, a phrase reported and never located leaving its
 evidence, closes with it: a phrase that is never located cannot occur, since the location is recorded
 rather than found.
 
+**What closing item 20 means, and what it does not.** It means **every phrase this function reports
+is located at the occurrence that produced it.** It does **not** mean the grammar reports everything
+a person would call unreadable. That is a different question, it was never item 20, and it is open:
+the grammar reads what it reads, and a number it reads confidently and wrongly is not reported at
+all, so no span exists for it and none should. **"Item 20 is closed" is not "numbers are read
+correctly now"**, and anybody about to quote it as the second thing should stop.
+
+**The mechanism is unexercised by real data, stated as coverage rather than as a worry.** The corpus
+run over every stored profile fact found **0 unreadable phrases in 309 chunks**. That is a clean
+result: nothing on the profile is ambiguous, which is why no stored row can move. It also means
+**every guarantee in this entry rests on constructed inputs**, because the population contains no
+instance of the thing being guarded. The first real exercise is the first upload written with
+decimal commas.
+
 **Nothing is kept open out of caution.** If a case is found later it will be a case, with an input,
 and it will get its own entry.
 
@@ -299,7 +313,13 @@ report prints are **what a restamp would write**, not what is there.
 
 ### D-063. Withdrawn. Suppression tied to the occurrence, superseded by D-065 before it shipped
 
-**Withdrawn 19 September 2026 and never merged.** It narrowed the search to the occurrence and
+**Withdrawn 19 September 2026. What is true about its reach, stated exactly rather than loosely: it
+exists in the repository on one commit, it was never run against user data, and no stored row was
+stamped under it.** It is not the case that it never existed, and it is not the case that it shipped.
+The commit is kept in the chain deliberately, because the header comment in `normalise.ts` explains
+the current design through all three attempts and this is the third.
+
+It narrowed the search to the occurrence and
 refused to guess between two that looked alike, which fixed the reject direction and left a phrase it
 could not locate unmarked, so the fragments of that phrase reached the claims as evidence nobody
 wrote. The trade table below argued for accepting that. **The user's answer was that there should be
@@ -1278,6 +1298,13 @@ documentation only and no prompt carries it, which is why it survived a round of
     rediscover. The pass direction opened by the withdrawn D-063, a phrase reported and never located
     leaving its fragments in the evidence, closes with it: a phrase that is never located cannot
     occur. Kept here struck through rather than deleted, because three entries above refer to it.
+
+    **Scope, so the closure is not quoted for more than it is.** Closed means every phrase the
+    function REPORTS is located at the occurrence that produced it. It does **not** mean the grammar
+    reports everything a person would call unreadable; that is a different question, it was never
+    this item, and it is open. And the mechanism is **unexercised by real data**: 0 unreadable
+    phrases across 309 chunks of every stored profile fact, so every guarantee rests on constructed
+    inputs until the first upload written with decimal commas.
 21. **The packet write under a second writer.** The ownership work already deferred, now three
     findings rather than one. All three need one user with concurrent or repeated runs to bite, and
     there is one user and no concurrency, which is why they wait rather than being forgotten.

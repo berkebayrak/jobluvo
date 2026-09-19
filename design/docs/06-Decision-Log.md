@@ -132,6 +132,74 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-066. An unknown code is checked where a finding is read and named where it is printed, and the scan stops trusting a list of filenames
+
+The tenth review's item 4, verified by the user against the code, and item B folded in because it is
+the same subject and the same file. **D-061 removed a hole from the label map and left the same hole
+open on the data path.**
+
+**The hole.** `codeOf` was `if (f.code) return f.code as FindingCode`. The type that makes that look
+safe is **a claim about the column rather than a fact about it**: `findings` is `jsonb` and the
+database enforces nothing. A row written by a later build, a hand edit or a restored snapshot can
+carry a code this build has never declared, and the cast handed it on as valid. `FINDING_LABELS[code]`
+then evaluated to `undefined` and the count table grew a row called **"undefined"**, which is exactly
+what D-061 removed from the map, re-entering through the data. The exhaustive `Record` proves the
+declared union is covered; it proves nothing about what is persisted.
+
+**Three changes, each small and each doing one thing.**
+
+1. **`codeOf` tests membership.** An unrecognised code returns null, and **does not fall through to
+   the legacy message table**. Falling through would relabel a finding as a rule it is not, which is
+   the bucket-joining this file exists to stop. This matters beyond the labels: `codeOf` feeds
+   `isDerived` in the replay, the `CITATION_KIND` lookups in two sample scripts and the probe, and an
+   unknown code escaping as valid poisons all of them.
+2. **`unknownCodeOf` and `labelOf` name it.** An unknown code prints as `unknown code: <the code>`,
+   a codeless finding as `no code: <the message>`. **Never `undefined`, and never folded into another
+   reason.**
+3. **`readFindings` is the boundary check**, run over the stored set before any row is interpreted,
+   in `validator-report` on the database side and `reconcile-sample` on the JSON side. It counts
+   unknown codes by name and codeless findings separately. **It never throws**: a report that stops
+   because one row is odd tells you less than one that prints the row, and these are the instrument
+   the restamp is judged with.
+
+   **It prints a line either way, which is this entry's own rule applied to itself.** The first
+   version returned nothing on a clean read, so the boundary was silent exactly when everything was
+   recognised, and a silent check cannot be told from one that did not run. That is the floor both
+   scans in item B carry and the boundary had none. The clean line says how many findings were read
+   and that every code is declared; the by-name detail is unchanged for the unclean case.
+
+**What is enforced and where, which is also D-061's sentence corrected.** D-061 said a codeless
+finding "is a row written before codes existed". That is stronger than anything enforces; it usually
+is one and nothing establishes it. The honest boundary, now written into the code:
+
+| | Rule |
+|---|---|
+| a finding **created** in this repository | must carry a code, and `codes.test.ts` fails the build if one does not |
+| a finding **read back** from `jsonb` or a snapshot | may carry anything, so the code is checked for membership when it is read |
+| a code this build does not declare | stays visible by name, in every table |
+
+**On the live rows: nothing to report.** The boundary line prints nothing, so every code on every
+stored finding is one this build declares. The 13 codeless ones are recognised by their message
+through the legacy table and are not counted as unrecognised.
+
+**Item B, the scan that trusted a list of filenames.** `codes.test.ts` scanned four named files.
+Nothing stopped a fifth being added and never scanned, and a check that silently covers less than it
+claims is the failure mode the file exists to catch. **The list is gone; the directory is read.**
+
+**Test files are excluded, deliberately, and what that leaves uncovered is stated.** Fixtures build
+findings without codes on purpose. A finding constructed in a test file is not checked while it lives
+there; **the moment such a helper moves into a source file it is scanned**, because the scan is over
+whatever non test files the directory holds, which is the case the review named. A construction
+elsewhere in the tree is a different gap and has its own test: no file outside `src/server/packet`
+constructs a finding, asserted over the whole of `src`. The type declaration in `db/schema.ts` is not
+a construction and is excluded by the shape of the pattern, `level: "hard",` against
+`level: "hard" | "review" | "soft";`.
+
+**Both new scans carry a floor**, because a walk that found nothing would report no violations and
+mean nothing: the tree has at least 30 sources and at least 4 of them inside this directory still
+match the construction pattern. That is the same guard the original scan already had on its own
+count, kept rather than assumed.
+
 ### D-065. The span is carried, not recovered, and phase 1 item 20 is closed
 
 The user's instruction after the tenth review, and its diagnosis is the entry: **the code threw away
@@ -509,9 +577,15 @@ saying so. Proved by breaking it both ways: removing a label fails `tsc` with th
 duplicated label fails the test.
 
 **One distinction kept, because the two are not the same defect.** A **known code with no label** is
-forbidden and now impossible. A **finding carrying no code at all** is a row written before codes
-existed whose message no legacy prefix matches; it is genuinely unrecognised and still prints, named
-`no code: <message>` rather than joined to one of the labels.
+forbidden and now impossible. A **finding carrying no code at all** is genuinely unrecognised and
+still prints, named `no code: <message>` rather than joined to one of the labels.
+
+*(Corrected 19 September 2026 by D-066. This said such a finding "is a row written before codes
+existed", which is **stronger than anything enforces**. It usually is one and nothing establishes it.
+The honest boundary, which D-066 writes into the code: a finding **created** in this repository must
+carry a code and the build fails if one does not; a finding **read back** from `jsonb` or a snapshot
+may carry anything, so its code is checked for membership when it is read; an unknown one stays
+visible by name. D-061 also left the data path open, which is D-066's subject.)*
 
 **Measured, and it changes nothing about the stored rows.** The report is read only. The three
 `posting-moved` findings it was calling unclassified are the same three findings; they are now

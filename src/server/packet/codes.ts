@@ -120,11 +120,91 @@ const LEGACY: [string, FindingCode][] = [
   ["this answer is a retry", "retry-provenance"],
 ];
 
-/** A finding's code: the one it carries, or the one its message names on a row written before codes existed. */
+const KNOWN: ReadonlySet<string> = new Set(FINDING_CODES);
+
+/** True when this build declares the code. The one place that decides it. */
+export const isFindingCode = (code: string): code is FindingCode => KNOWN.has(code);
+
+/**
+ * A finding's code: the one it carries **if this build declares it**, or the
+ * one its message names on a row written before codes existed.
+ *
+ * **The membership test is the point** (D-066). This used to be
+ * `return f.code as FindingCode`, an unchecked cast, and the type that makes
+ * it look safe is a claim about data rather than a fact about it: `findings`
+ * is `jsonb` and the database enforces nothing. A row written by a later
+ * build, a hand edit or a restored snapshot can carry a code this build has
+ * never heard of, and the cast handed it on as valid. Downstream that became
+ * `FINDING_LABELS[code]` evaluating to `undefined` and a count table with a
+ * row called "undefined", which is the same defect D-061 removed from the
+ * label map, re-entering through the data.
+ *
+ * An unrecognised code returns null and **does not fall through to the
+ * message**. Reading the message of a finding that named itself something
+ * else would relabel it as a rule it is not, which is the bucket-joining this
+ * whole file exists to stop. `unknownCodeOf` is how it stays visible.
+ */
 export function codeOf(f: { code?: string; message: string }): FindingCode | null {
-  if (f.code) return f.code as FindingCode;
+  if (f.code) return isFindingCode(f.code) ? f.code : null;
   for (const [prefix, code] of LEGACY) if (f.message.startsWith(prefix)) return code;
   return null;
+}
+
+/** The code a finding carries that this build does not declare, or null. Kept separate so an unknown code is reportable by name rather than merely absent. */
+export const unknownCodeOf = (f: { code?: string; message: string }): string | null => (f.code && !isFindingCode(f.code) ? f.code : null);
+
+/**
+ * What a stored finding could not be recognised as, over findings read from
+ * the database or from a snapshot file.
+ *
+ * Neither number is an error and neither throws. A report that stops because
+ * one row is odd tells you less than one that prints the row, and these are
+ * the instrument the restamp is judged with.
+ */
+export interface FindingsRead {
+  /** Codes this build does not declare, by name, with how many findings carry each. */
+  unknownCodes: Map<string, number>;
+  /** Findings carrying no code whose message no legacy prefix names either. */
+  unrecognised: number;
+  /** Findings read in all. */
+  total: number;
+}
+
+/**
+ * The boundary check: findings as they come off `jsonb` or a JSON file, read
+ * for what this build can and cannot recognise.
+ *
+ * The type on `packets.findings` says `PacketFinding[]`, and that is an
+ * assertion about the column rather than a guarantee from it. This is where
+ * the assertion is tested, and what it finds is printed by name.
+ */
+export function readFindings(findings: { code?: string; message: string }[]): FindingsRead {
+  const unknownCodes = new Map<string, number>();
+  let unrecognised = 0;
+  for (const f of findings) {
+    const unknown = unknownCodeOf(f);
+    if (unknown) unknownCodes.set(unknown, (unknownCodes.get(unknown) ?? 0) + 1);
+    else if (!codeOf(f)) unrecognised += 1;
+  }
+  return { unknownCodes, unrecognised, total: findings.length };
+}
+
+/**
+ * One line saying what the read found, **always**.
+ *
+ * It used to return null on a clean read, so the boundary printed nothing when
+ * everything was recognised. That is the defect this file's own scans carry a
+ * floor against: a check that found nothing reports no violations and is
+ * indistinguishable from a check that did not run, in the one report a restamp
+ * is judged from. The clean line says how many findings were read and that
+ * every code is declared, so the reader can tell the two apart.
+ */
+export function describeFindingsRead(r: FindingsRead): string {
+  const parts: string[] = [];
+  for (const [code, n] of [...r.unknownCodes].sort((a, b) => b[1] - a[1])) parts.push(`${n} carrying the code "${code}", which this build does not declare`);
+  if (r.unrecognised) parts.push(`${r.unrecognised} carrying no code and no message this build names`);
+  if (!parts.length) return `${r.total} stored findings read, and every code on them is one this build declares`;
+  return `${r.total} stored findings read: ${parts.join("; ")}. Counted and printed by name, never as "undefined" and never folded into another reason`;
 }
 
 /**
@@ -145,9 +225,20 @@ export function codeOf(f: { code?: string; message: string }): FindingCode | nul
  * are distinct, because two codes sharing a label is the other way a table
  * quietly merges two reasons into one bucket.
  *
- * A finding with no code at all is a different thing and still prints: it is a
- * row written before codes existed whose message no legacy prefix matches, and
- * it is named as codeless rather than as one of these.
+ * A finding this build cannot name still prints, by name where it has one.
+ * There are two such cases and they are not the same (D-066):
+ *
+ * - it carries a code this build does not declare. Printed as
+ *   `unknown code: <the code>`, so the name reaches the reader;
+ * - it carries no code and no message any legacy prefix names. Printed as
+ *   `no code: <the message>`.
+ *
+ * **What is enforced and where, stated rather than implied.** A finding
+ * created in this repository must carry a code, and `codes.test.ts` fails the
+ * build if one does not. A finding read back from `jsonb` or from a snapshot
+ * may carry anything, because the column is not the type, so the code is
+ * checked for membership when it is read. Neither of those says a stored
+ * codeless finding is old; it usually is, and nothing establishes it.
  */
 export const FINDING_LABELS: Record<FindingCode, string> = {
   // Citations: what the line points at.
@@ -186,8 +277,10 @@ export const FINDING_LABELS: Record<FindingCode, string> = {
   "retry-provenance": "this answer is a retry",
 };
 
-/** The label for a finding, or a name saying it carries no code this build knows. */
+/** The label for a finding; an unknown code is named, and a codeless finding is named by its message. Never `undefined`. */
 export const labelOf = (f: { code?: string; message: string }): string => {
+  const unknown = unknownCodeOf(f);
+  if (unknown) return `unknown code: ${unknown}`;
   const code = codeOf(f);
   return code ? FINDING_LABELS[code] : `no code: ${f.message}`;
 };

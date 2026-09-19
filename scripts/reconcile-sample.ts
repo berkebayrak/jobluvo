@@ -4,7 +4,7 @@ import type { Packet, PacketFinding } from "@/db/schema";
 import { parseFlags } from "@/lib/cli";
 import type { ResumeFacts } from "@/server/match/profile";
 import { applyChanges, baseResume, factEntries, resumeHash, shapedResume, type ChangeSet } from "@/server/packet/resume";
-import { CITATION_KIND, CITATION_KINDS, codeOf, type CitationKind } from "@/server/packet/codes";
+import { CITATION_KIND, CITATION_KINDS, codeOf, describeFindingsRead, readFindings, type CitationKind } from "@/server/packet/codes";
 import { classifyRetry, mergeRetry } from "@/server/packet/retry";
 import { factSet, isHard, needsReview, validateChangeSet } from "@/server/packet/validate";
 import { readAnswers } from "@/server/packet/answers";
@@ -46,6 +46,9 @@ function main() {
   const run = values.run ?? "families-18sep-changes";
   const read = <T>(name: string): T => JSON.parse(readFileSync(join(dir, name), "utf8")) as T;
   const packets = (read<Packet[]>("packets.json")).filter((p) => p.run === run);
+  // The same boundary check as the report, on the JSON side. A snapshot is a file and can hold anything;
+  // an unrecognised code is counted and named rather than reaching a table as "undefined" (D-066).
+  const boundary = describeFindingsRead(readFindings(packets.flatMap((p) => p.findings)));
   // Either format: a bare array from before headers existed, or a file with one (finding 18).
   const answersFile = readAnswers(readFileSync(join(dir, values.answers ?? "families-18sep-saved-answers.json"), "utf8"));
   const saved = answersFile.outcomes as unknown as SavedOutcome[];
@@ -69,6 +72,8 @@ function main() {
   out(`# Reconciliation of ${run}, read from ${dir}`);
   out();
   out(`Packets ${packets.length}, saved answers ${saved.length}, cost rows ${costs.length}. Profile ${hashes[0]!.slice(0, 12)}, ${factEntries(facts).length} facts. Rules as they stand at the code revision this ran on; the baseline is the stored status and findings, read before any rule was applied.`);
+  if (boundary) out(`
+Stored findings this build could not recognise: ${boundary}`);
   out();
   // What produced the answers, from their own header, and whether it matches what is being read against them.
   if (header) {

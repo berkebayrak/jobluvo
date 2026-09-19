@@ -461,9 +461,15 @@ describe.skipIf(!hasDb)("a validator that throws is a failed packet, not an abor
       expect(out.status).toBe("failed");
       expect(out.attempts).toBe(1);
       expect(call()).toHaveBeenCalledTimes(1);
-      expect(out.resume).toBeNull();
+      // The answer parsed and our own validator threw on it. The paid answer is kept and the status blocks it; it was
+      // being discarded to report a defect in the code that was going to read it (D-045).
+      expect(out.resume).not.toBeNull();
+      expect(consumableResume(out)).toBeNull();
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(p.status).toBe("failed");
+      expect(p.resume?.experience[0].bullets[0].text).toBe("Used constructor injection.");
+      expect(p.resumeHash).toBe(resumeHash(p.resume!));
+      expect(consumableResume(p)).toBeNull();
       expect(p.error).toBe("validator failed: n.toFixed is not a function");
       expect(p.attempts).toBe(1);
       expect(await tx.select({ kind: costEvents.kind }).from(costEvents).where(eq(costEvents.userId, userId))).toEqual([{ kind: "tailor" }]);
@@ -494,30 +500,43 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
   const malformed = { ...invented, text: "{not json" };
   const offSchema = { ...invented, text: JSON.stringify({ summary: null, changes: "none" }) };
 
+  /**
+   * The rule this suite exists for is that a rejected candidate is never promoted by a failed retry, and the way to
+   * say that is the gate: the status is not ready and nothing leaves through `consumableResume`.
+   *
+   * It used to say it by asserting the row held no trace of the rejected text, which asserted the deletion D-038
+   * removed and the seventh review found still in force on this path. A packet that keeps the document a person can
+   * be shown, with a status that stops it being sent anywhere, is the point. "The invention is not in the row" and
+   * "the invention cannot be submitted" are different claims and only the second one was ever wanted (D-045).
+   */
   async function expectNothingShipped(tx: Tx, jobId: string, out: Awaited<ReturnType<typeof tailorJob>>) {
     expect(out.status).not.toBe("ready");
-    expect(out.resume).toBeNull();
+    expect(consumableResume(out)).toBeNull();
     const [p] = await tx.select().from(packets).where(eq(packets.jobId, jobId));
     expect(p.status).not.toBe("ready");
-    expect(p.resume).toBeNull();
-    expect(p.resumeHash).toBeNull();
-    expect(JSON.stringify(p)).not.toContain("99 percent");
+    expect(consumableResume(p)).toBeNull();
     return p;
   }
 
-  it("invalid, then malformed JSON: failed, with no resume and no changes from the rejected attempt", async () => {
+  it("invalid, then malformed JSON: the rejected attempt is the packet, kept whole and not consumable", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
       call().mockResolvedValueOnce(invented).mockResolvedValueOnce(malformed);
       const out = await tailorJob(tx, facts, job);
       const p = await expectNothingShipped(tx, job.id, out);
-      expect(out.status).toBe("failed");
+      // The packet is attempt 1, which is the last attempt that produced anything. Its status, its findings and its
+      // number are attempt 1's; attempt 2's failure is in the error text, which is where a failure belongs (D-045).
+      expect(out.status).toBe("invalid");
       expect(out.attempts).toBe(2);
       expect(out.attemptLog.map((a) => a.outcome)).toEqual(["invalid", "failed"]);
       expect(out.attemptLog[0].findings).toEqual([expect.objectContaining({ level: "hard", bullet: "R1.1", value: "pct:99" })]);
-      expect(out.findings).toEqual([]);
-      expect(out.changes).toBe(0);
-      expect(p.changes).toEqual([]);
+      expect(out.findings).toEqual([expect.objectContaining({ level: "hard", bullet: "R1.1", value: "pct:99" })]);
+      expect(out.changes).toBe(1);
+      expect(p.attempt).toBe(1);
+      // The rejected document is on the row, named by its hash, and the finding says what is wrong with it.
+      expect(p.resume?.experience[0].bullets[0].text).toContain("99 percent");
+      expect(p.resumeHash).toBe(resumeHash(p.resume!));
+      expect(p.changes).toHaveLength(1);
       expect(p.attempts).toBe(2);
       expect(p.error).toContain("attempt 1 invalid: 1 hard finding(s)");
       expect(p.error).toContain("attempt 2 failed");
@@ -528,24 +547,24 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
     });
   });
 
-  it("invalid, then a transport error: failed, one cost row, nothing from the rejected attempt", async () => {
+  it("invalid, then a transport error: the rejected attempt is the packet, one cost row", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
       call().mockResolvedValueOnce(invented).mockRejectedValueOnce(new Error("fetch failed: ECONNRESET"));
       const out = await tailorJob(tx, facts, job);
       const p = await expectNothingShipped(tx, job.id, out);
-      expect(out.status).toBe("failed");
+      expect(out.status).toBe("invalid");
       expect(out.attempts).toBe(2);
       expect(out.attemptLog.map((a) => a.outcome)).toEqual(["invalid", "failed"]);
       expect(out.error).toContain("ECONNRESET");
-      expect(p.changes).toEqual([]);
-      expect(p.findings).toEqual([]);
+      expect(p.changes).toHaveLength(1);
+      expect(p.findings).toEqual([expect.objectContaining({ level: "hard", value: "pct:99" })]);
       const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
       expect(cost).toHaveLength(1);
     });
   });
 
-  it("invalid, then an incomplete response: failed, the cut off call still pays, nothing from the rejected attempt", async () => {
+  it("invalid, then an incomplete response: the rejected attempt is the packet, and the cut off call still pays", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
       call()
@@ -553,11 +572,11 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
         .mockRejectedValueOnce(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));
       const out = await tailorJob(tx, facts, job);
       const p = await expectNothingShipped(tx, job.id, out);
-      expect(out.status).toBe("failed");
+      expect(out.status).toBe("invalid");
       expect(out.attempts).toBe(2);
       expect(out.error).toContain("incomplete");
       expect(p.error).toContain("attempt 1 invalid");
-      expect(p.changes).toEqual([]);
+      expect(p.changes).toHaveLength(1);
       const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
       expect(cost).toHaveLength(2);
       expect(out.usd).toBeCloseTo(0.001, 8);
@@ -584,7 +603,7 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
     });
   });
 
-  it("invalid, then a timeout: failed with no cost row for the timed out call, and the cost report counts the row as unknown cost", async () => {
+  it("invalid, then a timeout: the rejected attempt is the packet, no cost row for the timed out call, and the report counts it as unknown cost", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
       const before = await unknownCostStats(tx);
@@ -593,7 +612,8 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
         .mockRejectedValueOnce(new tailor.TailorError(`call timed out after 20000ms, ${UNKNOWN_COST_MARK}: the provider may have completed and billed it`, "gpt-5.6-luna", null, 0, 20000));
       const out = await tailorJob(tx, facts, job);
       const p = await expectNothingShipped(tx, job.id, out);
-      expect(out.status).toBe("failed");
+      // The packet is attempt 1 and says so; the timeout is in the error text and the unknown cost mark survives it.
+      expect(out.status).toBe("invalid");
       expect(p.error).toContain("attempt 2 failed: call timed out after 20000ms, cost unknown");
       const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
       expect(cost).toHaveLength(1);
@@ -627,6 +647,51 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       const after = await unknownCostStats(tx);
       const rows = (s: typeof after) => s.find((x) => x.kind === "tailor")!;
       expect(rows(after).unknownRows! - rows(before).unknownRows!).toBe(1);
+    });
+  });
+
+  it("a rerun that produces nothing keeps a document built from the same facts and the same posting", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      // First run: a clean answer, stored.
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      await tailorJob(tx, facts, job, { run: "first" });
+      const [kept] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(kept.status).toBe("ready");
+      expect(kept.resume).not.toBeNull();
+
+      // Second run over the same facts and the same posting: nothing parses, so this run has no document of its own.
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      const out = await tailorJob(tx, facts, job, { run: "second" });
+      expect(out.status).toBe("failed");
+      const [after] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      // The row's labels already describe that document, so keeping it relabels nothing (D-045).
+      expect(after.resume).toEqual(kept.resume);
+      expect(after.resumeHash).toBe(kept.resumeHash);
+      expect(after.factsHash).toBe(kept.factsHash);
+      expect(after.contentHash).toBe(kept.contentHash);
+      // And the status is this run's, so the kept document is not consumable on the strength of a run that failed.
+      expect(after.status).toBe("failed");
+      expect(consumableResume(after)).toBeNull();
+      expect(after.run).toBe("second");
+      expect(after.error).toContain("attempt 2 failed");
+    });
+  });
+
+  it("a rerun that produces nothing does not keep a document built from different inputs", async () => {
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      await tailorJob(tx, facts, job, { run: "first" });
+      // The posting moved since that document was written, so it answers a different question and is not kept.
+      await tx.update(packets).set({ contentHash: "a-different-posting" }).where(eq(packets.jobId, job.id));
+
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      await tailorJob(tx, facts, job, { run: "second" });
+      const [after] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(after.resume).toBeNull();
+      expect(after.resumeHash).toBeNull();
+      expect(after.status).toBe("failed");
     });
   });
 

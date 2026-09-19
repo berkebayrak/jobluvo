@@ -132,6 +132,61 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-045. D-038 is extended to the attempt that produced nothing, and the tests stop asserting the deletion
+
+The seventh review's finding 1, which the user reproduced and verified. D-038 said a rejection
+blocks a document and does not delete it, and #86 fixed the rejection path only. Three paths
+were left, and on all three the packet still came out empty.
+
+**What was wrong.** The retained attempt was simply the last attempt. When attempt 1 was
+rejected and attempt 2 never produced anything, the packet became attempt 2: no document, no
+change set, no findings, status `failed`. The model's paid answer, the one a person could have
+been shown beside the finding that rejected it, was gone. The same happened when the validator
+itself threw on an answer that had parsed: the candidate was discarded to report a defect in
+the code that was going to read it.
+
+**The rule.** The retained attempt is the **last attempt that produced a document**, not the
+last attempt. An attempt whose call never returned, or whose answer did not parse, produced
+nothing to retain, and the execution failure belongs in the error text and on the attempt log,
+which is where a failure belongs. The packet then carries that attempt's own number, its own
+findings and its own status.
+
+| Sequence | Packet before | Packet now |
+|---|---|---|
+| invalid, then malformed JSON | failed, no document, no findings | invalid, attempt 1, its document and its hard finding |
+| invalid, then a transport error | failed, no document | invalid, attempt 1, its document |
+| invalid, then a timeout | failed, no document | invalid, attempt 1, its document |
+| parsed, then the validator threw on it | failed, no document | failed, attempt 1, its document, findings empty because nothing read it |
+| held, then a failed retry | held first answer kept | unchanged, that rule already existed |
+| nothing parsed at all | failed, no document | unchanged, there is nothing to keep |
+
+None of this promotes anything. `consumableResume` serves a `ready` packet and nothing else, so
+every row above is as unsendable as it was when it was empty. What changed is that the evidence
+survives the verdict, which is the whole of D-038.
+
+**The tests were enforcing what D-038 removed, and that is the part worth saying plainly.**
+`expectNothingShipped` asserted that the stored row contained no trace of the rejected text,
+including a string match on the invented figure. That is an assertion that the deletion happens.
+It now asserts the gate: the status is not ready and nothing leaves through `consumableResume`.
+**"The invention is not in the row" and "the invention cannot be submitted" are different
+claims, and only the second was ever wanted.** A test suite can hold a policy in place long
+after the decision that set it was reversed, and this one did, for four days, in the file whose
+job is to prove the opposite.
+
+**The regeneration case, which the review raised with it.** The upsert wrote `resume` and
+`resume_hash` unconditionally, so a rerun that produced nothing replaced a stored document with
+null. A run with no document of its own now keeps the one already on the row, **but only when
+that row carries the same facts hash and the same content hash**. Then the row's own labels
+already describe the document it is keeping and nothing is relabelled. When either input has
+moved, the stored document answered a different question and it goes.
+
+The honest limit of that, stated rather than left to be found: the kept document is from an
+earlier run while the status, findings and error on the row are this one's. It is coherent
+because the status in that case is always `failed`, which claims nothing about a document, and
+because with the retained attempt rule above a run reaches the upsert with no document only
+when not one of its attempts parsed. A row that had to describe two runs properly would need a
+column, and nothing here needs one.
+
 ### D-044. Two truthful controls were case 3 false lines, and the set is 30 and 24
 
 The user's call on the two named in D-041. Both are the same work at a higher level of

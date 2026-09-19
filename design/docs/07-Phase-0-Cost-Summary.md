@@ -19,8 +19,8 @@ what the sixth review found.
 
 | Status | Packets | Validator revision | Document on the row |
 |---|---|---|---|
-| ready | 83 | 2026-09-19.r9 | 83 |
-| needs_review | 22 | 2026-09-19.r9 | 22 |
+| ready | 83 | 2026-09-19.r11 | 83 |
+| needs_review | 22 | 2026-09-19.r11 | 22 |
 | invalid | 2 | 2026-09-18.r6 | 0 |
 
 Two restamps produced this, both applied 19 September 2026 from merged code. The r9 restamp

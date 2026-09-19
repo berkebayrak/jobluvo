@@ -264,11 +264,18 @@ describe("a span the normaliser could not read supplies no value at all", () => 
   });
 
   it("the fragments from that source do not pass as confirmed values", () => {
-    // This is the half that matters most. Before the fix the fact above contributed money:usd:9 and num:2000000, so
+    // This is the half that matters most. Before the fix the fact below contributed money:usd:9 and num:2000000, so
     // a line inventing either of them was waved through as supported by the profile. Both are unknown now.
     const facts = factSet([entry("R1.1", "Raised USD 9,2 million in Series B."), entry("R1.2", "Closed 3 rounds.")]);
+    // The evidence itself: the profile carries one value, and neither fragment is on it. This assertion is what
+    // catches the pollution, and it is the one the eighth review confirmed was doing its job (finding 10).
     expect(facts.all.map((c) => c.key)).toEqual(["num:3"]);
-    for (const invented of ["Raised USD 9 million.", "Served 2000000 customers."]) {
+    // "Raised USD 9 million" was the wrong example: it parses to money:usd:9000000, which is not the fragment the
+    // bug produced, so it tested nothing about this. The fragment was money:usd:9, and "Raised USD 9." is how a
+    // line states it (finding 10).
+    expect(claimsOf("Raised USD 9.").map((c) => c.key)).toEqual(["money:usd:9"]);
+    expect(claimsOf("Raised USD 9 million.").map((c) => c.key)).toEqual(["money:usd:9000000"]);
+    for (const invented of ["Raised USD 9.", "Served 2000000 customers."]) {
       const found = checkLine(invented, "R1.1", ["R1.1"], facts).filter((f) => f.code === "value-unknown");
       expect(found.length).toBeGreaterThan(0);
     }

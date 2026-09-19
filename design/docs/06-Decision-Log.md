@@ -132,6 +132,47 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-054. The corrections the eighth review's author attributed to himself, and one label read from the database rather than restated
+
+Three corrections and a read. No code changes beyond the one test example.
+
+**1. The revision label on the current state table was stale, and it is now what the rows say.**
+The table read `2026-09-19.r9` while r10 had been applied the same day, and r11 has been applied
+since. **Read once, at 01:55 UTC on 19 September 2026**, rather than restated from memory:
+
+| Status | Validator revision | Rows | With a document |
+|---|---|---|---|
+| ready | 2026-09-19.r11 | 83 | 83 |
+| needs_review | 2026-09-19.r11 | 22 | 22 |
+| invalid | 2026-09-18.r6 | 2 | 0 |
+
+The counts agree with what the review says. Only the revision label was wrong, and the two
+restamps that moved it, r10 for D-040 and r11 for D-053, each changed zero statuses. Nothing
+else on that page was touched while the label was corrected, which was the instruction.
+
+**2. The test example that did not test what its comment said.** D-046's regression asserted
+that a line inventing a fragment is rejected and used "Raised USD 9 million", which parses to
+`money:usd:9000000`. The fragment the bug produced was `money:usd:9`, and a line states that as
+"Raised USD 9." Both readings are asserted now so the example cannot drift again.
+
+**The rest of that test was doing its job and is not withdrawn.** The assertion that the fact set
+contains `num:3` and nothing else is what catches the evidence pollution directly, and it would
+have failed on the old behaviour. One example was wrong, not the regression.
+
+**3. The decision log reference.** A bundle assembled outside the repository cited entries D-045
+to D-049 when the log stopped at D-048. No file in the repository carries that reference, so
+there is nothing here to correct; the range is recorded instead, since it has moved again: **the
+entries of 19 September 2026 run from D-037 to D-054**, and this page is the only place that
+number should be read from.
+
+**4. The experiment wording, corrected in D-041 rather than here** because that is where the
+decision lives. "Fewer unsupported claims than a judge would accept" mixed a comparison with an
+acceptance threshold, and with one configuration and no baseline there is nothing to be fewer
+than. The run establishes an absolute rate against a rubric, and D-041 now carries the review's
+five prerequisites with it, of which the one worth repeating is that **useful tailoring is
+reported separately from factual acceptability, because without it a configuration looks safer
+by tailoring less.**
+
 ### D-053. One fragment leak is closed and tested, and carrying the span through the rewrite is placed rather than attempted
 
 The eighth review's finding 5. D-046 established that a numeric span the normaliser could not
@@ -457,6 +498,22 @@ documentation only and no prompt carries it, which is why it survived a round of
     reason and, more importantly, the list of things that run will not establish.
 19. **Verifiable durable provenance for a repaired row**, from part 1 above, beside the
     reconstruction items. Needed before any repair touches a real user's row.
+20. **Carry the unreadable span through the rewrite instead of rediscovering it.** From D-053.
+    The spans are found by searching the rewritten text, and every pass in `readNumbers` can move
+    or consume the characters they covered. One hole is closed and tested; the class is open, and
+    closing it means carrying offsets through the separator strip, the hyphen rules, the suffix
+    expansion and the tokeniser.
+21. **The stale writer.** The eighth review's finding 2. The ownership work already deferred, and
+    it needs one user with concurrent runs to bite, which is why it waits rather than being
+    forgotten.
+22. **The probe implements the old retention policy**, the eighth review's finding 6, and the
+    distinction it draws is kept because it is the useful part: **the frozen historical sample
+    keeps its historical selection**, since changing how a 2026-09-18 sample is read would make
+    it a different sample, **and the probe must not be reused unchanged for the new experiment**,
+    since a run measuring today's configuration has to select attempts the way today's code does.
+    Two tools, not one tool with a flag.
+23. **The rest of the current state inconsistencies**, the eighth review's finding 9 less the
+    revision label, which is fixed rather than placed (D-054).
 
 **The first phase 1 item is still the pre rank.** Nothing here changes that.
 
@@ -558,6 +615,14 @@ Overlap rather than containment, because a currency match starts before the digi
 is the line between this and the blunt alternative of discarding any text with an unreadable
 phrase in it. The tests assert both directions on purpose: the intended amount is held when its
 source is ambiguous, and the fragments from that source do not pass as confirmed values.
+
+*(Corrected 19 September 2026, the eighth review's finding 10.)* One example in that second test
+did not test what its comment said. It used "Raised USD 9 million", which parses to
+`money:usd:9000000` and is not the fragment the bug produced; the fragment was `money:usd:9`, and
+a line states that as "Raised USD 9." Both readings are now asserted so the example cannot drift
+again. **The rest of that test was doing its job and is not withdrawn**: the assertion that the
+fact set contains `num:3` and nothing else is what catches the evidence pollution directly, and
+it would have failed on the old behaviour.
 
 **Finding 5 needs no separate rule.** A line's ambiguous span now produces no claim, so there
 is nothing for `value-unknown` to be derived from, and `number-unreadable` still holds the line
@@ -900,13 +965,37 @@ the question worth the first paid run is whether the prompt as a whole does that
 paragraph earned it. A configuration result answers that. **If it comes back ambiguous, or worse
 than expected, the second run splits it, and that is when attribution is worth paying for.**
 
-**What the first run will establish:**
+**What the first run will establish.** *(Rewritten 19 September 2026 on the eighth review's
+finding 8, which is the user's wording being corrected rather than mine. It said the run would
+show whether the prompt produces "fewer unsupported claims than a judge would accept", which
+mixes a comparison with an acceptance threshold: "fewer than" needs something to be fewer than,
+and there is nothing, which is the whole reason for running it.)*
 
-- whether the prompt as it stands produces fewer unsupported claims than a person reading the
-  answers would accept, judged by that person against frozen inputs;
+With one configuration and no baseline the run can establish **an absolute rate against a
+rubric** and nothing comparative:
+
+- the share of answers, and of lines within them, that a person applying a written rubric judges
+  factually acceptable. A number, not a comparison, and it means nothing until a second
+  configuration is measured the same way;
 - the output token cost of the configuration, which is unmeasured for p4 and for p5 alike, and
   therefore the real cost per attempted packet under the policy that ships;
 - a baseline that later runs can be read against, which is the thing that does not exist.
+
+**Five prerequisites, from the review, without which the run measures something other than what
+it claims:**
+
+1. **The raw answers are kept apart from the merged candidates.** The merge changes lines
+   (D-039), so judging merged text says nothing about what the model wrote.
+2. **The selected attempt is recorded** for every packet, because first answers and retries are
+   different populations and the retained one is not always the last.
+3. **The inputs and the configuration are frozen** and recorded with the run: prompt revision,
+   validator revision, model, and the jobs and profile drawn.
+4. **Failed and missing answer cases stay inside the attempted packet population.** Dropping
+   them turns a rate over what was attempted into a rate over what succeeded, which flatters
+   every configuration that fails more often.
+5. **Useful tailoring is reported separately from factual acceptability**, and this one matters
+   most: **without it a configuration looks safer by tailoring less.** A prompt that edits
+   nothing scores perfectly on acceptability and is worthless. Both numbers or neither.
 
 **What the first run will not establish, and this list is here so that nobody quotes it for any
 of them:**

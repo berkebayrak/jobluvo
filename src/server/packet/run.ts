@@ -17,8 +17,11 @@ import { actionable, factSet, isHard, needsReview, validateChangeSet, VALIDATOR_
  * invalid packet with the findings that stopped it. The model is called at
  * most twice: once, and once more with the hard findings if the first
  * answer was rejected. A second rejection is stored as invalid. Every call
- * writes its cost row, tagged by run so the sample stays apart from the
- * product path (D-003).
+ * attempts its cost row, tagged by run so the sample stays apart from the
+ * product path (D-003). Attempts rather than writes: `recordCost` never
+ * throws, because the worksheet must not destroy a paid answer, so a row
+ * that cannot be written is printed with COST_NOT_RECORDED and dropped. A
+ * missing row is an accounting gap and is never a call that cost nothing.
  *
  * Each attempt owns its candidate, its findings and its outcome. The packet
  * is the retained attempt, usually the last, and it stores that attempt's
@@ -378,7 +381,13 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
      * because an input has moved, the full write below runs and the stored document, which answered a different
      * question, goes with it (D-051).
      *
-     * The cost of this run is not lost by leaving `usd` alone: every call writes its own `cost_events` row.
+     * The cost of this run is not lost by leaving `usd` alone, **as long as its cost rows were written**. That is
+     * not a guarantee and this comment used to state it as one. `recordCost` never throws: a row that cannot be
+     * written is printed with COST_NOT_RECORDED and dropped, deliberately, so a paid and validated answer is not
+     * destroyed by the worksheet (review four, finding 16). So a preserved row's spend is recoverable from
+     * `cost_events` when the rows are there, and when one is missing the spend is **unaccounted for, never zero**.
+     * Anything computing a cost per attempted packet has to establish coverage first and report the unresolved
+     * portion separately (the ninth review's finding 9).
      */
     // Written as two statements rather than one upsert with a condition per column, because the condition is the
     // same for every artifact column and the row either keeps all of them or none.

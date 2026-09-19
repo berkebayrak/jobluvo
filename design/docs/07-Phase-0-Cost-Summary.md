@@ -8,6 +8,14 @@ Superseded on 18 September 2026 (D-029): the headline that stood from D-024 to D
 
 **Every term on this page is a historical measurement, and the tailoring term was measured under a policy that no longer ships (review five, 18C).** Since USD 0.0610 over 80 was measured on 18 September, the retry has been given the previous answer to correct rather than the findings alone (prompt revision 2026-09-18.p2, #64), a retry's clean dropped lines are put back and the merged set revalidated (#64), and the validator has moved three revisions. Every one of those changes what the model is sent, what it sends back, or how many lines a second attempt has to write. Replaying stored answers offline cannot measure any of it: it re-reads answers the old prompt produced and cannot say what the new prompt would produce, how often a retry would be earned, or what either would cost in tokens. **The cost per attempted packet under the policy that ships today is unmeasured.** It becomes measured when an authorised paid run measures it, and not before. The figure below is kept because it is the last one that was measured, labelled with the revisions it was measured under.
 
+**A cost row is attempted and not guaranteed, added 19 September 2026 (D-058).** `recordCost` never
+throws: a row that cannot be written is printed with `COST_NOT_RECORDED` and dropped, so that the
+worksheet cannot destroy a paid and validated answer. **A missing row is an accounting gap and never
+a call that cost nothing.** Every cost per call and per packet on this page is therefore a cost over
+the rows that exist, and a real cost per attempted packet may be claimed only once coverage of those
+rows is established. Until then the known cost and the unresolved portion are reported beside each
+other.
+
 ## Current state, 19 September 2026
 
 **Everything below this section is dated and is superseded unless this section repeats it.**

@@ -132,6 +132,77 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-069. The evaluation cells become a partition, three rationales are corrected, and "guarantee" comes out of the source comments
+
+The tenth review's items 6 to 9, run together because they are documents and comments. **One of them
+turned out to need code and it is named below rather than folded in quietly.**
+
+**Item 6, the four cells were not a partition.** D-058 listed "factually acceptable", "usefully
+tailored", "both" and "failed, missing or unresolved" as cells. The first two each **contain** the
+third, so three of them overlap and cannot be summed, and there was **no cell at all** for an
+adjudicated output that is neither acceptable nor useful. Calling them cells invited exactly the
+addition they do not support.
+
+Replaced by four exclusive cells, one for every combination: shippable, acceptable only, useful only,
+neither. **The marginals and the joint rate are derived from the cells rather than listed beside
+them**, which is what stops the two being read as a partition again. The denominator stays the
+declared attempted job population. Failed, missing and unresolved are accounted separately under a
+rule declared before generation: every attempted job is adjudicated and in exactly one cell, or not
+adjudicated and in exactly one of those three, the two groups sum to the declared population, and
+nothing is in both. **An unresolved case is a judgement not reached and is not a factual failure**,
+and reporting it as one is how an inconclusive run becomes a bad one.
+
+**Item 7, D-060's rationale answered one of two conditions.** It deferred the ninth review's finding 3
+because "both need one user with concurrent or repeated runs, and there is one user and no
+concurrency". That answers concurrency and leaves repetition unanswered, and **item 24 in the same
+commit says in as many words that either script can be rerun over the same job.** Finding 2 needs a
+concurrent success between two statements. **Finding 3 needs no concurrency at all**, only failure
+then failure, sequentially, which one person can do today.
+
+**The deferral stands and its reason changes.** Not that the case is unreachable, but that what it
+costs when reached is a row wearing an earlier failure's labels beside this failure's error, on a row
+that holds no artifact either way, and **the part that lied is already fixed**: D-062 made the CLI say
+no artifact was preserved. This is the same defect as item 1 and it is resolved with it.
+
+**Item 8, D-059's detail carried the error its message was corrected for, plus one this stack
+created.** "The assessment that never ran" is the same overstatement as "nothing has ever assessed":
+an assessment that started and threw is not one that never ran. And "the other findings on this row
+are the current validator's reading of the document" **was made false by D-056 in this same stack**,
+which deliberately retains genuine historical summary findings, so the others are a mix.
+
+**This is the code in this entry.** The `detail` of `assessmentNotRun` is a string literal in
+`replay.ts`, so item 8 is not documentation. It now says the original assessment did not complete,
+the packet needs a person, and the other findings may be a mix of current checks and retained
+historical ones.
+
+**Recorded before anything implements it: a resolution must name the document it resolves, not the
+row.** A packet's document can be replaced under it, by a rerun, a rebuild from the change set or a
+repair from a snapshot. An approval that says only "this row is fine" would land on whatever the row
+holds when it is read, which need not be what the person read. Tie it to the resume hash, or to
+whatever version identity phase 1 item 26 gives an execution. Written beside the finding, not only
+here.
+
+**Item 9, "guarantee" and "main line of defence" in the source comments.** The strongest instance was
+in source rather than in an outward facing document: `validate.ts` opened with "The guarantee behind
+'nothing is added that is not on your profile'", in a module whose own paragraphs say it establishes
+nothing about truthfulness. It is "the one check" now. `tailor.ts` and `entities.ts` said the prompt
+is the main line of defence and carries the duty; both now say **the prompt carries the constraints
+and adherence to them is unevaluated**, which is the distinction the review is right about. "The only
+line of defence" is a statement about what else exists, not about how well it works.
+
+**Proposed and stopped, as instructed.** Two lines are the user's to decide and are untouched:
+
+| Where | What it says | Proposed |
+|---|---|---|
+| `CLAUDE.md`, the D-034 bullet | "The prompt carries that principle now, the validator does not" and "they are the main line of defence" | "The prompt carries that principle now, the validator does not. The four prohibitions in `RULES` are the only thing standing between a model that wants to sound impressive and a submitted resume, and **whether the model follows them is unevaluated**." |
+| `06-Decision-Log.md`, D-034's own sentence at the top | "The prompt carries this, the code does not" | "The prompt carries this, the code does not, **and nothing yet measures whether the prompt is obeyed**." |
+
+**One more, listed rather than edited, on the user's rule that a dated entry keeps what it said.**
+D-013's title reads "with the validator as the guarantee". It is dated 17 September 2026, it predates
+D-034, and under this log's own convention the supersession is recorded where the change was made
+rather than by editing the title. **It is the only pre-D-034 title found that would mislead a reader
+who did not notice the date.**
+
 ### D-067. The retired checks are marked historical with their population named, and retry eligibility stops depending on a message
 
 The tenth review's item 5, and the reason the user gave for it is the whole of it: **this report is
@@ -700,7 +771,19 @@ floor under the 8 that are flagged today, nothing about the other 24.
   an absent row gives nothing to lock; the fix is **an atomic decision against the row as seen at
   conflict time**. Finding 3 is the preservation branch matching a row that holds no artifact at
   all, so a failure after a failure keeps an earlier failure's labels and wears this one's error.
-  Both need one user with concurrent or repeated runs, and there is one user and no concurrency.
+  **The reason each one waits, separated, because one sentence covered two conditions and answered
+  only one** (corrected 19 September 2026 by D-069, the tenth review's item 7). The version here said
+  "both need one user with concurrent or repeated runs, and there is one user and no concurrency",
+  which answers concurrency and leaves repetition unanswered. **Finding 2 needs concurrency**: a
+  successful execution landing between the update and the insert. **Finding 3 needs no concurrency at
+  all**, only failure then failure, sequentially, and item 24 in the same commit says in as many words
+  that either script can be rerun over the same job. So finding 3 is reachable today by one person
+  running one script twice.
+
+  **The deferral stands and the reason for it changes.** It is not that the case cannot be reached.
+  It is that what it costs when reached is a row wearing an earlier failure's labels beside this
+  failure's error, on a row that holds no artifact either way, and **nothing about it is now
+  invisible**: D-062 made the CLI say that no artifact was preserved, which was the part that lied.
 
   **And the comment over that write is corrected in the item rather than left standing.** "The row
   either keeps all of them or none" is true of **each statement** and false of **the operation**:
@@ -740,6 +823,15 @@ person and is never promoted by a replay", with a detail that keeps the two apar
 on the row are the current validator's reading of the document, and this one is about the assessment
 that never ran. The historical failure and the latest validation result are two facts and the row
 carries both.
+
+*(**The detail carried the error the message was corrected for, and a second one this stack created**,
+corrected 19 September 2026 by D-069, the tenth review's item 8. "The assessment that never ran" is
+the same overstatement as "nothing has ever assessed": an assessment that started and threw is not one
+that never ran. And "the other findings on this row are the current validator's reading of the
+document" was made false by D-056 in this same stack, which deliberately **retains genuine historical
+summary findings**, so the others are a mix. The detail now says: the original assessment did not
+complete, the packet needs a person, and the other findings may be a mix of the current validator's
+checks and retained historical ones.)*
 
 **Recorded before anything implements it: a person cannot clear this by changing the status alone.**
 The stickiness re-derives the finding from the row's own copy of it, so a row moved to `ready` by
@@ -796,6 +888,37 @@ are named before generation:
 | usefully tailored | judged so under the rubric, whatever the facts did |
 | both | the only cell that describes something shippable |
 | failed, missing or unresolved | reported apart, never dropped and never spread over the other three |
+
+*(**These four are not a partition and cannot be summed**, corrected 19 September 2026 by D-068, the
+tenth review's item 6. "Factually acceptable" and "usefully tailored" each contain "both", so the
+three overlap, and there is no cell at all for an adjudicated output that is neither. Calling them
+cells invited exactly the addition they do not support. The table below replaces them; this one stays
+because the mistake is instructive and the entry refers to it.)*
+
+**The four exclusive cells, which is what the table above should have been.** Every adjudicated
+output lands in exactly one:
+
+| Cell | Factually acceptable | Usefully tailored |
+|---|---|---|
+| **shippable** | yes | yes |
+| acceptable only | yes | no |
+| useful only | no | yes |
+| neither | no | no |
+
+**The marginals are derived from the cells, not listed beside them**, which is what stops the two
+being read as a partition: factually acceptable is shippable plus acceptable only, usefully tailored
+is shippable plus useful only, and the joint rate is the shippable cell over the denominator. One
+number is the headline and the rest explain it.
+
+**The denominator is the declared attempted job population**, as D-041's fourth prerequisite requires,
+and that is what keeps a configuration from flattering itself by failing more often.
+
+**Failed, missing and unresolved are accounted separately, under a rule declared before generation so
+nothing is double counted.** Each attempted job is in exactly one of two places: adjudicated, and
+therefore in exactly one of the four cells; or not adjudicated, and therefore in exactly one of
+failed, missing, or unresolved. The two groups sum to the declared population and nothing appears in
+both. **An unresolved case is not a factual failure**, it is a judgement not reached, and reporting it
+as the former is how an inconclusive run becomes a bad one.
 
 **The line level result is a diagnostic and not the headline, and the reason is arithmetic rather
 than taste.** Unchanged base lines are in the line denominator. A configuration that edits four lines

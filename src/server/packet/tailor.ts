@@ -37,7 +37,14 @@ export const REASONING: ReasoningEffort = "none";
 export const DEFAULT_MODEL = "gpt-5.6-luna";
 
 /*
- * The truthfulness instruction, and it is now the main line of defence.
+ * The truthfulness instruction. It is where the constraints live, and the only
+ * place they live, since D-034 removed the comparison that used to check them.
+ *
+ * **That is a statement about what else exists, not about how well this works.**
+ * Adherence to these four prohibitions is unevaluated: no run has measured
+ * whether the model follows them, and the first paid run is what would begin to
+ * (D-041, D-058). Do not read "the only line of defence" as "the line holds"
+ * (D-069).
  *
  * The validator used to read a tailored line back and compare what it means
  * with what the cited fact means. That comparison is removed (D-034): the code

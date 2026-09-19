@@ -160,6 +160,15 @@ export const hasCandidate = (row: Pick<ReplayRow, "resume" | "changeSet">): bool
  * the finding as well, and nothing does that today. Whatever resolves a held
  * packet has to do both, and this is written here so the requirement is found
  * before it is implemented rather than after.
+ *
+ * **And the resolution must name the document it resolves, not the row.**
+ * Recorded before anything implements it (D-069). A packet's document can be
+ * replaced under it: a rerun writes a new artifact, a rebuild reconstructs one
+ * from the change set, a repair restores one from a snapshot. An approval that
+ * says only "this row is fine" would land on whatever the row holds when it is
+ * read, which need not be what the person read. Tie it to the resume hash, or
+ * to whatever version identity phase 1 item 26 gives an execution, so an
+ * approval of one document cannot clear a different one.
  */
 export const ASSESSMENT_NOT_RUN = "the original assessment of this answer failed, so this row is held for a person and is never promoted by a replay";
 export const assessmentNotRun = (): PacketFinding => ({
@@ -167,7 +176,7 @@ export const assessmentNotRun = (): PacketFinding => ({
   bullet: null,
   code: "assessment-not-run",
   message: ASSESSMENT_NOT_RUN,
-  detail: "the other findings on this row are the current validator's reading of the document; this one is about the assessment that never ran",
+  detail: "the original assessment did not complete, so this packet needs a person; the other findings here may be a mix of the current validator's checks and historical ones kept from the run",
 });
 
 /** The review finding a row carries when no profile on hand reproduces the facts it was built on. */

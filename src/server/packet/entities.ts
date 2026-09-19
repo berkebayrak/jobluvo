@@ -12,7 +12,8 @@ import { normaliseNumbers } from "./normalise";
  * that role however well the user knows it. The second question is a
  * comparison of what the line means against what a fact means, and it is gone
  * (D-034), along with the object heads, instrument heads and verb matching
- * that answered it. The prompt carries that duty now.
+ * that answered it. The prompt states that duty now, and whether the model
+ * discharges it is unevaluated (D-069).
  *
  * Everything here is a guess about a word's shape, and every finding it makes
  * is review, never hard (D-036). A capital, an internal capital, a position in

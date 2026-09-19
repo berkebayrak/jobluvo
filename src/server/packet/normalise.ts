@@ -55,6 +55,17 @@
  * in silence. The invariant that would have caught it is now stated and held
  * below: a numeric span is either interpreted and checked, or reported as
  * uninterpretable, and it never disappears quietly (D-055).
+ *
+ * The tenth review, item 2, and it is the same axis a third time. D-055 stated
+ * that invariant and then located each span by the phrase's **leading digits**,
+ * so a readable number sharing a head with an ambiguous one was suppressed with
+ * it: "Ambiguous 2023,4; In 2023,we launched" lost the second year. The
+ * invariant was true of the head and false of the occurrence. Suppression is
+ * tied to the occurrence now, and where an occurrence cannot be told from
+ * another, **nothing is suppressed rather than a readable number being taken
+ * with the unreadable one**. What that costs in the other direction is real and
+ * is written down in D-063 and in phase 1 item 20, which now carries both
+ * directions and a trigger.
  */
 
 const UNITS = new Map<string, number>([
@@ -82,13 +93,26 @@ export interface NumberReading {
    * coordinates of `text`, not of the input, and they are what `claimsOf`
    * filters on.
    *
-   * **Every range here is produced by a phrase in `unreadable`**, and that is
-   * the invariant rather than an incidental property (D-055). A range with no
-   * phrase behind it is the worst of both halves: the value is suppressed, so
-   * nothing on the profile can support a later line that states it, and the
-   * text still reads as fully readable, so D-040's guard sees no reason to
-   * hold and `value-unknown` rejects. A truthful line then loses its packet
-   * over a missing space after a comma.
+   * **Every range here is produced by a phrase in `unreadable`, at the
+   * occurrence that phrase produced**, and that is the invariant rather than an
+   * incidental property (D-055, D-063). Both halves are load bearing and each
+   * has failed once.
+   *
+   * A range with **no phrase** behind it is the worst case: the value is
+   * suppressed, so nothing on the profile can support a later line that states
+   * it, and the text still reads as fully readable, so D-040's guard sees no
+   * reason to hold and `value-unknown` rejects. A truthful line then loses its
+   * packet over a missing space after a comma (D-055).
+   *
+   * A range at **another occurrence** of the same leading digits suppresses a
+   * readable number, and that one is held rather than rejected, because the
+   * text does report a phrase and D-040 demotes. Milder, still a truthful line
+   * made unavailable (D-063).
+   *
+   * What is **not** covered by either: a phrase reported and never located
+   * leaves its fragments in the claims, and D-040 does not help there, because
+   * it softens an unmatched value and a fragment admitted as evidence is a
+   * matched one. Phase 1 item 20.
    */
   unreadableSpans: [number, number][];
 }

@@ -132,6 +132,46 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-053. One fragment leak is closed and tested, and carrying the span through the rewrite is placed rather than attempted
+
+The eighth review's finding 5. D-046 established that a numeric span the normaliser could not
+read supplies no value. It does not hold on every input, and the reason is structural.
+
+**What leaked.** `Raised USD 9,2 hundred hundred and cut costs 40 percent` reported the amount
+as unreadable and emitted `money:usd:9` anyway. The spans are found by searching the rewritten
+text for a digit comma digit run, and the rewrite had eaten the digits: the word machinery took
+the `2` into `2 hundred hundred`, leaving `usd 9,hundred hundred`, where no such run exists. The
+input is deliberately malformed and the invariant it breaks is the one D-046 exists to state.
+
+**What was done, and it is the smaller of the two things that would work.** A digit and a comma
+with a non space immediately after it is the wreckage of exactly this, and it is now a span too.
+The space is what separates it from punctuation: `Managed 4, 5 and 6 teams` keeps all three
+numbers, and a test asserts that alongside the leak.
+
+| Input | Before | Now |
+|---|---|---|
+| "Raised USD 9,2 hundred hundred and cut costs 40 percent" | `money:usd:9`, `pct:40` | `pct:40` |
+| "Raised USD 9,2 hundred hundred" | `money:usd:9` | none |
+| "Managed 4, 5 and 6 teams" | `num:4`, `num:5`, `num:6` | unchanged |
+| "USD 150,000 to 175,000" | `money:usd:150000`, `num:175000` | unchanged |
+
+**What was not done, and the user's instruction was to say so rather than attempt it.** The
+spans are **rediscovered from the rewritten text rather than carried through the rewrite**, and
+that is the defect. Every pass in `readNumbers` can move or consume the characters a span
+covered: the separator strip, the hyphen rules, the suffix expansion, the ordinal strip, the
+punctuation spacing and the tokeniser. Finding the span again afterwards is a second heuristic
+stacked on the first, and closing one of its holes does not close the class. Carrying offsets
+through all of that is a rewrite of the function rather than a patch, so it is **phase 1 item
+20** and the comment in `normalise.ts` says so where somebody will meet it.
+
+A focused regression is worth more than a wider grammar here, which is the user's judgement and
+is right: widening the word grammar would make this particular input parse and would say nothing
+about the next one.
+
+**Measured: nothing moves.** Stored packets read the same, 83 ready, 22 held, 2 invalid. No live
+fact or line contains an ambiguous comma at all, let alone one the rewrite consumes.
+`VALIDATOR_REVISION` is `2026-09-19.r11`.
+
 ### D-052. The four unplaced lines get their own category, because a comment does not outrank an assertion
 
 The eighth review's finding 7. D-047 said four controls were "marked for adjudication" and left

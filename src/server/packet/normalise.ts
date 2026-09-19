@@ -35,6 +35,15 @@
  * on the line side. `unreadableSpans` says where in `text` each such phrase
  * sits, and `claimsOf` emits nothing that overlaps one. Numbers elsewhere in
  * the same text are untouched: one bad span does not silence a fact (D-046).
+ *
+ * The eighth review, finding 5, and the limit is worth knowing before trusting
+ * this. **The spans are rediscovered from the rewritten text, not carried
+ * through the rewrite.** Every pass below can move or consume the characters a
+ * span covered, so finding it again afterwards is a second heuristic on top of
+ * the first. One case where that failed is closed here and tested, and the
+ * class is not closed: carrying offsets through the separator strip, the
+ * hyphen rules, the suffix expansion and the tokeniser is a rewrite of this
+ * function rather than a patch, and it is placed in phase 1 (D-053).
  */
 
 const UNITS = new Map<string, number>([
@@ -216,7 +225,14 @@ export function readNumbers(text: string): NumberReading {
   // A word number phrase survives the pipeline as its own words, so it is found by looking for it. A comma run does
   // not survive as it was written, because the scale word after it is expanded, but the comma itself is still there
   // and the run around it is the span: "9,2 million" leaves "9,2000000", and that whole token is the span (D-046).
-  const spans: [number, number][] = [...output.matchAll(/\d+(?:,\d+)+/g)].map((m) => [m.index!, m.index! + m[0].length] as [number, number]);
+  const spans: [number, number][] = [
+    ...output.matchAll(/\d+(?:,\d+)+/g),
+    // The digits after an ambiguous comma do not always survive: in "9,2 hundred hundred" the word machinery takes
+    // the 2 and leaves "9,hundred", so the run above finds nothing and "usd 9" reads as a value nobody wrote. A
+    // digit and a comma with a non space immediately after it is that wreckage. The space matters: "4, 5 and 6" is
+    // punctuation between two numbers and must keep both of them (D-053).
+    ...output.matchAll(/\d+,(?=[^\s\d])/g),
+  ].map((m) => [m.index!, m.index! + m[0].length] as [number, number]);
   for (const phrase of unreadable) {
     for (let i = output.indexOf(phrase); i >= 0; i = output.indexOf(phrase, i + phrase.length)) spans.push([i, i + phrase.length]);
   }

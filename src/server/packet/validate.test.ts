@@ -232,6 +232,22 @@ describe("a span the normaliser could not read supplies no value at all", () => 
     expect(claimsOf("Raised USD 9.2 million in Series B").map((c) => c.key)).toEqual(["money:usd:9200000"]);
   });
 
+  it("emits nothing from an ambiguous comma whose digits the rewrite consumed", () => {
+    /*
+     * The eighth review's finding 5, reproduced before the fix. The spans are rediscovered from the rewritten
+     * text, and the rewrite can eat the characters they covered: "9,2 hundred hundred" leaves "9,hundred hundred",
+     * the digit comma digit run is gone, and "usd 9" came out as a confirmed amount nobody wrote.
+     *
+     * A focused regression rather than a wider grammar, on the user's instruction. The class is not closed:
+     * carrying offsets through the rewrite is phase 1 work (D-053).
+     */
+    expect(claimsOf("Raised USD 9,2 hundred hundred and cut costs 40 percent").map((c) => c.key)).toEqual(["pct:40"]);
+    expect(claimsOf("Raised USD 9,2 hundred hundred").map((c) => c.key)).toEqual([]);
+    // A comma that is punctuation between numbers keeps every one of them. The space is what tells them apart.
+    expect(claimsOf("Managed 4, 5 and 6 teams").map((c) => c.key)).toEqual(["num:4", "num:5", "num:6"]);
+    expect(claimsOf("USD 150,000 to 175,000").map((c) => c.key)).toEqual(["money:usd:150000", "num:175000"]);
+  });
+
   it("reads every other number in the same text, so one bad span does not silence a fact", () => {
     expect(claimsOf("Cut costs 11 percent and raised USD 9,2 million").map((c) => c.key)).toEqual(["pct:11"]);
     expect(claimsOf("Joined in twenty ten and managed 6 analysts").map((c) => c.key)).toEqual(["num:6"]);

@@ -38,31 +38,60 @@ import { checkLine, factSet } from "./validate";
  * remove one.
  *
  * Every truthful line is case 1 by definition, so every one of them is a line
- * a future rule must not block. A control that is really a case 3 line would
- * quietly veto any rule built to catch case 3, which is the thinnest column in
- * the set, so the controls are worth reading with as much suspicion as the
- * false lines.
+ * a future rule must not block. A control that does not belong here vetoes any
+ * future rule that would have caught it, so the controls are worth reading with
+ * as much suspicion as the false lines.
  *
- * Two were wrong and were moved on 19 September 2026, the user's call (D-044):
+ * THE STANDARD FOR A CONTROL, and it is not the one this file used for its
+ * first three rounds of labels. A line belongs here when **every element of it
+ * is supported by the facts it cites**. Not when it is plausible, not when the
+ * person probably did it, not when nobody would mind. The question is whether
+ * these facts say it. "Built dashboards in Excel" does not say who the
+ * dashboards were for, so a line that names a beneficiary is not supported by
+ * it, whatever the truth of the matter. This file cannot know the truth of the
+ * matter; it knows the facts.
  *
+ * A line nobody can place under that standard is **marked for adjudication and
+ * left where it is**, not quietly moved. Guessing is how two case 3 lines sat
+ * in here for a week.
+ *
+ * Moved out on 19 September 2026, in two rounds, both the user's call:
+ *
+ * D-044, case 3, the same work at a higher authority:
  *   "Used Salesforce for the sales pipeline."
  *     -> "Used Salesforce to run the sales pipeline."
  *        The fact does not say the person ran the pipeline.
- *
  *   "Delivered 9 growth projects for banks, using a conjoint study of 2,000
  *    customers that lifted ARPU 6 percent."
  *     -> "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent."
  *        Running a study and using one are different work.
  *
- * Both are the same work at a higher authority, which is case 3, and both now
- * sit in the false lines of their pairs. That moves the set from 28 false and
- * 26 truthful to 30 and 24, and case 3 from 1 line to 3. Neither is caught by
- * the code, which is the ordinary state of a case 3 line here and the reason
- * the column is worth having at all.
+ * D-047, invention, an element in no cited fact at all:
+ *   "Built dashboards in Excel."
+ *     -> "Built dashboards in Excel for the sales team."
+ *        The fact names no beneficiary.
+ *     -> "Built dashboards and reports in Excel."
+ *        The fact names one deliverable, not two.
  *
- * So "24 of 24 truthful pass" is not evidence that the control set is
- * conservative. It says these 24 pass, and two of the previous 26 did not
- * deserve to be in it.
+ * The set has gone from 28 false and 26 truthful to 32 and 22 across the two
+ * rounds. None of the four is caught by the code.
+ *
+ * MARKED FOR ADJUDICATION, still counted as truthful controls, listed so that
+ * nobody has to rediscover the question (D-047). Each is a real question about
+ * what case 1 permits and none of them is this file's to answer:
+ *
+ *   "Trained 6 analysts." -> "Coached 6 analysts."
+ *      Is coaching the same activity as training, or a different one?
+ *   "Built dashboards in Excel." -> "Built dashboards with attention to
+ *      detail." Is a claim about the manner of the work a claim at all?
+ *   "Ran the pricing review across 3 markets." -> "Led the pricing review
+ *      across 3 markets." Do "ran" and "led" sit at the same authority?
+ *   "Ran the pricing review across 3 markets." -> "Ran pricing reviews across
+ *      three markets." One review across three markets, or three reviews?
+ *
+ * So "22 of 22 truthful pass" is not evidence that the control set is
+ * conservative. It says these 22 pass, four of them are unadjudicated, and
+ * four of the original 26 did not deserve to be in it.
  */
 
 const RESUME = { rowId: "r", origin: "upload" as const, hasEvidence: true };
@@ -249,8 +278,17 @@ const PAIRS: Pair[] = [
     case: "invention",
     bullet: "R1.8",
     cited: ["R1.8"],
-    truthful: ["Built Excel dashboards.", "Built dashboards in Excel for the sales team.", "Built dashboards with attention to detail."],
-    false: ["Built dashboards using salesforce data.", "Built dashboards using Tableau.", "Built dashboards in Salesforce."],
+    // "with attention to detail" is marked for adjudication, not settled: see the header.
+    truthful: ["Built Excel dashboards.", "Built dashboards with attention to detail."],
+    false: [
+      "Built dashboards using salesforce data.",
+      "Built dashboards using Tableau.",
+      "Built dashboards in Salesforce.",
+      // Reclassified from truthful on 19 September 2026 (D-047). The fact is "Built dashboards in Excel." It names
+      // no beneficiary, so naming one is an element in no cited fact. Whether the dashboards really were for the
+      // sales team is not a question this file can answer or needs to.
+      { line: "Built dashboards in Excel for the sales team.", case: "invention" },
+    ],
   },
   {
     finding: "5B, every conjunct of a coordinated object",
@@ -258,8 +296,15 @@ const PAIRS: Pair[] = [
     case: "invention",
     bullet: "R1.8",
     cited: ["R1.8"],
-    truthful: ["Built dashboards and reports in Excel."],
-    false: ["Built dashboards and recruitment systems.", "Built dashboards and pricing models in Excel."],
+    truthful: [],
+    false: [
+      "Built dashboards and recruitment systems.",
+      "Built dashboards and pricing models in Excel.",
+      // Reclassified from truthful on 19 September 2026 (D-047), and it was the control for this very pair: the
+      // pair exists to test that each conjunct of a coordinated object is checked, and its control added a second
+      // conjunct the fact does not carry. "Built dashboards in Excel" names one deliverable.
+      { line: "Built dashboards and reports in Excel.", case: "invention" },
+    ],
   },
   {
     finding: "5C, a qualification",
@@ -395,8 +440,9 @@ describe("paired evaluation set", () => {
         if (l !== "ready") held.push(`case 1 ${p.finding}: "${line}" ${l}`);
       }
     }
-    // 24 since D-044, not 26: two lines that were in here were case 3 and are now false lines of their pairs.
-    expect(caseOne).toBe(24);
+    // 22 after D-044 and D-047, not 26: four lines that were in here are false lines of their pairs now, two case 3
+    // and two invention. Four of the 22 that remain are marked for adjudication in the header and still counted.
+    expect(caseOne).toBe(22);
     expect(held).toEqual([]);
   });
 
@@ -448,8 +494,8 @@ describe("paired evaluation set", () => {
     for (const s of passing) console.log(`  ${s}`);
     // Deliberately no expectation on `passing`. Asserting it would turn a record of what is
     // not checked into a claim that it is checked, which is the thing this file must not say.
-    // 44 since D-044: 30 written by the rules' author and 14 by a second author. It was 42 while two case 3 lines
-    // were miscounted as truthful controls.
-    expect(byAuthor.rules.falseLines + byAuthor.independent.falseLines).toBe(44);
+    // 46 after D-047: 32 written by the rules' author and 14 by a second author. It was 42 while four lines that
+    // are not supported by the facts they cite were counted as truthful controls instead.
+    expect(byAuthor.rules.falseLines + byAuthor.independent.falseLines).toBe(46);
   });
 });

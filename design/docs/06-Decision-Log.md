@@ -132,6 +132,66 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-047. The standard for a truthful control is written down, the rest are audited against it, and what cannot be placed is marked rather than guessed
+
+The seventh review's finding 3, and the user's instruction with it: this is the third round of
+corrections to this file's labels, so do it properly.
+
+**The standard, which had never been written down.** A line belongs in the truthful controls
+when **every element of it is supported by the facts it cites**. Not when it is plausible, not
+when the person probably did it, not when nobody would mind. The first three rounds of labelling
+used the second test without saying so, which is how two case 3 lines survived a week and two
+inventions survived three audits.
+
+`pairs.test.ts` cannot know whether a thing happened. It knows what the facts say. "Built
+dashboards in Excel" does not say who the dashboards were for, so a control that names a
+beneficiary is not supported by it, whatever the truth of the matter.
+
+**Two moved, both invention rather than authority.** The previous round looked only for
+authority inflation and found two case 3 lines. This one looked for additions:
+
+| The fact says | The control | What it adds |
+|---|---|---|
+| "Built dashboards in Excel." | "Built dashboards in Excel for the sales team." | a beneficiary no fact names |
+| "Built dashboards in Excel." | "Built dashboards and reports in Excel." | a second deliverable |
+
+The second is worth its own sentence. It was the control of the pair whose whole purpose is to
+test that **every conjunct of a coordinated object is checked**, and the control added a conjunct
+the fact does not carry. The pair was testing the rule with an example that broke it.
+
+**Four are marked for adjudication and left where they are, counted as controls.** Each is a real
+question about what case 1 permits and none of them is a test file's to decide. They are named in
+the header so nobody has to rediscover them:
+
+| The fact says | The control | The question |
+|---|---|---|
+| "Trained 6 analysts." | "Coached 6 analysts." | is coaching the same activity as training |
+| "Built dashboards in Excel." | "Built dashboards with attention to detail." | is a claim about the manner of the work a claim at all |
+| "Ran the pricing review across 3 markets." | "Led the pricing review across 3 markets." | do "ran" and "led" sit at the same authority |
+| "Ran the pricing review across 3 markets." | "Ran pricing reviews across three markets." | one review across three markets, or three reviews |
+
+Marking them is the point of the entry as much as the two moves are. Guessing is what put the
+other four in there.
+
+**The counts, and the direction is unfavourable again**, which is what an honest audit of one's
+own fixtures looks like:
+
+| | Before D-044 | After D-044 | After D-047 |
+|---|---|---|---|
+| False lines, the rules' author | 28 | 30 | **32** |
+| Truthful controls | 26 | 24 | **22** |
+| Invention, the rules' author | 17 | 17 | **19** |
+| Flagged, of 42 then 44 then 46 | 8 | 8 | **8** |
+
+**None of the four moved lines is caught.** "Sales", "team" and "reports" all appear somewhere on
+the profile, and a word anywhere on the profile satisfies the remaining check, so the flagged
+count has not moved and only the denominator has. That is D-034's narrowness showing up again
+rather than anything new.
+
+The probe's copy is corrected in the same change, and its drift guard constants with it. The
+guard still compares the copy with a constant rather than with the file, which is phase 1 item
+10 and is untouched here.
+
 ### D-046. A span the normaliser could not read supplies no value, on either side of the check
 
 The seventh review's findings 4 and 5. The user reproduced finding 4 himself.

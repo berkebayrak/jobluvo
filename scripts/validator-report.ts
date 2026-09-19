@@ -5,7 +5,7 @@ import { parseFlags } from "@/lib/cli";
 import { jobs, packets, profileFacts, type PacketFinding, type ResumeDocument } from "@/db/schema";
 import { buildResumeFacts, type FactRow, type ResumeFacts } from "@/server/match/profile";
 import { lemmasOf } from "@/server/packet/entities";
-import { codeOf, labelOf } from "@/server/packet/codes";
+import { codeOf, describeFindingsRead, labelOf, readFindings } from "@/server/packet/codes";
 import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, SUMMARY_NOT_REVALIDATED, unreplayable, type RepairSource, type ReplayDecision, type ReplayRow } from "@/server/packet/replay";
 import { applyChanges, baseResume, factEntries, resumeHash } from "@/server/packet/resume";
 import { factSet, validateChangeSet } from "@/server/packet/validate";
@@ -127,6 +127,12 @@ async function main() {
   const apply = flags.booleans.apply;
   const repairs = flags.values["repair-from"] ? repairSource(flags.values["repair-from"]) : null;
   if (repairs) console.log(`repair source: ${repairs.size} packet rows carry a document`);
+  // The boundary check, before any row is interpreted. `findings` is jsonb and its TypeScript type is an
+  // assertion about the column rather than a guarantee from it, so a code this build does not declare can arrive
+  // on a row written by a later build, a hand edit or a restored snapshot. It is counted and named here rather
+  // than reaching a table as "undefined" (D-066).
+  const boundary = describeFindingsRead(readFindings(rows.flatMap((p) => p.findings)));
+  if (boundary) console.log(`\nstored findings this build could not recognise: ${boundary}`);
   const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null; rebuilds: boolean | null; excluded: boolean; postingMoved: boolean }[] = [];
   const profilesUsed: Record<string, number> = {};
   for (const [userId, ps] of byUser) {

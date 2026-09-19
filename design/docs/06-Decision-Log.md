@@ -132,6 +132,57 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-051. The artifact and the execution are separated, so a failed rerun stops relabelling the packet it kept
+
+The eighth review's finding 1, confirmed by the user. D-045 stopped a rerun that produced
+nothing from deleting the stored document. It kept the document and nothing else.
+
+**What that left.** The upsert kept `resume` and `resume_hash` when the inputs matched and
+overwrote everything around them: `changes`, `findings`, `change_set` to null, `attempt`, `run`,
+`model`, `mode` and `validator_rev` all became the failed run's. So the row held run A's document
+under run B's labels with no change set. **It could not be replayed**, because a replay needs the
+change set or the changes to rebuild the candidate, and **it could not be attributed**, because
+`run` and `model` named an execution that produced nothing. The comment above it said keeping the
+document "relabels nothing", in the same statement that did the relabelling.
+
+**The split, and every column belongs to one side of it.**
+
+| | Columns |
+|---|---|
+| the artifact | `status`, `mode`, `model`, `run`, `attempts`, `resume`, `resume_hash`, `changes`, `findings`, `change_set`, `attempt`, `validator_rev`, tokens, `usd`, `ms` |
+| the execution | `error`, `updated_at` |
+
+A run that produced a document owns the row and every column is its own. A run that produced
+none, where a row with the same facts hash and content hash exists, leaves every artifact column
+untouched and moves only the execution columns, so the row says what it holds and that a later
+attempt was made and failed. A run that produced none with no such row writes the row in full,
+and a stored document that answered a different question goes with it.
+
+Written as **two statements** rather than one upsert with a condition per column. The condition
+is the same for every artifact column, so a row keeps all of them or none, and the first attempt
+at this, a `case` expression per column, rendered an empty findings array as `()` and produced
+invalid SQL. The shape was wrong before the syntax was.
+
+**A behaviour change worth stating on its own, because a test asserted the opposite.** A failed
+rerun no longer takes the row's status down with it. A ready packet stays `ready` and stays
+consumable. The user whose regeneration times out twice keeps the resume they already had, and
+the row records that the regeneration was attempted and failed. `run.test.ts` asserted
+`p.status === "failed"` there; that assertion was the destructive behaviour, and it is corrected
+with the reason beside it.
+
+**`TailorOutcome` describes the execution, and now says so.** The review's second half: the
+object returned `resume: null` while the row kept a document, and it was being read as though it
+described the packet. It describes one execution. The type says that, the `resume` field says
+that, and `scripts/tailor.ts`, which asked the outcome what would be served, now asks the row
+through `consumableResume` and prints a line when the two disagree. Nothing may quote the outcome
+for a question about the stored packet.
+
+**What the test covers, which the old one did not.** The previous test checked the document and
+its hash. The new one starts from a first run with two real edits, a summary, a finding and its
+own run and model, and asserts that all of it survives: the change set, the findings, the attempt
+number, the validator revision, the status, the mode, and that `run` and `model` still name the
+execution that produced what the row is holding.
+
 ### D-050. A parsed candidate whose assessment failed is read again, instead of being skipped with the executions that produced nothing
 
 The eighth review's finding 4, verified by the user, and done in the same pass as D-049 because

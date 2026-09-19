@@ -432,10 +432,19 @@ describe.skipIf(!hasDb)("packet run over its attempts", () => {
       call().mockReset();
       call().mockRejectedValue(new tailor.TailorError("response incomplete: max_output_tokens", "gpt-5.6-luna", usage, 0.0005, 50));
       const failed = await tailorJob(tx, facts, job);
+      // The outcome describes this execution, which failed.
       expect(failed.status).toBe("failed");
       expect(failed.error).toContain("incomplete");
       const [p] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
-      expect(p.status).toBe("failed");
+      // The row does not. It still holds the ready packet the first run produced from the same facts and the same
+      // posting, and it is still consumable, because a later execution failing says nothing about a document that
+      // was produced and validated before it. This assertion used to read `failed`, which is the destructive
+      // behaviour D-051 removes: a user whose regeneration times out keeps the resume they already had.
+      expect(p.status).toBe("ready");
+      expect(p.resume?.experience[0].bullets[0].text).toBe("Owned a 3 year program that cut cost 11 percent.");
+      expect(consumableResume(p)).toEqual(p.resume);
+      // What the row records of this execution is that it was attempted and what became of it.
+      expect(p.error).toContain("incomplete");
       const cost = await tx.select({ usd: costEvents.usd }).from(costEvents).where(eq(costEvents.userId, userId));
       expect(cost).toHaveLength(2);
     });
@@ -650,31 +659,61 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
     });
   });
 
-  it("a rerun that produces nothing keeps a document built from the same facts and the same posting", async () => {
+  it("a rerun that produces nothing keeps the whole artifact, not just its document", async () => {
     await withFixture(async (tx, userId, job) => {
       const facts = (await resumeFacts(tx, userId))!;
-      // First run: a clean answer, stored.
-      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
-      await tailorJob(tx, facts, job, { run: "first" });
+      // First run: a real answer with two edits and a summary, held by a finding, under its own run and model.
+      // "KPI" is a name on no fact: review, and not on the actionable list, so this is held after one call and
+      // never earns a retry (D-036). One mocked answer is therefore the whole of the first run.
+      call().mockResolvedValueOnce(
+        answer(
+          [
+            { bullet: "R1.1", text: "Ran a 3 year cost program with KPI reporting that cut cost 11 percent.", facts: ["R1.1"] },
+            { bullet: "R1.2", text: "Own the annual planning cycle end to end.", facts: ["R1.2"] },
+          ],
+          "Cut cost 11 percent across a 3 year program.",
+          ["R1"],
+        ),
+      );
+      await tailorJob(tx, facts, job, { run: "first", model: "gpt-5.6-first" });
       const [kept] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
-      expect(kept.status).toBe("ready");
-      expect(kept.resume).not.toBeNull();
+      expect(kept.status).toBe("needs_review");
+      expect(kept.changes.length).toBeGreaterThan(0);
+      expect(kept.findings.length).toBeGreaterThan(0);
+      expect(kept.changeSet).not.toBeNull();
+      expect(kept.resume?.summary).toBe("Cut cost 11 percent across a 3 year program.");
+      expect(kept.attempts).toBe(1);
 
       // Second run over the same facts and the same posting: nothing parses, so this run has no document of its own.
       call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
-      const out = await tailorJob(tx, facts, job, { run: "second" });
+      const out = await tailorJob(tx, facts, job, { run: "second", model: "gpt-5.6-second" });
       expect(out.status).toBe("failed");
+      // The outcome describes THIS execution and says so: it produced nothing.
+      expect(out.resume).toBeNull();
+
       const [after] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
-      // The row's labels already describe that document, so keeping it relabels nothing (D-045).
+      // Everything that describes the artifact is kept with it. D-045 kept the document and let the rest be
+      // overwritten, which left run A's document under run B's labels with no change set: unreplayable and
+      // unattributable (D-051).
       expect(after.resume).toEqual(kept.resume);
       expect(after.resumeHash).toBe(kept.resumeHash);
+      expect(after.changes).toEqual(kept.changes);
+      expect(after.changeSet).toEqual(kept.changeSet);
+      expect(after.findings).toEqual(kept.findings);
+      expect(after.attempt).toBe(kept.attempt);
+      expect(after.validatorRev).toBe(kept.validatorRev);
+      expect(after.status).toBe(kept.status);
+      expect(after.mode).toBe(kept.mode);
+      // Attribution: the row still says which run and which model produced what it is holding.
+      expect(after.model).toBe("gpt-5.6-first");
+      expect(after.run).toBe("first");
       expect(after.factsHash).toBe(kept.factsHash);
       expect(after.contentHash).toBe(kept.contentHash);
-      // And the status is this run's, so the kept document is not consumable on the strength of a run that failed.
-      expect(after.status).toBe("failed");
-      expect(consumableResume(after)).toBeNull();
-      expect(after.run).toBe("second");
+      // The execution columns are this run's, so the row records that a later attempt was made and failed.
       expect(after.error).toContain("attempt 2 failed");
+      // And the kept packet is still exactly as consumable as it was, which for a held packet is not at all.
+      expect(consumableResume(after)).toBeNull();
+      expect(consumableResume({ ...after, status: "ready" })).toEqual(kept.resume);
     });
   });
 

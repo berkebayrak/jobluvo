@@ -24,7 +24,7 @@ async function main() {
   if (out.error) console.log(`error: ${out.error}`);
   for (const f of out.findings) console.log(`  ${f.level}  ${f.bullet ?? "-"}  ${f.message}${f.value ? `  (${f.value})` : ""}`);
   const facts = (await resumeFacts(db, userId))!;
-  const [p] = await db.select({ changes: packets.changes, resume: packets.resume }).from(packets).where(eq(packets.jobId, jobId));
+  const [p] = await db.select({ status: packets.status, changes: packets.changes, resume: packets.resume }).from(packets).where(eq(packets.jobId, jobId));
   const base = baseResume(facts);
   const { diff } = applyChanges(base, { summary: p.resume?.summary ?? null, summaryFacts: [], changes: p.changes, skills: [] });
   console.log("\ndiff");
@@ -33,14 +33,17 @@ async function main() {
     if (d.before) console.log(`  - ${d.before}`);
     console.log(`  + ${d.after}`);
   }
-  // Rendered only through the one door downstream: a held packet's resume stays with its findings until a person resolves it.
-  const consumable = consumableResume(out);
+  // Rendered only through the one door downstream: a held packet's resume stays with its findings until a person
+  // resolves it. The question is asked of the ROW and never of the outcome, because the outcome describes this
+  // execution and a run that produced no document leaves an earlier run's document on the row (D-051).
+  const consumable = consumableResume(p);
   if (consumable) {
     const [u] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
     console.log(`\n${renderResume(u.name, consumable)}`);
-  } else if (out.resume) {
+  } else if (p.resume) {
     console.log(`\nheld for review: the resume is stored with the findings above and is not consumable until a person resolves them (D-017)`);
   }
+  if (out.status !== p.status) console.log(`\nthis execution ended ${out.status}; the stored packet is ${p.status} and comes from an earlier run (D-051)`);
 }
 
 main()

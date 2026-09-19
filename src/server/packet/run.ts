@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { DbPool, Tx } from "@/db/client";
 import { packets, type PacketFinding, type ResumeDocument } from "@/db/schema";
 import { recordCost } from "@/server/cost";
@@ -101,8 +101,17 @@ export interface TailorAttempt {
   retry?: string;
 }
 
+/**
+ * What one call to `tailorJob` did. **It describes this execution and not the
+ * stored packet**, and the two differ on purpose: a run that produced no
+ * document leaves an earlier run's document on the row (D-051), so `resume`
+ * here is null while the row still has one. Nothing may read this object to
+ * answer "what would be served for this job"; that question is asked of the
+ * row, through `consumableResume` (D-051).
+ */
 export interface TailorOutcome {
   jobId: string;
+  /** This execution's outcome, not necessarily the stored row's. */
   status: AttemptOutcome;
   mode: TailorMode;
   attempts: number;
@@ -118,6 +127,7 @@ export interface TailorOutcome {
   posting: Set<string>;
   findings: PacketFinding[];
   changes: number;
+  /** The document this execution produced, null when it produced none. Not the row's document. */
   resume: ResumeDocument | null;
   error?: string;
   tokensIn: number;
@@ -330,12 +340,42 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     usd: Number(totals.usd.toFixed(8)),
   };
   if (store) {
-    // The stored document and the row's own labels move together: a run with no document of its own keeps the one
-    // already on the row only when that row was built from the same facts and the same posting, so nothing is
-    // relabelled as belonging to inputs it did not come from (D-045).
-    const sameInputs = sql`${packets.factsHash} = ${facts.factsHash} and ${packets.contentHash} = ${contentHash}`;
-    await db
-      .insert(packets)
+    /*
+     * A run that produced no document keeps the one already on the row, and D-045 kept only the document.
+     *
+     * That was not enough and the comment that stood here said the opposite of what the code did. Everything that
+     * describes the kept document, its change set, its findings, its attempt number, the validator revision it
+     * passed under, the run and model that produced it, was overwritten with the failed run's values, so the row
+     * held run A's document under run B's labels with `change_set` null: not replayable, not attributable, and
+     * described as belonging to a run that produced nothing (the eighth review's finding 1).
+     *
+     * So the split is between the artifact and the execution, and every column belongs to one of them.
+     *
+     *   the artifact   status, mode, model, run, attempts, resume, resumeHash, changes, findings, changeSet,
+     *                  attempt, validatorRev, tokens, usd, ms. These move together or not at all.
+     *   the execution  error and updatedAt, which are this run's whatever happened, so the row records that a
+     *                  later execution was attempted and failed.
+     *
+     * When this run produced a document it owns the row and every column is its own. When it produced none and a
+     * row with the same facts hash and content hash exists, that row's artifact columns are left untouched and only
+     * the execution columns move. When it produced none and no such row exists, either because there is no row or
+     * because an input has moved, the full write below runs and the stored document, which answered a different
+     * question, goes with it (D-051).
+     *
+     * The cost of this run is not lost by leaving `usd` alone: every call writes its own `cost_events` row.
+     */
+    // Written as two statements rather than one upsert with a condition per column, because the condition is the
+    // same for every artifact column and the row either keeps all of them or none.
+    const keptArtifact = resume
+      ? []
+      : await db
+          .update(packets)
+          .set({ error: error ?? null, updatedAt: sql`now()` })
+          .where(and(eq(packets.userId, facts.userId), eq(packets.jobId, job.id), eq(packets.factsHash, facts.factsHash), eq(packets.contentHash, contentHash)))
+          .returning({ id: packets.id });
+    if (!keptArtifact.length)
+      await db
+        .insert(packets)
       .values({
         userId: facts.userId,
         jobId: job.id,
@@ -368,13 +408,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           model,
           run: opts.run ?? null,
           attempts: outcome.attempts,
-          // A run that produced no document at all does not overwrite one that a previous run built from the same
-          // facts and the same posting: the row's own labels already describe that document, so keeping it relabels
-          // nothing. When either input has moved, the stored document belonged to a different question and goes
-          // (D-045). This is the whole of the regeneration case; with the retained attempt rule above, a run reaches
-          // here with no document only when not one of its attempts parsed.
-          resume: resume ?? sql`case when ${sameInputs} then ${packets.resume} else null end`,
-          resumeHash: resume ? resumeHash(resume) : sql`case when ${sameInputs} then ${packets.resumeHash} else null end`,
+          resume,
           changes,
           findings: final.findings,
           changeSet: final.candidate?.cs ?? null,
@@ -382,6 +416,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           validatorRev: VALIDATOR_REVISION,
           factsHash: facts.factsHash,
           contentHash,
+          resumeHash: resume ? resumeHash(resume) : null,
           tokensIn: totals.tokensIn,
           tokensCached: totals.tokensCached,
           tokensOut: totals.tokensOut,

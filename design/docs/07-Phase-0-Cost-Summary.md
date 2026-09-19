@@ -33,10 +33,16 @@ promoted to ready.
 **What the repair establishes, stated narrowly after the seventh review (D-048).** The guard
 proves the offered document is **consistent with the row's own stored changes**. It does not
 prove the bytes are that row's historical artifact: any document those changes could produce
-would pass the same test. **The four rows carry documents from a snapshot and the rows no longer
-say so**, because the `resume-repaired` finding is not retained by a replay and the r10 restamp
-of the same day dropped it from all four. Their provenance is in D-043 and in this page, not in
-the database.
+would pass the same test.
+
+**The record of where those documents came from is already gone, and was gone before anyone
+noticed.** This is not a fragile record that might fail later. The `resume-repaired` finding was
+written onto the four rows on 19 September and the r10 restamp of the same day dropped it from
+all four, because a replay retains only a row's summary findings. It was found by querying the
+rows two hours later, not by reading the code that would have predicted it. So **the four rows
+carry documents taken from a snapshot and nothing on them says so**; their provenance is in
+D-043, D-048 and this page, and nowhere in the database. An earlier version of this paragraph
+said each row carries the finding, which was false when it was written.
 
 **Every row in the table now has a document except the two that never had one.** That is the
 first time that has been true since 18 September.

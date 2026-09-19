@@ -183,13 +183,21 @@ documentation only and no prompt carries it, which is why it survived a round of
     recorded from the other side.
 14. **Document mode loses the skill order.** Finding 8. `readAnswer` builds its change set with
     `skills: []`, so a document mode answer's ordering is dropped on the way into the row.
-15. **The two pass replay, with its scope corrected.** Finding 9. D-042 placed this as "revoking
-    on one pass and promoting on the next". That is no longer what happens and the corrected
-    scope is narrower and verified against the code: a revoked row now keeps its document
-    (D-038), so on the next pass it falls into the `no_resume` branch, which is **named for a row
-    that has no document while the row is holding one**. Nothing is written, the row is never
-    re-examined, and the report prints "passes as ready but no resume stored" about a row with a
-    resume. A mislabel and a silent dead end rather than a promotion.
+15. **A revoked row is never re-examined, under a branch named for rows that have no document.**
+    Finding 9, and it replaces the placement D-042 made under a different name, "the replay
+    revokes on one pass and promotes on the next". That description no longer fits the code and
+    filing this under it would leave the real defect unfindable, so the item is renamed to what
+    it is.
+
+    What was checked, rather than taken from the description: the revoke branch is guarded on a
+    row being `ready` or `needs_review`, and a revoked row is `invalid` by the second pass, so
+    **a revoked row cannot be revoked again and cannot be promoted either**. What happens instead
+    is that a revoked row keeps its document now (D-038), so on the next pass it reaches
+    `no_resume`: **a branch named for a row that has no document, while the row is holding one.**
+    Three consequences, all verified: nothing is written, so **the row is never re-examined by
+    any later pass**; the report prints **"passes as ready but no resume stored" about a row with
+    a resume**; and a document nothing can verify sits on a row that no restamp will look at
+    again. A mislabel and a silent dead end. Smaller than the defect that was placed, and real.
 16. **The report omits repairs from its totals.** Finding 12, and the same shape as item 4's
     rebuilds: `repaired` is counted and not carried into the totals the report prints.
 17. **The remaining contradictions in the current state section.** Finding 13.
@@ -198,8 +206,12 @@ documentation only and no prompt carries it, which is why it survived a round of
     supplied false sentences measures the checker and not the prompt, and the only real test is
     generating answers from frozen inputs with a person judging them. It also observes that
     changing the self check, the retry protocol and the example together measures a configuration
-    rather than any one change, which is exactly what the first paid run is currently scheduled
-    to do to three changes at once (D-041). That tension is real and is not resolved here.
+    rather than any one change, which is exactly what the first paid run is scheduled to do to
+    three changes at once (D-041). **That is now a decision rather than an open tension**: the
+    first run measures the configuration on purpose, because no baseline exists and the first
+    question is whether the prompt as a whole holds up, not which paragraph earned it. If the
+    result is ambiguous or worse than expected, the second run splits it. D-041 carries the
+    reason and, more importantly, the list of things that run will not establish.
 19. **Verifiable durable provenance for a repaired row**, from part 1 above, beside the
     reconstruction items. Needed before any repair touches a real user's row.
 
@@ -428,7 +440,7 @@ of its four conditions is met by construction rather than by care:
 
 | The condition | How |
 |---|---|
-| the source is named on the row | a soft `resume-repaired` finding carrying the file path and the hash that source recorded. **This is weaker than it sounds and the claim is corrected in D-048: the finding does not survive the next replay, and by the end of the same day it was gone from all four rows** |
+| the source is named on the row | a soft `resume-repaired` finding carrying the file path and the hash that source recorded. **This did not hold, and D-048 corrects it: the finding was gone from all four rows by the end of the same day, dropped by the r10 restamp, before anyone noticed** |
 | the document is validated under today's rules before any status is decided | the repair branch runs after the validator has read the change set, and the status is `statusOf` over those findings like every other row |
 | nothing is promoted by hand | no branch here can produce `ready` that the validator did not produce. A repaired row that holds, holds; one that is rejected stays rejected and keeps its document |
 | the repair is a branch in the code | `kind: "repair"` in `replayDecision`, reached by `npm run validator-report -- --repair-from <dir>`, with tests. No script was written and none is needed again |
@@ -550,7 +562,10 @@ where the phase 1 work is. They join the seven D-035 placed.
 
 1. **The replay revokes on one pass and promotes on the next.** The same row can be revoked
    for an unverifiable document and then, on a later pass, treated as promotable. The decision
-   function is not idempotent across passes over changing inputs.
+   function is not idempotent across passes over changing inputs. *(Superseded 19 September 2026
+   by D-048's item 15, which checked the branch guard rather than the description: a revoked row
+   is `invalid`, the revoke branch is guarded on `ready` or `needs_review`, so it can be neither
+   revoked again nor promoted. The real defect is narrower and is filed under its own name.)*
 2. **Reconstruction provenance, including `sameDocument` sorting skills on full coverage
    rows.** A rebuilt candidate is compared with the skills sorted, which is right for a legacy
    row that never stored an order and wrong for a full coverage row that did: it can call two
@@ -630,8 +645,39 @@ permitted rewrite looks like, which is a real asymmetry: the model is told four 
 wrong and no way to be right. The reason not to fix it today is that every change to `RULES`
 is paid on every call and this one cannot be measured without a paid run. **So a case 1
 example is added and measured with the first paid run of phase 1**, in the same run that
-measures the output side of the p4 self check and the p5 retry block. It is on the phase 1
-list with them.
+measures the output side of the p4 self check and the p5 retry block.
+
+**The first run measures the configuration, not the three changes in it, and that is the
+decision rather than an accident of scheduling (the user's call, 19 September 2026).** The
+seventh review is right that the self check, the retry protocol and the example moving together
+cannot be attributed to any one of them. The answer is that attribution is the second question
+and there is no answer to the first one yet. **There is no baseline at all today.** Nothing has
+ever measured whether this prompt produces answers a person would accept, on any population, so
+the question worth the first paid run is whether the prompt as a whole does that, not which
+paragraph earned it. A configuration result answers that. **If it comes back ambiguous, or worse
+than expected, the second run splits it, and that is when attribution is worth paying for.**
+
+**What the first run will establish:**
+
+- whether the prompt as it stands produces fewer unsupported claims than a person reading the
+  answers would accept, judged by that person against frozen inputs;
+- the output token cost of the configuration, which is unmeasured for p4 and for p5 alike, and
+  therefore the real cost per attempted packet under the policy that ships;
+- a baseline that later runs can be read against, which is the thing that does not exist.
+
+**What the first run will not establish, and this list is here so that nobody quotes it for any
+of them:**
+
+- **that the self check works.** No sentence of the form "the self check catches X" can be
+  supported by this run. The same is true of the retry protocol and of the case 1 example. Three
+  changes moved together and the result belongs to all three or to none;
+- which of the three is carrying the result, or whether any of them is carrying it alone, or
+  whether one of them is making things worse and another is hiding it;
+- anything about the independent checking call of D-036, which is not in this configuration and
+  is not built. The run measures a prompt, not a checker;
+- a general rate. One profile, one draw, one judge.
+
+It is on the phase 1 list with the other two, as one item and not three.
 
 **Found while doing this, recorded rather than fixed, because it is the user's to decide.**
 `pairs.test.ts` asserts that 26 truthful lines must pass, and they are case 1 by definition.

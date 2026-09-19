@@ -132,6 +132,80 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-058. The first paid run reports a joint rate, needs an execution identity to be readable at all, and may not claim a cost it has not established coverage for
+
+The ninth review's findings 8 and 9. Both are D-041 and **neither is a code change to the tailoring
+path**; they are what the first paid run has to be set up to report, written down now because after
+the run is too late. The one code change in this entry is a comment that stated a guarantee the code
+does not give.
+
+**Finding 8. Two marginal rates do not establish a product.** The prerequisite in D-041 said useful
+tailoring is reported separately from factual acceptability. Separately is necessary and not
+sufficient: five packets factually acceptable with no useful tailoring, and five usefully tailored
+with unsupported claims, is 50 percent and 50 percent with **an intersection of zero**, and the
+configuration ships nothing anybody would send.
+
+So the run reports the **joint rate over the declared attempted job population**, and the four cells
+are named before generation:
+
+| Cell | What it counts |
+|---|---|
+| factually acceptable | judged so under the rubric, whatever the tailoring did |
+| usefully tailored | judged so under the rubric, whatever the facts did |
+| both | the only cell that describes something shippable |
+| failed, missing or unresolved | reported apart, never dropped and never spread over the other three |
+
+**The line level result is a diagnostic and not the headline, and the reason is arithmetic rather
+than taste.** Unchanged base lines are in the line denominator. A configuration that edits four lines
+of forty and invents a claim in one of them reads as 97.5 percent acceptable at the line level while
+**every resume it produced carries an unsupported claim**. A high line rate can coexist with a
+defect in every document, so the packet is the unit of the claim and the line is the unit of the
+diagnosis.
+
+**Frozen before generation, all four, because each one can be chosen after the fact to flatter a
+result:** the usefulness rubric; the treatment of unchanged text and of fallbacks, which decides
+whether a prompt that edits nothing scores well; the treatment of unresolved judgements, which is
+where a judge's "I cannot tell" goes; and the rule for calling the run successful, unsuccessful or
+inconclusive. A criterion chosen after seeing the numbers is not a criterion.
+
+**Finding 9. D-051 created a measurement trap, and the first paid run is exactly when it springs.**
+A failed execution now leaves the older ready packet in place, which is the right behaviour and was
+paid for deliberately. The consequence for measurement is that **an evaluator reading the current row
+credits the new configuration with an answer it never produced.** The row is a document, a status and
+a set of findings, and nothing on it says which execution produced them, so the natural reading is
+the wrong one.
+
+What the run needs before it starts, and none of it is optional:
+
+- an **execution identity** separate from the run tag, because a run tag names a batch and several
+  executions of the same job can share one;
+- **attempt identities inside the execution**, since first answers and retries are different
+  populations (D-041's prerequisite 2 names the retained attempt and not the attempts themselves);
+- **raw answers and merged candidates tied to those identities**, so D-041's prerequisite 1 is
+  checkable rather than asserted;
+- the **originating execution of the served artifact**, written where a reader will find it;
+- an **explicit flag when the served artifact was preserved** from an older execution.
+
+And the reading rule that follows from it: **fresh generation success is evaluated separately from
+whether an artifact was available to serve.** A configuration that fails every regeneration and
+serves yesterday's documents scores perfectly on the second question.
+
+**The cost claim, corrected in the same pass.** `run.ts` said "every call writes its own
+`cost_events` row", as a guarantee, in the comment that justifies leaving a preserved row's `usd`
+alone. It is not unconditional. `recordCost` never throws: a row that cannot be written is printed
+with `COST_NOT_RECORDED` and dropped, deliberately, so that the worksheet cannot destroy a paid and
+validated answer (review four, finding 16). The comment now says so.
+
+What follows for any number built on it: **a missing cost or usage row is an accounting gap and is
+never a call that cost nothing.** A real cost per attempted packet may be claimed only once coverage
+is established; otherwise the run reports the known cost and the unresolved portion beside it.
+
+**One correction to D-041 itself, from the review's list.** It said an absolute rate "means nothing
+until a second configuration is measured the same way". That is too strong and is withdrawn. A single
+configuration **cannot establish improvement**, which is what the surrounding paragraphs are about
+and which stands. It **is** meaningful against a criterion fixed before the run, which is the whole
+point of freezing the rubric and the success rule above. The sentence is corrected in place.
+
 ### D-057. The tailor CLI reads a packet by job alone, and labels a preserved artifact with the execution that did not produce it
 
 The ninth review's findings 4 and 5, both confirmed by the user against the code. One is a
@@ -681,6 +755,12 @@ documentation only and no prompt carries it, which is why it survived a round of
     question is whether the prompt as a whole holds up, not which paragraph earned it. If the
     result is ambiguous or worse than expected, the second run splits it. D-041 carries the
     reason and, more importantly, the list of things that run will not establish.
+
+    **What the run must report, added 19 September 2026 by D-058** (the ninth review's finding 8):
+    the joint rate over the declared attempted job population, factually acceptable and usefully
+    tailored and both, with failed, missing and unresolved cases apart; the line level result as a
+    diagnostic only; and the rubric, the treatment of unchanged text and fallbacks, the treatment of
+    unresolved judgements and the success rule all frozen before generation.
 19. **Verifiable durable provenance for a repaired row**, from part 1 above, beside the
     reconstruction items. Needed before any repair touches a real user's row.
 20. **Carry the unreadable span through the rewrite instead of rediscovering it.** From D-053.
@@ -758,6 +838,14 @@ documentation only and no prompt carries it, which is why it survived a round of
     twice, and by then the spend is already going out.
 25. **The rest of the current state inconsistencies**, the eighth review's finding 9 less the
     revision label, which is fixed rather than placed (D-054).
+26. **An execution identity on the packet row, and the attempt identities inside it.** From D-058,
+    the ninth review's finding 9. **Due before the first paid run**, in the same window as item 23,
+    and for the same reason: it is the difference between a run that can be read and one that
+    credits a configuration with an answer it never produced. A run tag names a batch, not an
+    execution, and D-051 made a second execution on the same job a normal event, so the row needs to
+    say which execution produced the artifact it is holding and whether that artifact was preserved
+    from an older one. Raw answers and merged candidates are tied to the same identities, which is
+    what makes D-041's first prerequisite checkable rather than asserted.
 
 **The first phase 1 item is still the pre rank.** Nothing here changes that.
 
@@ -1219,8 +1307,11 @@ With one configuration and no baseline the run can establish **an absolute rate 
 rubric** and nothing comparative:
 
 - the share of answers, and of lines within them, that a person applying a written rubric judges
-  factually acceptable. A number, not a comparison, and it means nothing until a second
-  configuration is measured the same way;
+  factually acceptable. A number, not a comparison. *(Corrected 19 September 2026 by D-058. This
+  said the number "means nothing until a second configuration is measured the same way", which is
+  too strong and is withdrawn. One configuration cannot establish improvement, and that is what the
+  paragraphs around this are about. It is meaningful against a criterion fixed before the run, which
+  is why D-058 freezes the rubric and the success rule before generation.)*
 - the output token cost of the configuration, which is unmeasured for p4 and for p5 alike, and
   therefore the real cost per attempted packet under the policy that ships;
 - a baseline that later runs can be read against, which is the thing that does not exist.

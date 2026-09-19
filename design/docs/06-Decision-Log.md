@@ -132,6 +132,78 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-055. A suppressed number must carry the finding that suppressed it, because a silent suppression is a rejection
+
+The ninth review's finding 1, verified by the user against the code before it reached me, and
+**it is a regression this round shipped**. It goes first because it can reject a truthful line.
+
+**What D-053 did, said plainly.** It was justified as a focused regression rather than a wider
+grammar, and that judgement was right. It then widened suppression instead. The pattern added to
+`readNumbers` was a digit, a comma and any non space, `/\d+,(?=[^\s\d])/`, written to find the
+wreckage an ambiguous comma leaves when the rewrite eats the digits after it. That shape is far
+larger than the case it was written for: it matches every comma in ordinary prose that is missing
+the space after it. The test covered the input the review supplied and not the class the pattern
+matches, which is how it passed review.
+
+**What that cost, and it is worse than a lost number.** A span produced by that pattern removed
+the value from the claims and **added nothing to the unreadable phrases**. Three consequences, in
+order, and the third is the damage:
+
+1. the value is gone from the fact side, so a profile that plainly carries the number carries
+   nothing the lookup can find;
+2. the text still reads as fully readable, so D-040's guard sees no unreadable phrase and leaves
+   `value-unknown` hard;
+3. a later truthful line stating that same number matches nothing and **takes a hard rejection**.
+
+A truthful line rejected because a comma was typed without a space after it. That is the failure
+mode rule 1's first design was withdrawn for (D-022), reached by a different road.
+
+**Reproduced before the fix**, on this module, at the three points the chain passes through:
+
+| Input | Reported unreadable | Suppressed |
+|---|---|---|
+| "In 2023,we launched the pricing review." | nothing | `2023` |
+| "Cut cost by USD 99,then moved on." | nothing | `99` |
+| "In 2023,three people joined." | nothing | `2023` and `3` |
+| "USD 9,2 hundred hundred saved." | "9,2" | `9`, correctly |
+
+Only the last line is a phrase nobody can read. The first three are ordinary sentences.
+
+**The invariant, which is the fix rather than a patch to the pattern.** A numeric span is either
+interpreted and checked, or reported as uninterpretable. It never disappears in silence. In the
+code that is one direction rather than one rule: **every span is located from a phrase the
+function reports**, and never by looking the other way round for wreckage shapes in the output.
+The ambiguous comma phrases are already collected from the input, before the rewrite; each one is
+now found in the output from the digits before its own first comma, and the span runs to the end
+of the digits and commas that follow. A comma with no phrase behind it is punctuation and keeps
+every number around it.
+
+**One thing the old pattern was also hiding, closed by the same change.** "In 2023,three people
+joined" rewrote to "in 2023,3" and was suppressed whole. Both values are real and both are read
+now.
+
+**The residual, named rather than implied.** A comma phrase whose leading digits the pipeline also
+rewrote is reported and not located, so its fragments are read. That direction is safe, because the
+phrase is on the list and D-040 then holds rather than rejects, and it is the same rediscovery hole
+as before: the fix is carrying offsets through the rewrite, **phase 1 item 20**, unchanged by this
+entry.
+
+**Tested on both sides, with the space and without**, and the chain that ends in the false
+rejection is a test of its own rather than a property left to be inferred: a fact carrying the
+slip, a truthful line stating the same year, and no finding at all. The invariant itself is
+asserted over every shape in the block, so a span with no phrase behind it cannot come back
+quietly whatever produces it.
+
+**Measured against the stored packets before it ships.** The report was run on this branch and on
+`main`, and the two tables are identical: 81 ready, 24 held, 0 invalid, 2 not promoted, over 107
+rows. **This change moves no stored row.** The demo profile has no comma written without a space
+after it, which is why the defect was invisible in the population and not why it was harmless.
+
+The validator revision goes to `2026-09-19.r12`. **The restamp is deliberately not applied with
+this change.** The duplicate findings of the next entry are still accumulating, and a restamp
+applied now would add one more copy to every legacy row before the fix that collapses them; it is
+applied once, from merged code, after both.
+
 ### D-054. The corrections the eighth review's author attributed to himself, and one label read from the database rather than restated
 
 Three corrections and a read. No code changes beyond the one test example.

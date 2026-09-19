@@ -293,6 +293,82 @@ describe("a span the normaliser could not read supplies no value at all", () => 
   });
 });
 
+describe("a numeric span is either interpreted and checked, or reported as uninterpretable", () => {
+  /*
+   * The ninth review's finding 1, reproduced before the fix, and the whole class rather than the one input.
+   *
+   * D-053 added a pattern for a digit, a comma and any non space, to find the wreckage an ambiguous comma leaves
+   * when the rewrite eats the digits after it. It matched far more than that: any comma with no space after it,
+   * "in 2023,we launched" and "USD 99,then". Those values were suppressed from the claims and **no phrase was
+   * reported**, so the text still read as fully readable.
+   *
+   * That is not a lost value, it is a rejection. The suppressed value is gone from the fact side, so a later
+   * truthful line stating the same number matches nothing; and with no unreadable phrase on the profile, D-040's
+   * guard has no reason to hold, so `value-unknown` is hard and the packet is rejected. A truthful line destroyed
+   * by a missing space after a comma, which is the failure mode rule 1's first design was withdrawn for (D-022).
+   *
+   * The invariant these assert: a numeric span is either interpreted and checked, or reported as
+   * uninterpretable. Suppression comes from a span an unreadable phrase actually produced, and anything
+   * suppressed carries the finding with it (D-055).
+   */
+
+  const entry = (id: string, text: string): FactEntry => ({ id, text, kind: "employment", role: "R1", source: FROM_RESUME });
+  const levels = (line: string, f: ReturnType<typeof factSet>) => checkLine(line, "R1.1", ["R1.1"], f).filter((x) => x.code === "value-unknown").map((x) => x.level);
+
+  /** The same sentences with the space after the comma and without it. Nothing about a number changes between them. */
+  const SLIPS: [string, string, string[]][] = [
+    ["Built the OKR system in 2023, now used by 38 teams.", "Built the OKR system in 2023,now used by 38 teams.", ["year:2023", "num:38"]],
+    ["Cut operating cost by USD 9.2M, then held it flat.", "Cut operating cost by USD 9.2M,then held it flat.", ["money:usd:9200000"]],
+    ["Reduced cost 11 percent, against a 12 percent target.", "Reduced cost 11 percent,against a 12 percent target.", ["pct:11", "pct:12"]],
+  ];
+
+  it("reads the same values with the space and without, and reports nothing unreadable either way", () => {
+    for (const [spaced, slipped, keys] of SLIPS) {
+      for (const text of [spaced, slipped]) {
+        const r = readNumbers(text);
+        expect(`${text}: ${JSON.stringify(r.unreadable)}`).toBe(`${text}: []`);
+        expect(`${text}: ${JSON.stringify(r.unreadableSpans)}`).toBe(`${text}: []`);
+        expect(`${text}: ${JSON.stringify(claimsOf(text).map((c) => c.key))}`).toBe(`${text}: ${JSON.stringify(keys)}`);
+      }
+    }
+  });
+
+  it("reads them on the fact side too, so the profile carries what it says it carries", () => {
+    for (const [, slipped, keys] of SLIPS) {
+      const facts = factSet([entry("R1.1", slipped)]);
+      expect(`${slipped}: ${JSON.stringify(facts.all.map((c) => c.key))}`).toBe(`${slipped}: ${JSON.stringify(keys)}`);
+      // And nothing on this profile is unreadable, so D-040's guard is not what is carrying these cases.
+      expect(facts.unreadablePhrases).toEqual([]);
+    }
+  });
+
+  it("does not reject a truthful line for a missing space after a comma, which is the chain this closes", () => {
+    // The whole chain in one test. The fact is written with the slip; the line states the same year cleanly and
+    // cites that fact. Before the fix: the fact contributed no year:2023, the profile read as fully readable, and
+    // the line took a hard value-unknown and lost its packet.
+    const slipped = factSet([entry("R1.1", "Built the OKR system in 2023,now used by 38 teams.")]);
+    expect(levels("Built the OKR system in 2023.", slipped)).toEqual([]);
+    // The generated side of the same slip: a line that writes the comma without a space asserts its numbers and is
+    // checked on them, rather than passing because they were quietly removed from the question.
+    expect(levels("Built the OKR system in 2023,now used by 38 teams.", slipped)).toEqual([]);
+    expect(levels("Built the OKR system in 1998,now used by 38 teams.", slipped)).toEqual(["hard"]);
+  });
+
+  it("still suppresses and still reports the ambiguous comma D-053 was written for", () => {
+    // The case the patch was right about, unchanged: the digits after the comma are consumed by the word
+    // machinery, "usd 9" is left behind, and it is neither read as a value nor passed over in silence.
+    const r = readNumbers("Raised USD 9,2 hundred hundred");
+    expect(r.unreadable).toContain("9,2");
+    expect(claimsOf("Raised USD 9,2 hundred hundred").map((c) => c.key)).toEqual([]);
+    // Every span this function reports is produced by a phrase it reports. That is the invariant, asserted here
+    // over each shape rather than left to the cases above to imply.
+    for (const text of ["Raised USD 9,2 hundred hundred", "Raised USD 9,2 million", "Grew revenue five thousand two million", "Managed 4, 5 and 6 teams", ...SLIPS.flatMap(([a, b]) => [a, b])]) {
+      const { unreadable, unreadableSpans } = readNumbers(text);
+      expect(unreadableSpans.length && !unreadable.length ? `${text}: ${unreadableSpans.length} span(s) and no phrase to explain them` : text).toBe(text);
+    }
+  });
+});
+
 describe("a value is rejected only when the profile's own numbers could all be read", () => {
   /*
    * The sixth review's item 3. `value-unknown` is the one finding D-036 lets

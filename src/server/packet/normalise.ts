@@ -44,6 +44,17 @@
  * class is not closed: carrying offsets through the separator strip, the
  * hyphen rules, the suffix expansion and the tokeniser is a rewrite of this
  * function rather than a patch, and it is placed in phase 1 (D-053).
+ *
+ * The ninth review, finding 1, and it is this file's own patch being corrected.
+ * D-053 was justified as a focused regression rather than a wider grammar,
+ * which was the right call, **and it then widened suppression instead**: it
+ * matched a digit, a comma and any non space in the output, a shape far larger
+ * than the one case it was written for, and suppressed every value inside it
+ * without reporting a phrase. The test covered the input the review supplied
+ * and not the class the pattern matches, so "in 2023,we launched" lost its year
+ * in silence. The invariant that would have caught it is now stated and held
+ * below: a numeric span is either interpreted and checked, or reported as
+ * uninterpretable, and it never disappears quietly (D-055).
  */
 
 const UNITS = new Map<string, number>([
@@ -70,6 +81,14 @@ export interface NumberReading {
    * taken out of it is evidence of anything (D-046). The ranges are in the
    * coordinates of `text`, not of the input, and they are what `claimsOf`
    * filters on.
+   *
+   * **Every range here is produced by a phrase in `unreadable`**, and that is
+   * the invariant rather than an incidental property (D-055). A range with no
+   * phrase behind it is the worst of both halves: the value is suppressed, so
+   * nothing on the profile can support a later line that states it, and the
+   * text still reads as fully readable, so D-040's guard sees no reason to
+   * hold and `value-unknown` rejects. A truthful line then loses its packet
+   * over a missing space after a comma.
    */
   unreadableSpans: [number, number][];
 }
@@ -221,20 +240,33 @@ export function readNumbers(text: string): NumberReading {
   if (pendingAnd) phrase.pop();
   flush();
   const output = out.join("").replace(/\s+/g, " ").trim();
-  // Where each unreadable phrase sits in the text that comes out, so a caller can refuse to read values out of it.
-  // A word number phrase survives the pipeline as its own words, so it is found by looking for it. A comma run does
-  // not survive as it was written, because the scale word after it is expanded, but the comma itself is still there
-  // and the run around it is the span: "9,2 million" leaves "9,2000000", and that whole token is the span (D-046).
-  const spans: [number, number][] = [
-    ...output.matchAll(/\d+(?:,\d+)+/g),
-    // The digits after an ambiguous comma do not always survive: in "9,2 hundred hundred" the word machinery takes
-    // the 2 and leaves "9,hundred", so the run above finds nothing and "usd 9" reads as a value nobody wrote. A
-    // digit and a comma with a non space immediately after it is that wreckage. The space matters: "4, 5 and 6" is
-    // punctuation between two numbers and must keep both of them (D-053).
-    ...output.matchAll(/\d+,(?=[^\s\d])/g),
-  ].map((m) => [m.index!, m.index! + m[0].length] as [number, number]);
+  /*
+   * Where each unreadable phrase sits in the text that comes out, so a caller can refuse to read values out of it.
+   *
+   * Each span is located FROM a phrase this function reports, never by looking the other way round for wreckage
+   * shapes in the output. That direction is the whole of the invariant: a span that no reported phrase produced
+   * suppresses a value and tells nobody, which is what D-053's pattern did to every "2023,we" in the corpus.
+   *
+   * A word number phrase survives the pipeline as its own words, so it is found by searching for it. A comma
+   * phrase does not survive as it was written: the scale word after it is expanded, "9,2 million" leaving
+   * "9,2000000", and the word machinery can take the digits after the comma outright, "9,2 hundred hundred"
+   * leaving "9,". Both are found from the digits before the phrase's own first comma, and the span runs to the
+   * end of the digits and commas that follow. "4, 5 and 6" is punctuation between three numbers, is no phrase,
+   * and keeps all three.
+   *
+   * The residual, stated rather than implied. A comma phrase whose leading digits the pipeline also rewrote is
+   * reported and not located, so its fragments are read. That is safe in the direction that matters, since the
+   * phrase is on the list and D-040 then holds rather than rejects, and it is the same rediscovery hole as
+   * before: the fix is carrying offsets through the rewrite, phase 1 item 20 (D-053, D-055).
+   */
+  const spans: [number, number][] = [];
   for (const phrase of unreadable) {
     for (let i = output.indexOf(phrase); i >= 0; i = output.indexOf(phrase, i + phrase.length)) spans.push([i, i + phrase.length]);
+  }
+  for (const phrase of commas) {
+    const head = /^\d+/.exec(phrase)?.[0];
+    if (!head) continue;
+    for (const m of output.matchAll(new RegExp(`(?<![\\d,])${head},[\\d,]*`, "g"))) spans.push([m.index!, m.index! + m[0].length]);
   }
   return { text: output, unreadable: [...commas, ...unreadable], unreadableSpans: spans };
 }

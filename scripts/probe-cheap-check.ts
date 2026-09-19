@@ -174,7 +174,7 @@ function holdRate(dir: string, run: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Part 2a: the 32 false lines already in pairs.test.ts. Four of them were truthful controls until D-044 and D-047.
+// Part 2a: the 32 unsupported lines already in pairs.test.ts, plus the 18 labelled supported and the 4 pending.
 // Copied from src/server/packet/pairs.test.ts. The copy is checked below by
 // reproducing that file's published counts before anything is removed.
 // ---------------------------------------------------------------------------
@@ -187,6 +187,8 @@ interface Pair {
   bullet: string;
   cited: string[];
   truthful: string[];
+  /** Lines nobody has placed: counted and reported, never asserted about (D-052). */
+  pending?: string[];
   false: FalseLine[];
 }
 
@@ -232,7 +234,7 @@ const PAIR_POSTING = lemmasOf("Salesforce, recruitment systems, dashboards, anal
 
 const PAIRS: Pair[] = [
   { finding: "3A, a value paired with a sibling value's measure", case: "case 2", bullet: "R1.1", cited: ["R1.1"], truthful: ["Cut churn 11 percent and reduced acquisition cost 5 percent.", "Reduced churn by 11 percent while cutting acquisition cost by 5 percent."], false: ["Reduced acquisition cost 11 percent.", "Cut churn 5 percent."] },
-  { finding: "3B, the opening verb is a relationship", case: "case 3", bullet: "R1.2", cited: ["R1.2"], truthful: ["Coached 6 analysts.", "Trained six analysts."], false: ["Managed 6 analysts.", { line: "Hired 6 analysts.", case: "invention" }] },
+  { finding: "3B, the opening verb is a relationship", case: "case 3", bullet: "R1.2", cited: ["R1.2"], truthful: ["Trained six analysts."], pending: ["Coached 6 analysts."], false: ["Managed 6 analysts.", { line: "Hired 6 analysts.", case: "invention" }] },
   { finding: "3C, a denial", case: "polarity", bullet: "R1.3", cited: ["R1.3"], truthful: ["Did not manage the 6 analysts."], false: ["Managed 6 analysts."] },
   { finding: "3D, a change against a level", case: "case 2", bullet: "R1.4", cited: ["R1.4"], truthful: ["Cut churn by 11 percent.", "Reduced churn by about 11 percent."], false: ["Reduced churn to 11 percent.", "Held churn at 11 percent."] },
   { finding: "3E, the sign", case: "polarity", bullet: "R1.5", cited: ["R1.5"], truthful: ["Revenue growth of -11 percent.", "Achieved revenue growth of -11 percent."], false: ["Achieved 11 percent revenue growth."] },
@@ -240,11 +242,11 @@ const PAIRS: Pair[] = [
   { finding: "4B, a period bound to its predicate", case: "case 2", bullet: "R1.7", cited: ["R1.7"], truthful: ["Cut costs by 11 percent and reviewed budgets annually.", "Reviewed budgets annually; cut costs by 11 percent."], false: ["Cut costs by 11 percent annually."] },
   { finding: "7, numbers the normaliser reads", case: "invention", bullet: "R1.9", cited: ["R1.9"], truthful: ["Grew the team from four to nine people.", "Grew the team from 4 to 9 people."], false: ["Grew the team from 4 to 19 people.", "Grew the team to 4 people."] },
   { finding: "a four digit count is not a year", case: "invention", bullet: "R2.3", cited: ["R2.3"], truthful: ["Delivered 9 growth projects for banks, with a study of 2,000 customers."], false: ["Ran a conjoint study of 2,000 users that lifted ARPU 6 percent.", "Ran a conjoint study of 2,000 customers that lifted ARPU 16 percent.", { line: "Ran a conjoint study of 2000 customers that lifted ARPU 6 percent.", case: "case 3" }] },
-  { finding: "5A, the tool after using or in is a claim", case: "invention", bullet: "R1.8", cited: ["R1.8"], truthful: ["Built Excel dashboards.", "Built dashboards with attention to detail."], false: ["Built dashboards using salesforce data.", "Built dashboards using Tableau.", "Built dashboards in Salesforce.", { line: "Built dashboards in Excel for the sales team.", case: "invention" }] },
+  { finding: "5A, the tool after using or in is a claim", case: "invention", bullet: "R1.8", cited: ["R1.8"], truthful: ["Built Excel dashboards."], pending: ["Built dashboards with attention to detail."], false: ["Built dashboards using salesforce data.", "Built dashboards using Tableau.", "Built dashboards in Salesforce.", { line: "Built dashboards in Excel for the sales team.", case: "invention" }] },
   { finding: "5B, every conjunct of a coordinated object", case: "invention", bullet: "R1.8", cited: ["R1.8"], truthful: [], false: ["Built dashboards and recruitment systems.", "Built dashboards and pricing models in Excel.", { line: "Built dashboards and reports in Excel.", case: "invention" }] },
   { finding: "5C, a qualification", case: "invention", bullet: "R2.1", cited: ["R2.1"], truthful: ["Worked in Salesforce for the sales pipeline."], false: ["Certified in Salesforce.", "Salesforce certified, ran the sales pipeline.", { line: "Used Salesforce to run the sales pipeline.", case: "case 3" }] },
   { finding: "6, a global entity does not support a relationship", case: "invention", bullet: "R1.8", cited: ["R1.8"], truthful: ["Built dashboards in Excel."], false: ["Led recruitment.", "Led RECRUITMENT.", "Reported ARPU in Excel."] },
-  { finding: "D-021, rewordings that must keep passing", case: "invention", bullet: "R1.10", cited: ["R1.10"], truthful: ["Led the pricing review across 3 markets.", "Ran pricing reviews across three markets."], false: ["Ran the pricing review across 30 markets.", "Ran the pricing review across 3 regions."] },
+  { finding: "D-021, rewordings that must keep passing", case: "invention", bullet: "R1.10", cited: ["R1.10"], truthful: [], pending: ["Led the pricing review across 3 markets.", "Ran pricing reviews across three markets."], false: ["Ran the pricing review across 30 markets.", "Ran the pricing review across 3 regions."] },
 ];
 
 function pairsTable() {
@@ -284,10 +286,15 @@ function pairsTable() {
     cheap += t.cheap;
   }
   console.log(`| all | ${lines} | ${now} | ${cheap} |`);
-  console.log(`\ncase 1, stronger wording that must keep passing: ${caseOnePassed} of ${caseOne} pass now.`);
+  console.log(`\nlines labelled supported, which must keep passing: ${caseOnePassed} of ${caseOne} pass now.`);
+  const pendingLines = PAIRS.flatMap((x) => (x.pending ?? []).map((line) => ({ p: x, line })));
+  console.log(`\n${pendingLines.length} lines are pending adjudication (D-052). Reported, never asserted:\n`);
+  console.log("| Line | Today |");
+  console.log("|---|---|");
+  for (const { p: x, line } of pendingLines) console.log(`| ${line} | ${statusOf(checkLine(line, x.bullet, x.cited, PAIR_SET, PAIR_POSTING))} |`);
   console.log(`\nThe ${nowPassing.length} lines that stop being caught:`);
   for (const s of nowPassing) console.log(`  - ${s}`);
-  return { lines, now, cheap, caseOne, caseOnePassed };
+  return { lines, now, cheap, caseOne, caseOnePassed, pending: PAIRS.reduce((n, x) => n + (x.pending?.length ?? 0), 0) };
 }
 
 // ---------------------------------------------------------------------------
@@ -412,11 +419,11 @@ function main() {
   // catch an edit to the copy and never an edit to the file the copy mirrors. D-044 moved
   // two lines in that file and this guard passed unchanged, which is exactly the failure it
   // reads as though it prevents. Placed in phase 1 with the other measurement defects.
-  if (p.lines !== 32 || p.caseOne !== 22) {
-    throw new Error(`the copy of pairs.test.ts has drifted: ${p.lines} false lines and ${p.caseOne} truthful, expected 32 and 22`);
+  if (p.lines !== 32 || p.caseOne !== 18 || p.pending !== 4) {
+    throw new Error(`the copy of pairs.test.ts has drifted: ${p.lines} false lines, ${p.caseOne} supported and ${p.pending} pending, expected 32, 18 and 4`);
   }
   console.log(`
-The copy holds 32 false lines and 22 truthful ones, which is what pairs.test.ts held when this constant was last set by hand. The guard compares the copy with that constant and not with the file, so it cannot see an edit to the file. Flagged: ${p.cheap} of 32. Case 1: ${p.caseOnePassed} of 22 pass.`);
+The copy holds 32 unsupported lines, 18 labelled supported and 4 pending, which is what pairs.test.ts held when this constant was last set by hand. The guard compares the copy with that constant and not with the file, so it cannot see an edit to the file. Flagged: ${p.cheap} of 32. Supported lines passing: ${p.caseOnePassed} of 18. The 4 pending are reported above and asserted about nowhere.`);
   fourteenTable();
 }
 

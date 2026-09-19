@@ -76,9 +76,15 @@ import { checkLine, factSet } from "./validate";
  * The set has gone from 28 false and 26 truthful to 32 and 22 across the two
  * rounds. None of the four is caught by the code.
  *
- * MARKED FOR ADJUDICATION, still counted as truthful controls, listed so that
- * nobody has to rediscover the question (D-047). Each is a real question about
- * what case 1 permits and none of them is this file's to answer:
+ * PENDING ADJUDICATION, in their own `pending` array and asserted about in no
+ * way at all (D-052). They were listed here as truthful controls with a comment
+ * calling them undecided, which was not deferring the decision: the executable
+ * policy said they must pass, so a rule that correctly flagged one would have
+ * failed this suite and read as a regression. A comment does not outrank an
+ * assertion. What they do today is printed by the suite and asserted by nothing.
+ *
+ * Each is a real question about what case 1 permits and none is this file's to
+ * answer:
  *
  *   "Trained 6 analysts." -> "Coached 6 analysts."
  *      Is coaching the same activity as training, or a different one?
@@ -89,9 +95,12 @@ import { checkLine, factSet } from "./validate";
  *   "Ran the pricing review across 3 markets." -> "Ran pricing reviews across
  *      three markets." One review across three markets, or three reviews?
  *
- * So "22 of 22 truthful pass" is not evidence that the control set is
- * conservative. It says these 22 pass, four of them are unadjudicated, and
- * four of the original 26 did not deserve to be in it.
+ * THE POPULATION, in one place: **18 lines labelled supported, 4 pending, 32
+ * unsupported written by the rules' author and 14 by a second author.**
+ *
+ * So "18 of 18 supported lines pass" is not evidence that the control set is
+ * conservative. It says these 18 pass. Four more are unplaced and four of the
+ * original 26 did not deserve to be in the set at all.
  */
 
 const RESUME = { rowId: "r", origin: "upload" as const, hasEvidence: true };
@@ -175,8 +184,17 @@ interface Pair {
   case: Case;
   bullet: string;
   cited: string[];
-  /** Lines that must pass with no hard or review finding. */
+  /** Lines labelled supported: every element of them is carried by the facts they cite, and they must pass. */
   truthful: string[];
+  /**
+   * Lines nobody has placed yet. They are not controls and they are not false
+   * lines, and **nothing here asserts anything about their outcome**. Leaving
+   * them in `truthful` while a comment called them undecided was not deferring
+   * the decision, it was making it: the executable policy said they must pass,
+   * so a future rule that correctly flagged one would have failed the suite and
+   * been read as a regression (the eighth review's finding 7, D-052).
+   */
+  pending?: string[];
   /** Lines that must be held or rejected. */
   false: FalseLine[];
 }
@@ -197,7 +215,8 @@ const PAIRS: Pair[] = [
     case: "case 3",
     bullet: "R1.2",
     cited: ["R1.2"],
-    truthful: ["Coached 6 analysts.", "Trained six analysts."],
+    truthful: ["Trained six analysts."],
+    pending: ["Coached 6 analysts."],
     // Training becoming managing is the promotion. Hiring is a different activity, not a higher rung of the same one.
     false: ["Managed 6 analysts.", { line: "Hired 6 analysts.", case: "invention" }],
   },
@@ -278,8 +297,8 @@ const PAIRS: Pair[] = [
     case: "invention",
     bullet: "R1.8",
     cited: ["R1.8"],
-    // "with attention to detail" is marked for adjudication, not settled: see the header.
-    truthful: ["Built Excel dashboards.", "Built dashboards with attention to detail."],
+    truthful: ["Built Excel dashboards."],
+    pending: ["Built dashboards with attention to detail."],
     false: [
       "Built dashboards using salesforce data.",
       "Built dashboards using Tableau.",
@@ -338,7 +357,8 @@ const PAIRS: Pair[] = [
     case: "invention",
     bullet: "R1.10",
     cited: ["R1.10"],
-    truthful: ["Led the pricing review across 3 markets.", "Ran pricing reviews across three markets."],
+    truthful: [],
+    pending: ["Led the pricing review across 3 markets.", "Ran pricing reviews across three markets."],
     false: ["Ran the pricing review across 30 markets.", "Ran the pricing review across 3 regions."],
   },
 ];
@@ -440,10 +460,23 @@ describe("paired evaluation set", () => {
         if (l !== "ready") held.push(`case 1 ${p.finding}: "${line}" ${l}`);
       }
     }
-    // 22 after D-044 and D-047, not 26: four lines that were in here are false lines of their pairs now, two case 3
-    // and two invention. Four of the 22 that remain are marked for adjudication in the header and still counted.
-    expect(caseOne).toBe(22);
+    // 18: the 26 this file began with, less the four that became false lines (D-044, D-047) and the four that
+    // are pending (D-052). Every line counted here is one this file is prepared to say a rule must not block.
+    expect(caseOne).toBe(18);
     expect(held).toEqual([]);
+  });
+
+  it("reports what the pending lines do today and asserts nothing about it", () => {
+    /*
+     * The eighth review's finding 7. These four are not placed, so no assertion may depend on them. What they do
+     * is printed, because a rule change that moves one of them is worth seeing in the output even though it is
+     * not a failure, and because the day somebody adjudicates them the observed outcome is the thing they will
+     * want to look at first.
+     */
+    const pending = PAIRS.flatMap((p) => (p.pending ?? []).map((line) => ({ p, line })));
+    expect(pending).toHaveLength(4);
+    console.log(`\n${pending.length} lines are pending adjudication. Nothing below is asserted:`);
+    for (const { p, line } of pending) console.log(`  ${level(p.bullet, line, p.cited).padEnd(13)} ${p.finding}: "${line}"`);
   });
 
   it("still catches the false lines the check reaches, rejected or held, each named", () => {
@@ -494,8 +527,12 @@ describe("paired evaluation set", () => {
     for (const s of passing) console.log(`  ${s}`);
     // Deliberately no expectation on `passing`. Asserting it would turn a record of what is
     // not checked into a claim that it is checked, which is the thing this file must not say.
-    // 46 after D-047: 32 written by the rules' author and 14 by a second author. It was 42 while four lines that
-    // are not supported by the facts they cite were counted as truthful controls instead.
+    // The population, stated the way the eighth review states it: 18 controls labelled supported, 4 pending,
+    // 32 unsupported lines written by the rules' author and 14 by a second author.
+    expect(PAIRS.reduce((n, p) => n + p.truthful.length, 0)).toBe(18);
+    expect(PAIRS.reduce((n, p) => n + (p.pending?.length ?? 0), 0)).toBe(4);
+    expect(byAuthor.rules.falseLines).toBe(32);
+    expect(byAuthor.independent.falseLines).toBe(14);
     expect(byAuthor.rules.falseLines + byAuthor.independent.falseLines).toBe(46);
   });
 });

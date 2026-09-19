@@ -132,6 +132,46 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-052. The four unplaced lines get their own category, because a comment does not outrank an assertion
+
+The eighth review's finding 7. D-047 said four controls were "marked for adjudication" and left
+them in the `truthful` array, where the suite asserts that every line produces no finding.
+
+**So the decision was made and recorded as deferred.** A future check that correctly flagged one
+of those four would have failed the suite, and the failure would have read as a regression rather
+than as the check working. The comment said undecided; the executable policy said "these must
+pass"; the executable policy is the one that would have been enforced. Marking something in prose
+while the code asserts the opposite is not deferring a decision, it is making one and hiding it.
+
+**The fix.** A `pending` array on the pair, separate from `truthful` and from `false`. Nothing
+asserts anything about what those lines do. The suite prints their observed outcome, because a
+rule change that moves one is worth seeing even though it is not a failure, and because it is the
+first thing anyone adjudicating them will want.
+
+All four pass today, which is worth having on the record now rather than discovered later:
+
+| Pending line | Today |
+|---|---|
+| "Coached 6 analysts." | ready |
+| "Built dashboards with attention to detail." | ready |
+| "Led the pricing review across 3 markets." | ready |
+| "Ran pricing reviews across three markets." | ready |
+
+**The population, stated once and the same everywhere**, in the test file's header, the probe and
+the cost summary:
+
+| | Lines |
+|---|---|
+| labelled supported, must pass | 18 |
+| pending adjudication, asserted about nowhere | 4 |
+| unsupported, written by the rules' author | 32 |
+| unsupported, written by a second author | 14 |
+
+The suite asserts each of those four counts, so the population cannot drift without a test
+failing. The probe's copy carries the same split and its drift constants are updated with it; the
+guard still compares that copy with a constant rather than with the file, which is phase 1 item
+10 and is untouched here.
+
 ### D-051. The artifact and the execution are separated, so a failed rerun stops relabelling the packet it kept
 
 The eighth review's finding 1, confirmed by the user. D-045 stopped a rerun that produced

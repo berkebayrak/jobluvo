@@ -28,10 +28,22 @@ import { actionable, factSet, isHard, needsReview, validateChangeSet, VALIDATOR_
  * describes (review four, findings 2 and 13). A resume is stored whenever
  * that attempt parsed, rejected or not: a rejection blocks the document, it
  * does not delete it, and `consumableResume` is the one door it would have
- * to leave through (D-038). Nothing from a rejected attempt is reused: a
- * rejected candidate cannot become ready because the retry failed to parse,
- * timed out or came back incomplete. The earlier attempts stay in the error
- * text for diagnostics.
+ * to leave through (D-038).
+ *
+ * The retained attempt is the last one that produced a document, not simply
+ * the last one. An attempt whose call never returned, or whose answer did not
+ * parse, produced nothing, and taking it as the packet deleted the document
+ * the attempt before it had produced: D-038 fixed the rejection path and left
+ * this one, so "invalid, then the retry times out" still cleared the row
+ * (D-045). The execution failure is recorded in the error text and on the
+ * attempt log, which is where a failure belongs, rather than by destroying
+ * the evidence of what the model actually wrote.
+ *
+ * Nothing from a rejected attempt is reused: a rejected candidate cannot
+ * become ready because the retry failed to parse, timed out or came back
+ * incomplete. Its status stays what the validator gave it and
+ * `consumableResume` serves a ready packet only. The earlier attempts stay in
+ * the error text for diagnostics.
  *
  * A held answer earns a retry too when its findings are ones the model can
  * act on, each naming the word to replace (D-022). That retry is asked to
@@ -57,8 +69,13 @@ export interface TailorOptions {
  * ready: parsed and passed. needs_review: parsed, no hard finding, held
  * for a person on a review finding, with its resume stored but not
  * consumable. invalid: a hard finding after the retry, with its resume
- * stored and not consumable either (D-038). failed: no answer to validate,
- * so there is no document to store.
+ * stored and not consumable either (D-038). failed: the call did not
+ * return, or what it returned did not parse, or the validator threw on it.
+ *
+ * A failed attempt has a document only in the last of those three: the
+ * answer parsed and nothing read it. The other two produced nothing to
+ * keep. Either way the packet keeps the last document any attempt produced
+ * rather than the last attempt's absence of one (D-045).
  */
 export type AttemptOutcome = "ready" | "needs_review" | "invalid" | "failed";
 
@@ -266,7 +283,9 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
       findings = validateChangeSet(candidate.cs, base, set, posting);
     } catch (e) {
       // The same defect on a second answer would throw again; no paid retry for a code defect. The call already made keeps its cost row.
-      log.push({ n, outcome: "failed", candidate: null, findings: [], error: `validator failed: ${e instanceof Error ? e.message : String(e)}` });
+      // The candidate is kept: it parsed, and what failed is the code that was going to read it. Discarding it here
+      // threw away the only copy of a paid answer to report a defect in our own validator (D-045).
+      log.push({ n, outcome: "failed", candidate, findings: [], error: `validator failed: ${e instanceof Error ? e.message : String(e)}` });
       break;
     }
     // Provenance, not a defect: a soft finding never holds the packet, and it says how this answer was reached.
@@ -279,12 +298,16 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     if (!(outcome === "invalid" || (outcome === "needs_review" && findings.some(actionable)))) break;
   }
 
-  // The packet is the last attempt. A resume exists whenever that attempt parsed, whatever the validator said about it:
-  // blocking consumption is the status's job, not the absence of the document (D-038). A failed attempt parsed nothing and has none.
+  // The packet is the last attempt that produced a document. A resume exists whenever that attempt parsed, whatever the
+  // validator said about it: blocking consumption is the status's job, not the absence of the document (D-038). An
+  // attempt that produced nothing is not the packet, because taking it as the packet deletes what the attempt before
+  // it produced, which is the same deletion D-038 removed from the rejection path (D-045).
   const last = log[log.length - 1];
   const before = log[log.length - 2];
   // A retry of a held answer that came back rejected or failed does not replace it: the held answer was validated.
-  const final = before?.outcome === "needs_review" && (last.outcome === "invalid" || last.outcome === "failed") ? before : last;
+  const heldFirst = before?.outcome === "needs_review" && (last.outcome === "invalid" || last.outcome === "failed") ? before : null;
+  const lastWithDocument = [...log].reverse().find((a) => a.candidate) ?? null;
+  const final = heldFirst ?? (last.candidate ? last : (lastWithDocument ?? last));
   const status = final.outcome;
   const resume = final.candidate ? final.candidate.applied.resume : null;
   const error = last.error ? storedError(log) : undefined;
@@ -307,6 +330,10 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     usd: Number(totals.usd.toFixed(8)),
   };
   if (store) {
+    // The stored document and the row's own labels move together: a run with no document of its own keeps the one
+    // already on the row only when that row was built from the same facts and the same posting, so nothing is
+    // relabelled as belonging to inputs it did not come from (D-045).
+    const sameInputs = sql`${packets.factsHash} = ${facts.factsHash} and ${packets.contentHash} = ${contentHash}`;
     await db
       .insert(packets)
       .values({
@@ -341,7 +368,13 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           model,
           run: opts.run ?? null,
           attempts: outcome.attempts,
-          resume,
+          // A run that produced no document at all does not overwrite one that a previous run built from the same
+          // facts and the same posting: the row's own labels already describe that document, so keeping it relabels
+          // nothing. When either input has moved, the stored document belonged to a different question and goes
+          // (D-045). This is the whole of the regeneration case; with the retained attempt rule above, a run reaches
+          // here with no document only when not one of its attempts parsed.
+          resume: resume ?? sql`case when ${sameInputs} then ${packets.resume} else null end`,
+          resumeHash: resume ? resumeHash(resume) : sql`case when ${sameInputs} then ${packets.resumeHash} else null end`,
           changes,
           findings: final.findings,
           changeSet: final.candidate?.cs ?? null,
@@ -349,7 +382,6 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           validatorRev: VALIDATOR_REVISION,
           factsHash: facts.factsHash,
           contentHash,
-          resumeHash: resume ? resumeHash(resume) : null,
           tokensIn: totals.tokensIn,
           tokensCached: totals.tokensCached,
           tokensOut: totals.tokensOut,

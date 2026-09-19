@@ -211,7 +211,11 @@ about the next one.
 
 **Measured: nothing moves.** Stored packets read the same, 83 ready, 22 held, 2 invalid. No live
 fact or line contains an ambiguous comma at all, let alone one the rewrite consumes.
-`VALIDATOR_REVISION` is `2026-09-19.r11`.
+`VALIDATOR_REVISION` is `2026-09-19.r11`. **The r11 restamp was applied from merged code, from
+`main` at 3783c49, the commit that merged this change, and not from the branch** (D-032). D-054
+reports the table it produced and that it changed zero statuses; this sentence is the provenance
+that goes with it, because a restamp whose origin is not written down is one nobody can explain
+later.
 
 ### D-052. The four unplaced lines get their own category, because a comment does not outrank an assertion
 
@@ -512,7 +516,36 @@ documentation only and no prompt carries it, which is why it survived a round of
     it a different sample, **and the probe must not be reused unchanged for the new experiment**,
     since a run measuring today's configuration has to select attempts the way today's code does.
     Two tools, not one tool with a flag.
-23. **The rest of the current state inconsistencies**, the eighth review's finding 9 less the
+23. **`reconcile-sample`'s spend section asserts an invariant the run no longer holds.** The
+    same shape as item 22 above and placed beside it for that reason: a measurement tool that
+    encodes a rule the system has stopped following, so it will report a problem about a row
+    that is behaving correctly.
+
+    What it asserts, per packet: that the number of cost rows equals the number of attempts, and
+    that those rows sum to the USD the packet and the saved answer carry. Both assume **one
+    tailoring execution per job**. D-051 made a second execution on the same job a supported
+    event that writes its own cost rows and **deliberately leaves the packet's `attempts` and
+    `usd` at the first run's values**, so both assertions fire and the reconciler reports two
+    problems about a row doing exactly what D-051 designed it to do.
+
+    **One qualifier, from reading the code rather than the description.** `reconcile-sample`
+    filters the snapshot's cost rows to the run it is reconciling, so a second execution under a
+    *different* run tag is excluded and nothing fires. It needs the second execution to carry
+    **the same run tag**, which is what a rerun of the same sample is, and what the product path
+    is when both executions are untagged. The snapshot is the half with no run filter: it freezes
+    every cost row there is.
+
+    **The mismatch predates D-051** and would have fired on any rerun under the same tag, because
+    the cost rows accumulated while the packet's attempts did not. What D-051 changed is that a
+    second execution is now **normal rather than destructive**, so the behaviour is right and the
+    checker is the thing out of date. Do not fix this by making a rerun overwrite the artifact
+    again.
+
+    **The trigger is explicit: this is due before the first paid run, not after it.** Nothing is
+    in that state today and the frozen sample predates D-051, so nothing is wrong now. It becomes
+    wrong on the first paid run where a regeneration fails, in the tool that run would be judged
+    with, which is the worst moment to discover it.
+24. **The rest of the current state inconsistencies**, the eighth review's finding 9 less the
     revision label, which is fixed rather than placed (D-054).
 
 **The first phase 1 item is still the pre rank.** Nothing here changes that.

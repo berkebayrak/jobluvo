@@ -132,6 +132,55 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-057. The tailor CLI reads a packet by job alone, and labels a preserved artifact with the execution that did not produce it
+
+The ninth review's findings 4 and 5, both confirmed by the user against the code. One is a
+scoping defect that only bites with a second user, the other is a wrong sentence printed today.
+
+**Finding 4. The query filters on the job and not on the user.** `packets` is unique per user and
+job, and `scripts/tailor.ts` selected on `jobId` alone. With one user that is the right row by
+accident. With a second user it is any user's row, and since the render reads the row rather than
+this execution's output, it would print **another person's findings and render their resume under
+this user's name**. Scoped to user and job, and an absent row is now said rather than dereferenced:
+the old code read `p.resume` off an undefined row and would have thrown.
+
+**Finding 5. Three wrong things printed about one row, and they share a cause.** The script printed
+this execution's findings, then the stored document, and said "the resume is stored with the
+findings above". After a preserved packet the findings above are the failed execution's and the
+stored ones are what explain the hold. The output is now in two parts under two headings, the
+execution and the stored artifact, each with its own findings, because they are two different
+things and D-051 made them differ on purpose.
+
+**The signal that a preservation happened, which is the part that needed code.** The script read it
+from `out.status !== p.status`. That is not a signal. Two executions can share a status, and here is
+the case where they always do: **a preserving execution is always `failed`**, because preserving
+requires that it produced no document, so any row that is itself `failed` makes the comparison
+silent. A `failed` row with a document is not a contrivance either: the answer parsed, the validator
+threw on it, and D-045 keeps it (D-050).
+
+So `tailorJob` now reports what it wrote, where that is known rather than inferred:
+
+| `storedAs` | What happened |
+|---|---|
+| `artifact` | it produced a document and owns every artifact column |
+| `execution` | it produced none, a row with the same inputs kept its artifact, and only `error` and `updated_at` moved |
+| `none` | nothing was written, because `store` was false |
+
+**Every non consumable document was called "held for review".** `needs_review`, `invalid` and
+`failed` are three different things and the sentence was true of one of them. Each now says what it
+is: held until a person resolves the findings (D-017), rejected with the document kept because a
+rejection blocks a document rather than deleting it (D-038), or a row whose execution failed after
+its answer parsed, so nothing has ever assessed what it holds (D-045, D-050).
+
+**Tested where the behaviour is**, in `run.test.ts` rather than around the script: both branches of
+`storedAs` on the existing preservation test, and a new test that builds the trap deliberately, two
+executions and a row all ending `failed`, and asserts that the old signal is silent on it and the
+new one is not.
+
+**Not exercised end to end.** The script itself is not run here, because running it makes a paid
+model call and none has been authorised. What is checked is the typecheck, the lint and the tests
+behind it. That is stated rather than left to look like coverage it does not have.
+
 ### D-056. A finding this module derives is derived again, never retained, and the test that was said to establish idempotence did not
 
 The ninth review's finding 6, confirmed by the user by reading the code. **The ordering fix of D-049

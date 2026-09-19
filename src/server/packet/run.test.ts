@@ -675,7 +675,9 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
           ["R1"],
         ),
       );
-      await tailorJob(tx, facts, job, { run: "first", model: "gpt-5.6-first" });
+      const firstRun = await tailorJob(tx, facts, job, { run: "first", model: "gpt-5.6-first" });
+      // This execution produced a document, so it owns every artifact column on the row.
+      expect(firstRun.storedAs).toBe("artifact");
       const [kept] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(kept.status).toBe("needs_review");
       expect(kept.changes.length).toBeGreaterThan(0);
@@ -688,8 +690,9 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
       const out = await tailorJob(tx, facts, job, { run: "second", model: "gpt-5.6-second" });
       expect(out.status).toBe("failed");
-      // The outcome describes THIS execution and says so: it produced nothing.
+      // The outcome describes THIS execution and says so: it produced nothing, and it says what it wrote.
       expect(out.resume).toBeNull();
+      expect(out.storedAs).toBe("execution");
 
       const [after] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       // Everything that describes the artifact is kept with it. D-045 kept the document and let the rest be
@@ -714,6 +717,44 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       // And the kept packet is still exactly as consumable as it was, which for a held packet is not at all.
       expect(consumableResume(after)).toBeNull();
       expect(consumableResume({ ...after, status: "ready" })).toEqual(kept.resume);
+    });
+  });
+
+  it("says a preserved artifact was preserved even when the two executions share a status", async () => {
+    /*
+     * The ninth review's finding 5, the half that is not about the CLI's wording. The only signal a caller had
+     * that a preservation happened was comparing this execution's status with the row's, and two executions can
+     * share one. Here both end `failed` and so does the row, so that comparison says nothing at all while the
+     * document on the row belongs to the run before.
+     *
+     * A `failed` row with a document is not a contrivance: the answer parsed, the validator threw on it, and
+     * D-045 keeps it (D-050). And a preserving execution is always `failed`, because preserving requires that it
+     * produced no document, so the trap is every case where the row it preserves is `failed` too.
+     */
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      // Run one: the answer parses and the validator throws on it. The document is kept and the row is failed.
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      vi.mocked(validate.validateChangeSet).mockImplementationOnce(() => {
+        throw new TypeError("n.toFixed is not a function");
+      });
+      const first = await tailorJob(tx, facts, job, { run: "first" });
+      expect(first.status).toBe("failed");
+      expect(first.storedAs).toBe("artifact");
+      const [kept] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(kept.status).toBe("failed");
+      expect(kept.resume).not.toBeNull();
+
+      // Run two: nothing parses, so it produces no document and the row keeps run one's artifact.
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      const second = await tailorJob(tx, facts, job, { run: "second" });
+      const [after] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
+      expect(after.resume).toEqual(kept.resume);
+      expect(after.run).toBe("first");
+
+      // The old signal is silent on exactly this case, and the new one is not.
+      expect(second.status).toBe(after.status);
+      expect(second.storedAs).toBe("execution");
     });
   });
 

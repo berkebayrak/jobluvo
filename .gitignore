@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# worktrees created by the desktop app for a session, never committed
+/.claude/worktrees/

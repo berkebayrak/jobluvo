@@ -132,6 +132,102 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-065. The span is carried, not recovered, and phase 1 item 20 is closed
+
+The user's instruction after the tenth review, and its diagnosis is the entry: **the code threw away
+information it already had and then tried to recover it by pattern matching.** Three recoveries, three
+defects. This replaces the third rather than narrowing it, and **D-063 and the pull request that
+carried it are withdrawn.**
+
+**The two places the information was thrown away, verified against the code before anything was built.**
+
+1. `flush()` branches on `bad`, and in that branch does `out.push(phrase.join(" "))`. The index is
+   `out.length` at the moment of the push, and it was not recorded.
+2. Comma phrases are captured by `matchAll` before any rewrite runs, and the capture is followed by
+   `.map((m) => m[0])`, which discards `m.index`. The four `replace` passes and the tokeniser then
+   move or consume the characters, and the old code went looking for them afterwards.
+
+Both hold. Nothing here is a workaround for a half that did not.
+
+**What replaces them.** Each writer records the index it writes to, at the moment it writes. A comma
+phrase is lifted out of the text where its position is still known and a placeholder left in its
+place: lower case letters, so the tokeniser keeps it whole; no digit, hyphen or suffix letter, so no
+pass between can touch it; wrapped in a character the tokeniser treats as a separator, so it arrives
+as an element of its own rather than glued to the word beside it, which "usd9,2million" would
+otherwise do. The prefix grows until it appears nowhere in the text, and the guard character is
+stripped from the input first, so nothing in a resume can collide with either. The phrase goes back
+in when the output is built.
+
+**One walk then turns indices into offsets**, accumulating the lengths it emits and collapsing
+whitespace as it goes, because the old `.replace(/\s+/g, " ").trim()` over the joined string would
+have moved every offset the walk had just worked out.
+
+**The acceptance conditions, each one checked.**
+
+| Condition | How it is met |
+|---|---|
+| no matching on leading digits anywhere in span construction | there is no regex in the span construction at all |
+| a span at the occurrence the phrase produced, and at no other | the index is the one the writer used |
+| no fragment of an unreadable phrase reaches `claimsOf` | every phrase has a span, so every fragment is inside one |
+| the readable year released and `money:usd:9` not admitted | both, in the table below |
+| the invariant true by construction, not asserted | the type's comment says how the construction makes it true, and the paragraphs naming which failure mode was live are gone, because none is |
+
+**What it releases and withholds**, measured against the state before any of this round's item 2 work:
+
+| Input | Before | Now |
+|---|---|---|
+| "Ambiguous 2023,4; In 2023,we launched." | nothing read | `year:2023` |
+| "In 2023,we launched. Ambiguous 2023,4 teams." | nothing read | `year:2023` |
+| "We launched in 2023, and the figure was 2023,4" | nothing read | `year:2023` |
+| "Raised USD 9,2 hundred hundred. Cut 9,then held it." | nothing read | `num:9` |
+| "Ran 2023,4 and 2023,5 programmes." | withheld | withheld |
+| "Ran 2023,4 twice: 2023,4 again." | withheld | withheld |
+| "2023,4 was the year we launched in 2023." | `year:2023` | `year:2023` |
+| "Raised USD 9,2 hundred hundred" | withheld | withheld |
+| "Raised USD 9,2 million in Series B" | withheld | withheld |
+| "a study of 2,000 customers…", "Managed 4, 5 and 6 teams", "In 2023,we launched…" | read | read |
+
+**Four readable values released and no fragment admitted anywhere.** `money:usd:9`, which the
+withdrawn D-063 released and wrote a trade table about, is not admitted: the phrase that produces it
+now has a span, so the fragment is inside it. **There is no trade in this version and no third rule.**
+
+**The invariant as a count, over a corpus built to break it.** Every phrase reported has one span,
+every span covers a phrase reported, the lists are the same length. 31 inputs chosen so that each
+earlier version fails something in the list: D-053's pattern produces spans with no phrase on the
+prose inputs, D-055's produces two spans for one phrase on the shared head inputs, D-063's produces
+none at all for "9,2 hundred hundred. Cut 9,then". Asserted in `validate.test.ts`.
+
+**Also run over the real population, read only:** 309 chunks of every stored profile fact, **0
+carrying an unreadable phrase and 0 mismatches**, which confirms from the other side what the report
+already showed, that no stored row can move.
+
+**One behaviour change worth naming.** The output text now carries an unreadable comma phrase as it
+was written, "9,2 million", where it used to carry the rewritten wreckage, "9,2000000". That is the
+same wording `unreadable` already reported, so the two agree for the first time. The only consumer
+that sees it besides `claimsOf`, which skips the span, is `lemmasOf` in `entities.ts`, which gains
+"million" as a token where it had "2000000". No test moved and nothing on the profile is affected.
+
+**The report is identical on this branch and its parent**: 81 ready, 24 held, 0 invalid, 2 not
+promoted. **The stored state remains 83 ready, 22 held and 2 invalid, 105 rows at `2026-09-19.r11`
+and 2 at `2026-09-18.r6`**, and the 81 and 24 are what a restamp would write.
+
+## Phase 1 item 20 is closed
+
+Asked plainly and answered plainly. Item 20 was "carry the unreadable span through the rewrite
+instead of rediscovering it", and that is what this does.
+
+**There are exactly two producers of a reported phrase**, the `commas` capture and `flush`'s `bad`
+branch, and `unreadable` is `[...commas, ...unreadable]` with nothing else able to add to it. Both
+now record their own position. There is no third class to carry and no pass left that can move a span
+it does not know about, because no span is ever looked for.
+
+The pass direction D-063 opened, a phrase reported and never located leaving its fragments in the
+evidence, closes with it: a phrase that is never located cannot occur, since the location is recorded
+rather than found.
+
+**Nothing is kept open out of caution.** If a case is found later it will be a case, with an input,
+and it will get its own entry.
+
 ### D-064. The restamp counts recomputed from the database, and the sentence that mixed three ledgers
 
 The tenth review's item 3, and the instruction with it: do not adjust the sentence to fit, recompute.
@@ -201,7 +297,17 @@ place.
 invalid, 105 rows at `2026-09-19.r11` and 2 at `2026-09-18.r6`.** The 81 ready and 24 held that the
 report prints are **what a restamp would write**, not what is there.
 
-### D-063. Suppression is tied to the occurrence, not to leading digits, and what that releases in the pass direction is stated rather than masked
+### D-063. Withdrawn. Suppression tied to the occurrence, superseded by D-065 before it shipped
+
+**Withdrawn 19 September 2026 and never merged.** It narrowed the search to the occurrence and
+refused to guess between two that looked alike, which fixed the reject direction and left a phrase it
+could not locate unmarked, so the fragments of that phrase reached the claims as evidence nobody
+wrote. The trade table below argued for accepting that. **The user's answer was that there should be
+no trade**, because the position was available all along and was being thrown away; D-065 carries it
+instead and releases the readable values without admitting any fragment. The entry is kept whole
+because the reasoning it accepted is the mistake worth finding later.
+
+### D-063, as written (withdrawn)
 
 The tenth review's item 2, verified by the user against the code. **D-055's own fix, corrected on the
 same axis it was written to correct**: a pattern written for one case matching a class.
@@ -1164,24 +1270,14 @@ documentation only and no prompt carries it, which is why it survived a round of
     unresolved judgements and the success rule all frozen before generation.
 19. **Verifiable durable provenance for a repaired row**, from part 1 above, beside the
     reconstruction items. Needed before any repair touches a real user's row.
-20. **Carry the unreadable span through the rewrite instead of rediscovering it.** From D-053, and
-    **the pass direction added 19 September 2026 by D-063.** The spans are found by searching the
-    rewritten text, and every pass in `readNumbers` can move or consume the characters they covered.
-    Two holes are closed and tested; the class is open, and closing it means carrying offsets through
-    the separator strip, the hyphen rules, the suffix expansion and the tokeniser.
-
-    **Both directions are now known and they are not equally protected.** A phrase located too
-    widely suppresses a readable value, and that direction is covered: the text reports an unreadable
-    phrase, D-040 demotes, and the line is held. A phrase **not located at all** leaves its fragments
-    in the evidence, and **that direction is not covered by anything**, because D-040 softens an
-    unmatched value and a fragment admitted as evidence is a matched one, which produces no finding.
-    D-063 reproduces the chain: a fact reading "Raised USD 9,2 hundred hundred. Cut 9,then held it."
-    contributes `money:usd:9`, and the line "Raised USD 9." then passes silently.
-
-    **The trigger, which this item did not have before.** It is unreachable on the stored population
-    today, since no stored profile fact carries a comma of this shape, and it becomes reachable the
-    day a real user uploads a resume written with decimal commas, which is most of Europe. **Due
-    before the first upload from a locale that writes numbers that way**, not before the paid run.
+20. ~~**Carry the unreadable span through the rewrite instead of rediscovering it.**~~ **Closed 19
+    September 2026 by D-065**, which carries the position instead of recovering it: a comma phrase is
+    lifted out before any rewrite runs and a placeholder left in its place, and `flush` records the
+    index it writes a word number phrase to. There are exactly two producers of a reported phrase and
+    both record their own position, so there is no third class to carry and nothing left to
+    rediscover. The pass direction opened by the withdrawn D-063, a phrase reported and never located
+    leaving its fragments in the evidence, closes with it: a phrase that is never located cannot
+    occur. Kept here struck through rather than deleted, because three entries above refer to it.
 21. **The packet write under a second writer.** The ownership work already deferred, now three
     findings rather than one. All three need one user with concurrent or repeated runs to bite, and
     there is one user and no concurrency, which is why they wait rather than being forgotten.

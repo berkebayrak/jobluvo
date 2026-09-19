@@ -36,36 +36,34 @@
  * sits, and `claimsOf` emits nothing that overlaps one. Numbers elsewhere in
  * the same text are untouched: one bad span does not silence a fact (D-046).
  *
- * The eighth review, finding 5, and the limit is worth knowing before trusting
- * this. **The spans are rediscovered from the rewritten text, not carried
- * through the rewrite.** Every pass below can move or consume the characters a
- * span covered, so finding it again afterwards is a second heuristic on top of
- * the first. One case where that failed is closed here and tested, and the
- * class is not closed: carrying offsets through the separator strip, the
- * hyphen rules, the suffix expansion and the tokeniser is a rewrite of this
- * function rather than a patch, and it is placed in phase 1 (D-053).
+ * **How a span is known, which is the subject of reviews eight, nine and ten
+ * and is settled here (D-065).** The position is carried, not recovered. A
+ * comma phrase is lifted out of the text below while its position is still
+ * known and a placeholder left in its place; a word number the grammar could
+ * not read is recorded by `flush` at the index it writes to. One walk at the
+ * end turns those indices into offsets. **Nothing searches the output.**
  *
- * The ninth review, finding 1, and it is this file's own patch being corrected.
- * D-053 was justified as a focused regression rather than a wider grammar,
- * which was the right call, **and it then widened suppression instead**: it
- * matched a digit, a comma and any non space in the output, a shape far larger
- * than the one case it was written for, and suppressed every value inside it
- * without reporting a phrase. The test covered the input the review supplied
- * and not the class the pattern matches, so "in 2023,we launched" lost its year
- * in silence. The invariant that would have caught it is now stated and held
- * below: a numeric span is either interpreted and checked, or reported as
- * uninterpretable, and it never disappears quietly (D-055).
+ * That is worth stating as history rather than as a rule, because three
+ * versions of this file tried to recover the position afterwards and each one
+ * was a pattern that was right about its example and wrong about the class it
+ * matched:
  *
- * The tenth review, item 2, and it is the same axis a third time. D-055 stated
- * that invariant and then located each span by the phrase's **leading digits**,
- * so a readable number sharing a head with an ambiguous one was suppressed with
- * it: "Ambiguous 2023,4; In 2023,we launched" lost the second year. The
- * invariant was true of the head and false of the occurrence. Suppression is
- * tied to the occurrence now, and where an occurrence cannot be told from
- * another, **nothing is suppressed rather than a readable number being taken
- * with the unreadable one**. What that costs in the other direction is real and
- * is written down in D-063 and in phase 1 item 20, which now carries both
- * directions and a trigger.
+ * - D-053 matched a digit, a comma and any non space, to find the wreckage an
+ *   ambiguous comma leaves. It matched every comma in prose that was missing
+ *   its space, suppressed the value and reported no phrase, so "in 2023,we
+ *   launched" lost its year in silence and a later truthful line stating that
+ *   year was rejected as a fabrication (the ninth review's finding 1, D-055).
+ * - D-055 replaced it with a search by the phrase's leading digits. That
+ *   suppressed every occurrence sharing those digits, so the readable year in
+ *   "Ambiguous 2023,4; In 2023,we launched" went with the ambiguous run (the
+ *   tenth review's item 2, D-063).
+ * - D-063 narrowed the search to the occurrence and refused to guess between
+ *   two that looked alike. That left a phrase it could not locate unmarked, so
+ *   its fragments reached the claims as evidence nobody wrote.
+ *
+ * Each fix was smaller than the last and each introduced its own defect,
+ * because the information they were all reconstructing had been thrown away a
+ * few lines earlier. It is kept now.
  */
 
 const UNITS = new Map<string, number>([
@@ -94,25 +92,25 @@ export interface NumberReading {
    * filters on.
    *
    * **Every range here is produced by a phrase in `unreadable`, at the
-   * occurrence that phrase produced**, and that is the invariant rather than an
-   * incidental property (D-055, D-063). Both halves are load bearing and each
-   * has failed once.
+   * occurrence that phrase produced, and every such phrase has one. This is
+   * true by construction and not by assertion**, which is the difference
+   * between this version and the three before it (D-065).
    *
-   * A range with **no phrase** behind it is the worst case: the value is
-   * suppressed, so nothing on the profile can support a later line that states
-   * it, and the text still reads as fully readable, so D-040's guard sees no
-   * reason to hold and `value-unknown` rejects. A truthful line then loses its
-   * packet over a missing space after a comma (D-055).
+   * There are exactly two places a phrase enters the output, and each records
+   * the index it is writing to at the moment it writes:
    *
-   * A range at **another occurrence** of the same leading digits suppresses a
-   * readable number, and that one is held rather than rejected, because the
-   * text does report a phrase and D-040 demotes. Milder, still a truthful line
-   * made unavailable (D-063).
+   * - a word number the grammar could not read is pushed by `flush`, which adds
+   *   the index it used to `marked` in the same breath;
+   * - a comma phrase is lifted out of the text before any rewrite runs, while
+   *   its position is still known, and a placeholder stands in its place. The
+   *   placeholder cannot be touched by the passes between, arrives in the token
+   *   loop as an element of its own, and is swapped back for the phrase, again
+   *   recording the index.
    *
-   * What is **not** covered by either: a phrase reported and never located
-   * leaves its fragments in the claims, and D-040 does not help there, because
-   * it softens an unmatched value and a fragment admitted as evidence is a
-   * matched one. Phase 1 item 20.
+   * A single walk then turns those indices into character offsets by
+   * accumulating the lengths it emits. Nothing searches the output for anything,
+   * so there is no pattern here to be right about one case and wrong about a
+   * class, which is how the three earlier versions failed.
    */
   unreadableSpans: [number, number][];
 }
@@ -129,9 +127,20 @@ export function normaliseNumbers(text: string): string {
 
 type Last = "unit" | "tens" | "hundred" | "scale" | "and";
 
+/**
+ * The character a phrase taken out of the text is wrapped in. The tokeniser
+ * splits on it, so the placeholder between two of them is always an element of
+ * its own. Stripped from the input first, so nothing in a resume can be
+ * mistaken for one.
+ */
+const GUARD = "\u0001";
+
+/** A number as letters, bijective base 26, so each placeholder is distinct and carries no digit. */
+const letters = (n: number): string => (n < 26 ? String.fromCharCode(97 + n) : letters(Math.floor(n / 26) - 1) + String.fromCharCode(97 + (n % 26)));
+
 /** `normaliseNumbers` with the phrases it could not read. */
 export function readNumbers(text: string): NumberReading {
-  let t = text.toLowerCase().replace(/[–—]/g, " ");
+  let t = text.toLowerCase().replace(/[–—]/g, " ").split(GUARD).join(" ");
   // Thousands separators, however many groups: a comma between digits goes when only whole groups of three follow it, "1,234,567,890,123" and never "1,2345".
   t = t.replace(/(?<=\d),(?=\d{3}(?:,\d{3})*(?!\d))/g, "");
   // Whatever commas are left between digits were not separators. The scale word after one is taken with it, so the
@@ -139,7 +148,29 @@ export function readNumbers(text: string): NumberReading {
   // Longest scale word first, so the phrase is reported as it was written: "9,2 million", not "9,2 m". This is the
   // wording a person reads; where it lands in the output is worked out at the end, because the pipeline below
   // rewrites the text around it.
-  const commas = [...t.matchAll(/\d+(?:,\d+)+(?:\s?(?:million|billion|thousand|mn|bn|k|m|b))?/g)].map((m) => m[0]);
+  const found = [...t.matchAll(/\d+(?:,\d+)+(?:\s?(?:million|billion|thousand|mn|bn|k|m|b))?/g)];
+  const commas = found.map((m) => m[0]);
+  /*
+   * Each phrase is taken out of the text here, where its position is known, and a placeholder put in its place.
+   * Nothing below ever looks for it again.
+   *
+   * The placeholder is lower case letters, so the tokeniser keeps it whole, and it carries no digit, no hyphen
+   * and no suffix letter, so none of the passes between here and the loop can touch it. It is wrapped in a
+   * character the tokeniser treats as a separator, which is what guarantees it arrives in `out` as an element of
+   * its own rather than glued to the word beside it: "usd9,2million" would otherwise leave "usdPLACEHOLDER".
+   * The prefix is grown until it appears nowhere in the text, so a resume that happens to contain it cannot
+   * collide with it.
+   */
+  let mark = "qzx";
+  while (t.includes(mark)) mark += "q";
+  const placeholders = new Map<string, string>();
+  // Backwards, so an earlier phrase's index is still valid when a later one has been replaced.
+  for (let i = found.length - 1; i >= 0; i -= 1) {
+    const m = found[i];
+    const token = `${mark}${letters(i)}`;
+    placeholders.set(token, m[0]);
+    t = `${t.slice(0, m.index!)}${GUARD}${token}${GUARD}${t.slice(m.index! + m[0].length)}`;
+  }
   // A hyphen before a digit that follows nothing alphanumeric is a sign, "-11 percent", and stays. Every other hyphen carries no value:
   // "3-year", "three-year", "two-thirds", "2019-2023" all open up. The one in a YYYY-MM date stays.
   t = t.replace(/(^|[^a-z0-9)])-(?=\d)/g, "$1\u2212");
@@ -152,6 +183,14 @@ export function readNumbers(text: string): NumberReading {
   const words = t.split(/(\s+|[^a-z0-9.%$€£-])/);
   const out: string[] = [];
   const unreadable: string[] = [];
+  /**
+   * Which elements of `out` are an unreadable phrase, by their index in `out`.
+   *
+   * This is the whole of how a span is known. Both writers below record the
+   * index they are writing to, at the moment they write it, so the offsets are
+   * carried through the rest of the function rather than looked for afterwards.
+   */
+  const marked = new Set<number>();
 
   // The number being read: `group` is the part under the last scale word, `total` the scaled parts before it.
   let group: number | null = null;
@@ -172,6 +211,8 @@ export function readNumbers(text: string): NumberReading {
     if (open()) {
       if (bad) {
         unreadable.push(phrase.join(" "));
+        // Writer one. The index is recorded here, where it is known, and never searched for again.
+        marked.add(out.length);
         out.push(phrase.join(" "));
       } else out.push(fmt((total ?? 0) + (group ?? 0)));
       if (pendingAnd) out.push(" and");
@@ -194,6 +235,18 @@ export function readNumbers(text: string): NumberReading {
 
   for (const w of words) {
     if (w === "") continue;
+    // The guard characters are scaffolding and never reach the output. They need no flush of their own: the
+    // placeholder they wrap does one, so a number open before them is closed in the right order.
+    if (w === GUARD) continue;
+    const held = placeholders.get(w);
+    if (held !== undefined) {
+      // Writer two. The phrase goes back in as it was written, at the position it was taken from, and the index
+      // is recorded exactly as writer one records its own. Nothing in the loop reads it as a number.
+      flush();
+      marked.add(out.length);
+      out.push(held);
+      continue;
+    }
     if (/^\s+$/.test(w)) {
       if (!open()) out.push(w);
       else pendingSpace = true;
@@ -263,64 +316,39 @@ export function readNumbers(text: string): NumberReading {
   }
   if (pendingAnd) phrase.pop();
   flush();
-  const output = out.join("").replace(/\s+/g, " ").trim();
   /*
-   * Where each unreadable phrase sits in the text that comes out, so a caller can refuse to read values out of it.
+   * The output string and the spans, built in one walk over `out`.
    *
-   * Each span is located FROM a phrase this function reports, never by looking the other way round for wreckage
-   * shapes in the output. That direction is the whole of the invariant: a span that no reported phrase produced
-   * suppresses a value and tells nobody, which is what D-053's pattern did to every "2023,we" in the corpus.
+   * Nothing is searched for here. Both writers above recorded the index in `out` they wrote an unreadable phrase
+   * to, so this walk only has to turn those indices into character offsets, which it does by accumulating the
+   * lengths it emits. The whitespace normalisation happens in the walk rather than as a `replace` over the joined
+   * string, because a `replace` afterwards would move every offset this walk just worked out.
    *
-   * A word number phrase survives the pipeline as its own words, so it is found by searching for it. A comma
-   * phrase does not survive as it was written: the scale word after it is expanded, "9,2 million" leaving
-   * "9,2000000", and the word machinery can take the digits after the comma outright, "9,2 hundred hundred"
-   * leaving "9,". Both are found from the digits before the phrase's own first comma, and the span runs to the
-   * end of the digits and commas that follow. "4, 5 and 6" is punctuation between three numbers, is no phrase,
-   * and keeps all three.
-   *
-   * The residual, stated rather than implied. A comma phrase whose leading digits the pipeline also rewrote is
-   * reported and not located, so its fragments are read. That is safe in the direction that matters, since the
-   * phrase is on the list and D-040 then holds rather than rejects, and it is the same rediscovery hole as
-   * before: the fix is carrying offsets through the rewrite, phase 1 item 20 (D-053, D-055).
+   * A run of whitespace is held rather than emitted, and a single space is emitted before the next piece of text
+   * instead. That collapses runs and drops the leading and trailing space in one rule, which is what the old
+   * `.replace(/\s+/g, " ").trim()` did, and it keeps the offsets describing the string that is actually returned.
    */
+  let output = "";
+  let gap = false;
   const spans: [number, number][] = [];
-  for (const phrase of unreadable) {
-    for (let i = output.indexOf(phrase); i >= 0; i = output.indexOf(phrase, i + phrase.length)) spans.push([i, i + phrase.length]);
-  }
-  /*
-   * A comma phrase is located by its occurrence, not by its leading digits (the tenth review's item 2).
-   *
-   * The first version of this matched `head,[\d,]*` and suppressed every hit, so in
-   * "Ambiguous 2023,4; In 2023,we launched" it suppressed the readable year in the second clause for sharing a
-   * head with the ambiguous run in the first. The invariant on the type was true of the head digits and false of
-   * the occurrence, which is the same mistake D-053 made in a different place: a pattern written for one case
-   * matching a class.
-   *
-   * Two steps, and neither of them guesses:
-   *
-   * 1. **A surviving run, `head,` followed by digits.** A digit, a comma and a digit in the output is the
-   *    signature of a comma the thousands strip refused, and every one of those is in `commas`. "9,2 million"
-   *    leaves "9,2000000"; "2023,4" leaves "2023,4". Suppressed.
-   * 2. **The wreckage, a bare `head,`, only when it is the one such occurrence in the output.** This is the case
-   *    D-053 was written for: in "9,2 hundred hundred" the word machinery takes the 2 and leaves "9,". One
-   *    occurrence and one phrase is not a guess about which is which. Two occurrences is, so nothing is
-   *    suppressed rather than a readable number being taken with the unreadable one.
-   *
-   * What step 2's guard costs is real and is not hidden: a phrase this cannot locate is reported and its
-   * fragments are read, so "usd 9" can enter the claims. That is the residual D-055 already named, reached by
-   * one more path, and it is the pass direction rather than the reject direction. The fix for the class is
-   * carrying offsets through the rewrite, phase 1 item 20, and it stays deferred.
-   */
-  for (const phrase of commas) {
-    const head = /^\d+/.exec(phrase)?.[0];
-    if (!head) continue;
-    const runs = [...output.matchAll(new RegExp(`(?<![\\d,])${head},[\\d,]+`, "g"))];
-    if (runs.length) {
-      for (const m of runs) spans.push([m.index!, m.index! + m[0].length]);
-      continue;
+  for (let i = 0; i < out.length; i += 1) {
+    const piece = out[i];
+    if (piece === GUARD) continue;
+    let from = -1;
+    for (const part of piece.split(/(\s+)/)) {
+      if (!part) continue;
+      if (/^\s+$/.test(part)) {
+        if (output.length) gap = true;
+        continue;
+      }
+      if (gap) {
+        output += " ";
+        gap = false;
+      }
+      if (from < 0) from = output.length;
+      output += part;
     }
-    const wreckage = [...output.matchAll(new RegExp(`(?<![\\d,])${head},(?![\\d,])`, "g"))];
-    if (wreckage.length === 1) spans.push([wreckage[0].index!, wreckage[0].index! + wreckage[0][0].length]);
+    if (marked.has(i) && from >= 0) spans.push([from, output.length]);
   }
   return { text: output, unreadable: [...commas, ...unreadable], unreadableSpans: spans };
 }

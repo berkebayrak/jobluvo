@@ -398,23 +398,102 @@ describe("a numeric span is either interpreted and checked, or reported as unint
     expect(found.filter((f) => f.code === "number-unreadable").map((f) => f.value)).toEqual(["2023,4"]);
   });
 
-  it("does not suppress a bare head it cannot tell from another, and the cost of that is a fragment read", () => {
+  it("admits no fragment of an unreadable phrase, even beside a readable number sharing its digits", () => {
     /*
-     * The guard on the wreckage fallback, and what it costs, asserted rather than described. D-053's case has one
-     * bare `9,` in the output and is suppressed. Put a second bare `9,` in the same text and nothing can say which
-     * is the wreckage, so neither is suppressed: the readable 9 is read, which is right, and the fragment "usd 9"
-     * is read too, which is not.
-     *
-     * That is the pass direction, and D-040 does not cover it: the demotion softens an UNMATCHED value, and a
-     * matched one produces no finding at all. Placed, not fixed, because the fix is offsets through the rewrite.
+     * Both directions at once, and this is the input the two earlier rules each got half right. D-053's wreckage
+     * rule suppressed both nines, losing the readable one; #114's occurrence rule suppressed neither, admitting
+     * the fragment. Carrying the position gives the only answer that is right about both: the phrase is
+     * suppressed where it stands and the readable 9 beside it is read.
      */
     expect(claimsOf("Raised USD 9,2 hundred hundred").map((c) => c.key)).toEqual([]);
-    expect(claimsOf("Raised USD 9,2 hundred hundred. Cut 9,then held it.").map((c) => c.key)).toEqual(["money:usd:9", "num:9"]);
-    // The chain that follows from it, stated as a test so nobody has to take the paragraph's word for it.
-    const unlocated = factSet([entry("R1.1", "Raised USD 9,2 hundred hundred. Cut 9,then held it.")]);
-    expect(checkLine("Raised USD 9.", "R1.1", ["R1.1"], unlocated)).toEqual([]);
-    const located = factSet([entry("R1.1", "Raised USD 9,2 hundred hundred.")]);
-    expect(checkLine("Raised USD 9.", "R1.1", ["R1.1"], located).map((f) => [f.level, f.code])).toEqual([["review", "value-unknown"]]);
+    expect(claimsOf("Raised USD 9,2 hundred hundred. Cut 9,then held it.").map((c) => c.key)).toEqual(["num:9"]);
+    // The chain, so nobody has to take the paragraph's word for it. The fragment is not evidence, so a line
+    // claiming it is held rather than waved through.
+    const facts = factSet([entry("R1.1", "Raised USD 9,2 hundred hundred. Cut 9,then held it.")]);
+    expect(facts.all.map((c) => c.key)).toEqual(["num:9"]);
+    expect(checkLine("Raised USD 9.", "R1.1", ["R1.1"], facts).map((f) => [f.level, f.code])).toEqual([["review", "value-unknown"]]);
+    // And the readable 9 the same fact does assert is evidence, so a truthful line stating it says nothing.
+    expect(checkLine("Cut 9 programmes.", "R1.1", ["R1.1"], facts).filter((f) => f.code === "value-unknown")).toEqual([]);
+  });
+
+  it("marks the occurrence the phrase produced and no other, wherever in the text it sits", () => {
+    /*
+     * The position cases, which are what a carried offset buys and a search cannot have. Each input is chosen so
+     * that a rule matching on text or on leading digits would mark the wrong place: the phrase at the start, at
+     * the end, twice over, and beside a readable number that shares its digits.
+     */
+    const at = (text: string) => {
+      const r = readNumbers(text);
+      return r.unreadableSpans.map(([a, b]) => r.text.slice(a, b));
+    };
+    expect(at("2023,4 was the year we launched in 2023.")).toEqual(["2023,4"]);
+    expect(at("We launched in 2023, and the figure was 2023,4")).toEqual(["2023,4"]);
+    expect(at("Ran 2023,4 and 2023,5 programmes.")).toEqual(["2023,4", "2023,5"]);
+    expect(at("Ran 2023,4 twice: 2023,4 again.")).toEqual(["2023,4", "2023,4"]);
+    // A word number the grammar could not read, beside a readable one, and beside its own words used readably.
+    expect(at("Grew revenue five thousand two million from a five thousand base")).toEqual(["five thousand two million"]);
+    // Every span covers exactly the phrase, and the phrase is on the reported list. Both halves, over all of them.
+    for (const text of [
+      "2023,4 was the year we launched in 2023.",
+      "We launched in 2023, and the figure was 2023,4",
+      "Ran 2023,4 and 2023,5 programmes.",
+      "Grew revenue five thousand two million from a five thousand base",
+      "Raised USD 9,2 hundred hundred. Cut 9,then held it.",
+    ]) {
+      const r = readNumbers(text);
+      for (const [a, b] of r.unreadableSpans) expect(`${text}: ${r.text.slice(a, b)}`).toBe(`${text}: ${r.unreadable.find((p) => p === r.text.slice(a, b))}`);
+    }
+  });
+
+  it("gives every reported phrase exactly one span, over a corpus built to break it", () => {
+    /*
+     * The invariant stated as a count rather than as a sentence. Every phrase the function reports has one span,
+     * every span covers a phrase it reports, and the two lists are the same length. That is what "true by
+     * construction" means here: there is no pattern to be right about one input and wrong about the next, so a
+     * corpus this varied either passes wholesale or reveals a class.
+     *
+     * The three earlier versions each fail something in this list. D-053's pattern produces spans with no phrase
+     * on the prose inputs, D-055's produces two spans for one phrase on the shared head inputs, and D-063's
+     * produces none for the phrase in "9,2 hundred hundred. Cut 9,then".
+     */
+    const corpus = [
+      "Ambiguous 2023,4; In 2023,we launched.", "In 2023,we launched. Ambiguous 2023,4 teams.",
+      "Ran 2023,4 and 2023,5 programmes.", "Ran 2023,4 twice: 2023,4 again.",
+      "2023,4 was the year we launched in 2023.", "We launched in 2023, and the figure was 2023,4",
+      "Raised USD 9,2 hundred hundred", "Raised USD 9,2 hundred hundred. Cut 9,then held it.",
+      "Raised USD 9,2 million in Series B", "9,2m and 3,4 thousand",
+      "Grew revenue five thousand two million", "Joined in twenty ten and managed 6 analysts",
+      "Grew revenue five thousand two million from a five thousand base",
+      "twenty ten and twenty ten again", "two hundred hundred and three",
+      "a study of 2,000 customers that lifted ARPU 6 percent", "Managed 4, 5 and 6 teams",
+      "USD 150,000 to 175,000", "1,234,567 rows", "In 2023,we launched the pricing review.",
+      "Cut cost by USD 99,then moved on.", "In 2023,three people joined.",
+      "9,2", "9,2 million", "x 9,2", "9,2 x", "", "   ", "2023,4", "five thousand two million",
+      "USD 9,2 million and twenty ten and 3,4 thousand and five thousand two million",
+    ];
+    const mismatched: string[] = [];
+    for (const text of corpus) {
+      const r = readNumbers(text);
+      const covered = r.unreadableSpans.map(([a, b]) => r.text.slice(a, b));
+      if (covered.length !== r.unreadable.length || !covered.every((c) => r.unreadable.includes(c))) {
+        mismatched.push(`${JSON.stringify(text)}: reports ${JSON.stringify(r.unreadable)}, covers ${JSON.stringify(covered)}`);
+      }
+    }
+    expect(mismatched).toEqual([]);
+  });
+
+  it("reads both sides of the same input the same way, fact and generated line", () => {
+    // The profile side and the generated side go through one function, and the assertions say so rather than
+    // leaving it to be assumed. A fact contributes only what it asserts; a line is checked on only what it asserts.
+    const text = "Ambiguous 2023,4; In 2023,we launched.";
+    const facts = factSet([entry("R1.1", text)]);
+    expect(facts.all.map((c) => c.key)).toEqual(["year:2023"]);
+    expect(facts.unreadablePhrases).toEqual(["2023,4"]);
+    // The generated side: the same text as a line asserts the same one value, and is held on the phrase it carries.
+    const clean = factSet([entry("R1.1", "Launched the pricing review in 2023.")]);
+    const found = checkLine(text, "R1.1", ["R1.1"], clean);
+    expect(found.filter((f) => f.code === "value-unknown")).toEqual([]);
+    expect(found.filter((f) => f.code === "number-unreadable").map((f) => f.value)).toEqual(["2023,4"]);
   });
 
   it("still suppresses and still reports the ambiguous comma D-053 was written for", () => {

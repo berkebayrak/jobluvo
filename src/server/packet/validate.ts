@@ -17,8 +17,14 @@ export { normaliseNumbers } from "./normalise";
 export const VALIDATOR_REVISION = "2026-09-19.r12";
 
 /*
- * The guarantee behind "nothing is added that is not on your profile", and
+ * The one check behind "nothing is added that is not on your profile", and
  * only that.
+ *
+ * **Not the guarantee, which is what this said until 19 September 2026**
+ * (D-069, the tenth review's item 9). This file establishes nothing about
+ * whether a tailored resume is truthful, as the paragraphs below say in
+ * detail and as the measured numbers say plainly. Calling it the guarantee
+ * was the strongest sentence in the module contradicting the rest of it.
  *
  * One question is asked of a proposed line: does every value and every name
  * in it appear somewhere in the user's confirmed facts.
@@ -55,8 +61,13 @@ export const VALIDATOR_REVISION = "2026-09-19.r12";
  * subject, whether the level of responsibility rose, whether a denial was
  * reversed, whether the employer was right. All of that is removed. It is
  * stated in the tailoring prompt instead, in the four prohibitions that
- * carry the principle at the top of design/docs/06-Decision-Log.md, and the
- * prompt is now the main line of defence.
+ * carry the principle at the top of design/docs/06-Decision-Log.md.
+ *
+ * **The prompt carries the constraints. Whether the model adheres to them is
+ * unevaluated** (D-069). "The prompt is the main line of defence" is true of
+ * where the constraints live and says nothing about whether they hold, and no
+ * run has ever measured that. It is the only line of defence, which is a
+ * statement about what else exists rather than about how well it works.
  *
  * What that costs is measured and written down rather than implied: 19 of 28
  * known false lines stop being caught, 10 of them plain inventions, because a

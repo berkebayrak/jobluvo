@@ -11,27 +11,42 @@ import { isHard, needsReview, VALIDATOR_REVISION } from "./validate";
  * be stamped with, from every finding the row will carry, and refuses to
  * stamp ready anything that has no validated candidate behind it.
  *
- * Three rules, each one a way the first replay went wrong:
+ * The rules, each one a way an earlier replay went wrong. **Three of them
+ * described behaviour this file has since stopped having, and they are
+ * corrected here rather than left to be read as current** (the ninth
+ * review's item 6).
  *
  * 1. The status is derived from the findings the row will hold, the
  *    replayed bullet findings and the summary findings kept from the
  *    original run together. The summary cannot be replayed (D-016), so
  *    its findings keep their level; a packet held or rejected by its
  *    summary alone stays held or rejected.
- * 2. A failed packet is not replayed. It has no candidate: the model never
- *    answered or the answer did not parse, and its empty change set is the
- *    absence of an answer, not a clean one.
+ * 2. A failed execution that produced nothing is not replayed: the model
+ *    never answered or the answer did not parse, and an empty change set
+ *    is the absence of an answer, not a clean one. **A failed row with a
+ *    candidate is a different thing and is replayed.** The answer parsed
+ *    and the validator threw on it, D-045 kept the document, and skipping
+ *    it meant no restamp could ever reach the answer the validator threw
+ *    on. It is read, validated and held, never promoted (D-050).
  * 3. Ready and needs_review need the candidate: the stored resume must be
  *    the base plus the stored changes, with the summary it carries. A
- *    packet that passes today but has no such resume, an invalid one whose
- *    resume was never stored, cannot be promoted by a rule change; it needs
- *    a new run. The row is left as it is and counted.
+ *    packet that passes today but has no such resume is not stamped ready
+ *    on the strength of passing. **It does not follow that it needs a new
+ *    run.** A row that stores the change set it was built from rebuilds
+ *    its document from base plus that change set, which is deterministic
+ *    and wholly on the row (D-037), and a row that stores neither may be
+ *    offered one from outside and is accepted only where its own stored
+ *    changes reproduce it (D-043). Only a row that can do neither is left
+ *    as it is and counted.
  * 4. A ready or held row whose stored resume is missing or is not that
  *    candidate is revoked: stamped invalid with a hard finding that says
- *    so, its resume dropped, through the same guarded write. Leaving it
- *    was the way the repair failed open (review four, finding 1): the row
- *    stayed ready and consumableResume kept serving a document nothing
- *    could verify.
+ *    so, through the same guarded write. Leaving it was the way the repair
+ *    failed open (review four, finding 1): the row stayed ready and
+ *    consumableResume kept serving a document nothing could verify.
+ *    **The document is kept, not dropped.** Clearing it here is what
+ *    destroyed ten tailored resumes and left the demotion that followed
+ *    with nothing to promote; the status is what stops a document being
+ *    served, and its absence is not (D-038).
  * 6. A row that cannot be revalidated at all is held, not left alone.
  *    Two ways that happens, and the first is how the repair of #56 still
  *    failed open (review five, finding 6). When no profile on hand

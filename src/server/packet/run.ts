@@ -101,6 +101,33 @@ export function consumableResume(p: { status: string; resume: ResumeDocument | n
   return p.status === "ready" ? p.resume : null;
 }
 
+/**
+ * What to say about where the row's artifact came from, in one sentence, or
+ * null when this execution simply wrote its own packet with a document and
+ * there is nothing worth saying.
+ *
+ * **It lives here, beside the enumeration, and is exported so a test asserts
+ * the sentence** (the tenth review's item 1). The wrong string is the user
+ * facing half of that defect: the CLI told a reader that the row kept an
+ * artifact an earlier execution left, on rows where no artifact existed at
+ * all. An enumeration that is right and a sentence that is wrong is the same
+ * defect as before, one layer out.
+ *
+ * `row` is the stored row, which is the only thing that can say whether a
+ * document exists. `storedAs` never answers that and is not asked to.
+ */
+export function describeStorage(out: Pick<TailorOutcome, "storedAs" | "resume">, row: { resume: ResumeDocument | null }): string | null {
+  if (out.storedAs === "none") return "nothing was written to the row: this execution ran with storing off.";
+  if (out.storedAs === "packet") {
+    if (out.resume) return null;
+    return "this execution produced no document and no stored packet matched its inputs, so the row it wrote is this execution's own and holds no document.";
+  }
+  if (row.resume) {
+    return "this execution produced no document, so the row keeps the artifact an earlier execution left and only the error moved (D-051). Everything below describes that earlier artifact, not the execution above.";
+  }
+  return "this execution produced no document, and the row it left alone holds none either, so there was no artifact to preserve. The labels below are an earlier execution's and the error is this one's (D-051).";
+}
+
 /** One call to the model and what became of it. */
 export interface TailorAttempt {
   n: number;
@@ -141,20 +168,35 @@ export interface TailorOutcome {
   /** The document this execution produced, null when it produced none. Not the row's document. */
   resume: ResumeDocument | null;
   /**
-   * What this execution wrote to the row.
+   * **What was written to the row, and nothing else.** Every value is decided
+   * by what the code did, never by whether a document exists.
    *
-   *   artifact   it produced a document and owns every artifact column, so the row is this execution's
-   *   execution  it produced none and a row with the same inputs kept its artifact, so only `error` and
-   *              `updated_at` moved and the row's document belongs to an earlier execution (D-051)
-   *   none       nothing was written, because `store` was false
+   *   packet  this execution wrote the row's artifact columns: status, mode,
+   *           model, run, attempts, findings, change set, attempt number,
+   *           validator revision, and the document if it produced one. The
+   *           row is this execution's. **It may hold no document**, which is
+   *           what a first execution that produced nothing looks like.
+   *   kept    this execution produced no document and a row with the same
+   *           user, job, facts hash and content hash already existed, so that
+   *           row's artifact columns were left untouched and only `error` and
+   *           `updated_at` moved (D-051). **Whether the surviving artifact
+   *           holds a document is a separate question and this does not
+   *           answer it.**
+   *   none    nothing was written, because `store` was false.
    *
-   * This is the signal that a preservation happened, and it is here because
-   * there was no other honest one. Comparing this outcome's status with the
-   * row's does not say: two executions can share a status, so a preserved row
-   * whose earlier execution also ended `invalid` looks like a row this
-   * execution wrote (the ninth review's finding 5).
+   * The first shape of this field was `artifact | execution | none` and was
+   * **wrong in both directions** (the tenth review's item 1). It read
+   * "artifact" whenever the update matched nothing, including when this
+   * execution had produced no document at all, under a doc saying "it
+   * produced a document"; and it read "execution" whenever the update
+   * matched, including when the row it left alone held no document either,
+   * under a doc saying an artifact was kept. The second case is the ninth
+   * review's finding 3, so the signal built to replace an inference was
+   * inferring the same thing one layer down. These three say only what was
+   * written, and a caller that needs to know whether a document exists asks
+   * the row.
    */
-  storedAs: "artifact" | "execution" | "none";
+  storedAs: "packet" | "kept" | "none";
   error?: string;
   tokensIn: number;
   tokensCached: number;
@@ -406,9 +448,11 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           .set({ error: error ?? null, updatedAt: sql`now()` })
           .where(and(eq(packets.userId, facts.userId), eq(packets.jobId, job.id), eq(packets.factsHash, facts.factsHash), eq(packets.contentHash, contentHash)))
           .returning({ id: packets.id });
-    // Which of the two happened, recorded here where it is known rather than inferred downstream from a status.
-    outcome.storedAs = keptArtifact.length ? "execution" : "artifact";
-    if (!keptArtifact.length)
+    // Which of the two happened, recorded from the write itself. Set inside each branch rather than from the
+    // length beforehand, so neither value can be reached by a path that did not do what it names.
+    if (keptArtifact.length) outcome.storedAs = "kept";
+    if (!keptArtifact.length) {
+      outcome.storedAs = "packet";
       await db
         .insert(packets)
       .values({
@@ -461,6 +505,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           updatedAt: sql`now()`,
         },
       });
+    }
   }
   return outcome;
 }

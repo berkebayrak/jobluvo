@@ -3,7 +3,7 @@ import { dbPool } from "@/db/client";
 import { packets, users } from "@/db/schema";
 import { resumeFacts } from "@/server/match/profile";
 import { applyChanges, baseResume, renderResume } from "@/server/packet/resume";
-import { consumableResume, tailorForUser } from "@/server/packet/run";
+import { consumableResume, describeStorage, tailorForUser } from "@/server/packet/run";
 import { currentUserId } from "@/server/user";
 
 /**
@@ -48,12 +48,11 @@ async function main() {
 
   // Whether the row is this execution's is read from what this execution wrote, never from comparing the two
   // statuses: two executions can share a status, so a preserved row whose earlier execution also ended invalid
-  // looks like a row this one wrote (finding 5).
-  if (out.storedAs === "execution") {
-    console.log(
-      `\nthis execution produced no document, so the row keeps the artifact an earlier execution left and only the error moved (D-051). Everything below describes that earlier artifact, not the execution above.`,
-    );
-  }
+  // looks like a row this one wrote (the ninth review's finding 5). The sentence itself is built in run.ts
+  // beside the enumeration and asserted by a test, because "an earlier artifact was kept" was printed over rows
+  // that held no artifact at all (the tenth review's item 1).
+  const account = describeStorage(out, p);
+  if (account) console.log(`\n${account}`);
 
   console.log(`\nstored artifact: ${p.status}${p.attempt ? `, attempt ${p.attempt}` : ""}, validator ${p.validatorRev ?? "unstamped"}`);
   if (!p.findings.length) console.log("  no findings stored");

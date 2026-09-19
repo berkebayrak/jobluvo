@@ -8,7 +8,7 @@ import { UNKNOWN_COST_MARK } from "@/server/llm/client";
 import { resumeFacts } from "@/server/match/profile";
 import { unknownCostStats } from "@/server/match/report";
 import { resumeHash } from "./resume";
-import { consumableResume, ERROR_STORE, tailorJob } from "./run";
+import { consumableResume, describeStorage, ERROR_STORE, tailorJob } from "./run";
 import { VALIDATOR_REVISION } from "./validate";
 import * as tailor from "./tailor";
 import * as validate from "./validate";
@@ -676,8 +676,8 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
         ),
       );
       const firstRun = await tailorJob(tx, facts, job, { run: "first", model: "gpt-5.6-first" });
-      // This execution produced a document, so it owns every artifact column on the row.
-      expect(firstRun.storedAs).toBe("artifact");
+      // This execution produced a document, so it wrote the row's artifact columns.
+      expect(firstRun.storedAs).toBe("packet");
       const [kept] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(kept.status).toBe("needs_review");
       expect(kept.changes.length).toBeGreaterThan(0);
@@ -692,7 +692,7 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       expect(out.status).toBe("failed");
       // The outcome describes THIS execution and says so: it produced nothing, and it says what it wrote.
       expect(out.resume).toBeNull();
-      expect(out.storedAs).toBe("execution");
+      expect(out.storedAs).toBe("kept");
 
       const [after] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       // Everything that describes the artifact is kept with it. D-045 kept the document and let the rest be
@@ -740,7 +740,7 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
       });
       const first = await tailorJob(tx, facts, job, { run: "first" });
       expect(first.status).toBe("failed");
-      expect(first.storedAs).toBe("artifact");
+      expect(first.storedAs).toBe("packet");
       const [kept] = await tx.select().from(packets).where(eq(packets.jobId, job.id));
       expect(kept.status).toBe("failed");
       expect(kept.resume).not.toBeNull();
@@ -754,7 +754,69 @@ describe.skipIf(!hasDb)("a rejected candidate is never promoted by a failed retr
 
       // The old signal is silent on exactly this case, and the new one is not.
       expect(second.status).toBe(after.status);
-      expect(second.storedAs).toBe("execution");
+      expect(second.storedAs).toBe("kept");
+    });
+  });
+
+  it("says what was written to the row in every case, and never claims an artifact that is not there", async () => {
+    /*
+     * The tenth review's item 1. `storedAs` was decided from `keptArtifact.length` before either write, so it
+     * read "artifact" whenever the update matched nothing, **including when this execution had produced no
+     * document at all**, and "execution" whenever the update matched, **including when the row it left alone
+     * held no document either**. The second is the ninth review's finding 3, so the signal built to replace an
+     * inference was inferring the same thing one layer down.
+     *
+     * Four cases, each with the sentence the CLI prints, because the wrong string is the user facing half.
+     */
+    await withFixture(async (tx, userId, job) => {
+      const facts = (await resumeFacts(tx, userId))!;
+      const rowNow = async () => (await tx.select().from(packets).where(eq(packets.jobId, job.id)))[0] ?? { resume: null };
+
+      // 1. The first execution ever, and it produced nothing. No row existed, so this one wrote the packet.
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      const first = await tailorJob(tx, facts, job, { run: "first" });
+      expect(first.storedAs).toBe("packet");
+      expect(await rowNow().then((r) => r.resume)).toBeNull();
+      expect(describeStorage(first, await rowNow())).toBe(
+        "this execution produced no document and no stored packet matched its inputs, so the row it wrote is this execution's own and holds no document.",
+      );
+
+      // 2. Failure after failure. The update matches, so the row is left alone, and there is NOTHING there to
+      // preserve. The old code called this "execution" and the CLI said an earlier artifact had been kept.
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      const second = await tailorJob(tx, facts, job, { run: "second" });
+      expect(second.storedAs).toBe("kept");
+      expect(await rowNow().then((r) => r.resume)).toBeNull();
+      expect(describeStorage(second, await rowNow())).toBe(
+        "this execution produced no document, and the row it left alone holds none either, so there was no artifact to preserve. The labels below are an earlier execution's and the error is this one's (D-051).",
+      );
+
+      // 3. A real document, then a failure over the same inputs: a genuine preservation, and the only case the
+      // old sentence was true of.
+      call().mockResolvedValueOnce(answer([{ bullet: "R1.1", text: "Ran a 3 year cost program that cut cost 11 percent.", facts: ["R1.1"] }]));
+      const third = await tailorJob(tx, facts, job, { run: "third" });
+      expect(third.storedAs).toBe("packet");
+      expect(describeStorage(third, await rowNow())).toBeNull();
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      const fourth = await tailorJob(tx, facts, job, { run: "fourth" });
+      expect(fourth.storedAs).toBe("kept");
+      expect(await rowNow().then((r) => r.resume)).not.toBeNull();
+      expect(describeStorage(fourth, await rowNow())).toContain("keeps the artifact an earlier execution left");
+
+      // 4. Inputs moved, so no row matches and the full write runs. This execution owns the row even though it
+      // produced nothing, which is precisely the case the enumeration used to call "artifact".
+      await tx.update(packets).set({ contentHash: "a-different-posting" }).where(eq(packets.jobId, job.id));
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      const fifth = await tailorJob(tx, facts, job, { run: "fifth" });
+      expect(fifth.storedAs).toBe("packet");
+      expect(await rowNow().then((r) => r.resume)).toBeNull();
+      expect(describeStorage(fifth, await rowNow())).toContain("no stored packet matched its inputs");
+
+      // 5. store off: nothing was written at all, and the sentence says so rather than describing a row.
+      call().mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
+      const unstored = await tailorJob(tx, facts, job, { run: "unstored", store: false });
+      expect(unstored.storedAs).toBe("none");
+      expect(describeStorage(unstored, await rowNow())).toBe("nothing was written to the row: this execution ran with storing off.");
     });
   });
 

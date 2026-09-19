@@ -132,6 +132,54 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-061. Every finding code has a label, and a code without one fails the typecheck instead of printing a word
+
+The user's instruction after review nine, and the reason for it is the one that matters: **the report
+read to decide whether a restamp is safe could not name one of the reasons in front of the reader.**
+`posting-moved` holds three packets today and printed as "unclassified: posting-moved".
+
+**The defect was the shape of the map, not the four missing rows.** `REVIEW_LABELS` lived inside
+`scripts/validator-report.ts` as a partial map with a fallback branch. A code with no entry printed
+"unclassified" and the table kept its shape, its length and its totals, so nothing looked wrong. It
+is the same failure this project keeps hunting: a counter that reads a plausible number because its
+filter found nothing.
+
+**Five codes were unnamed, across two lists that were each partly right.** D-059 observed four and
+named `value-unknown` as one of them; the user's instruction named four and had `resume-repaired`
+instead. Both are correct and neither list was complete:
+
+| Code | How it was printing |
+|---|---|
+| `posting-moved` | "unclassified" in the review table, holding 3 packets |
+| `profile-not-reproducible` | "unclassified" in the review table |
+| `assessment-not-run` | "unclassified" in the review table |
+| `value-unknown` | "unclassified" in the review table whenever D-040 demotes it to review |
+| `resume-repaired` | never named at all: it is soft, and the soft table counted by **message**, which is the coupling `codes.ts` exists to remove |
+
+D-059's parenthetical is corrected in place rather than left reading as the whole of it.
+
+**The fix is one map for every code, in `codes.ts` beside `FINDING_CODES`, typed
+`Record<FindingCode, string>` and not `Partial<Record<...>>`.** That is what makes a missing label
+fail rather than print: **adding a code to `FINDING_CODES` without a label is a typecheck error**, so
+it is caught by `npm run check` before the report is ever run. All three tables, hard, review and
+soft, now read the same map, so no table counts a message any more.
+
+`codes.test.ts` asserts the same at run time, and asserts the labels are **distinct**, because two
+codes sharing a label is the other way a count table merges two reasons into one bucket without
+saying so. Proved by breaking it both ways: removing a label fails `tsc` with the code named, and a
+duplicated label fails the test.
+
+**One distinction kept, because the two are not the same defect.** A **known code with no label** is
+forbidden and now impossible. A **finding carrying no code at all** is a row written before codes
+existed whose message no legacy prefix matches; it is genuinely unrecognised and still prints, named
+`no code: <message>` rather than joined to one of the labels.
+
+**Measured, and it changes nothing about the stored rows.** The report is read only. The three
+`posting-moved` findings it was calling unclassified are the same three findings; they are now
+called "posting moved since the packet was written". **The stored state is unchanged at 83 ready, 22
+held and 2 invalid, stamped `2026-09-19.r11`.** What the report prints as 81 ready and 24 held is
+what a restamp would write, not what is there.
+
 ### D-060. Four comments and a claim are made to match the code, and the ninth review's remaining findings are placed
 
 The ninth review's item 6 and its placements. No behaviour changes in this entry. Every correction
@@ -237,6 +285,13 @@ point of the note, so it is said.
 `profile-not-reproducible` or `value-unknown`, so those print as "unclassified" in the review table
 even though this build knows all four. It is a labelling gap in a report, it is outside what this
 entry was asked to do, and it belongs with phase 1 item 25's report inconsistencies.
+
+*(Done on 19 September 2026 by D-061, on the user's instruction, and **this list was incomplete**:
+`resume-repaired` was unnamed too, through the soft table, which counted by message. Nor was it
+outside anything worth doing, and the reason is the one the user gave. `posting-moved` holds three
+packets today, so the report read to decide whether a restamp is safe could not name a reason in
+front of the reader. It is not placed with item 25 and it is not a labelling gap: the map was
+partial with a fallback, and a partial map is the defect.)*
 
 ### D-058. The first paid run reports a joint rate, needs an execution identity to be readable at all, and may not claim a cost it has not established coverage for
 

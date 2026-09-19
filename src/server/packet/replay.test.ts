@@ -262,6 +262,10 @@ describe("replay decision", () => {
   it("actually validates the kept document rather than reading its empty findings as a pass", () => {
     // The stored findings of such a row are empty because nothing ever read it, not because it passed. What the
     // validator says today is what decides, and a hard finding rejects the row exactly as it would any other.
+    //
+    // **What this covers, said plainly** (the ninth review's note on it). The hard finding is injected, so this
+    // asserts that `replayDecision` uses the findings it is handed. It does not assert that anything reaches a
+    // failed row and hands it any. The write guard suite below has that path end to end, against the database.
     const assessed = row({ status: "failed", resume: doc, findings: [], changeSet });
     const d = replayDecision(assessed, [bulletHard], doc);
     expect(d).toMatchObject({ kind: "restamp", status: "invalid" });
@@ -484,6 +488,32 @@ describe.skipIf(!hasDb)("replay write guard", () => {
       const twice = unreplayable({ ...r, findings: once.kind === "hold" ? once.findings : [] }, profileNotReproducible());
       expect(twice.kind === "hold" && twice.findings.filter((f) => f.code === "profile-not-reproducible")).toHaveLength(1);
       expect((await read(tx, id)).status).toBe("ready");
+    });
+  });
+
+  it("reaches a failed row that kept a parsed document, validates it and writes the hold", async () => {
+    /*
+     * The integration half of D-050, from the ninth review's note on finding 7. The unit test asserts that
+     * `replayDecision` uses the findings it is handed; this asserts that a failed row with a document goes
+     * through the real write and comes back held, with its document and off the consumable path.
+     *
+     * The one step still not asserted here is the report's own select, which reads every packet with no status
+     * filter (`scripts/validator-report.ts`). That is read rather than tested, and this covers everything after
+     * it. Saying which part is covered is the point of the note.
+     */
+    await withPacket(async (tx, id) => {
+      await tx.update(packets).set({ status: "failed", findings: [], changeSet, updatedAt: sql`now()` }).where(eq(packets.id, id));
+      const r = await read(tx, id);
+      expect(r.status).toBe("failed");
+      expect(hasCandidate(r)).toBe(true);
+      const result = await applyReplay(tx, [{ row: r, decision: replayDecision(r, [], doc) }]);
+      expect(result.restamped).toBe(1);
+      const after = await read(tx, id);
+      // Held, never promoted, and the document D-045 paid to keep is still there and still not servable.
+      expect(after.status).toBe("needs_review");
+      expect(after.resume).toEqual(r.resume);
+      expect(consumableResume(after)).toBeNull();
+      expect(after.findings.map((f) => f.code)).toContain("assessment-not-run");
     });
   });
 

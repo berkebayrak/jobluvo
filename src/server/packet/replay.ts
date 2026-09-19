@@ -122,8 +122,8 @@ export const summaryNotRevalidated = (): PacketFinding => ({ level: "review", bu
 export const hasCandidate = (row: Pick<ReplayRow, "resume" | "changeSet">): boolean => !!row.resume || !!row.changeSet;
 
 /**
- * The review finding a row carries when its document was never assessed: the
- * answer parsed, the validator threw, and D-045 kept the document.
+ * The review finding a row carries when its **original** assessment failed:
+ * the answer parsed, the validator threw, and D-045 kept the document.
  *
  * It holds the row and it is sticky. Sticky because the alternative is the
  * defect D-049 fixed one entry earlier: without it, the first pass would hold
@@ -131,9 +131,29 @@ export const hasCandidate = (row: Pick<ReplayRow, "resume" | "changeSet">): bool
  * held row with a clean document and stamp it ready. A row whose assessment
  * failed is not promoted by a replay at all. Something with a person in it
  * decides that, and until then the row says why it is waiting.
+ *
+ * **The policy is right and the message used to be wrong** (the ninth review's
+ * finding 7). It said nothing had ever assessed the document, on a row the
+ * replay had just assessed under the current validator, using those very
+ * findings to decide the status. The two are kept apart now: this finding is
+ * about the historical failure and the requirement for a person, and the rest
+ * of the row's findings are the latest validation result.
+ *
+ * **A person cannot clear this by changing the status alone.** The stickiness
+ * re-derives the finding from the row's own copy of it, so a row moved to
+ * `ready` by hand is held again by the next replay. Clearing it means removing
+ * the finding as well, and nothing does that today. Whatever resolves a held
+ * packet has to do both, and this is written here so the requirement is found
+ * before it is implemented rather than after.
  */
-export const ASSESSMENT_NOT_RUN = "the validator threw on this answer when it was written, so nothing has ever assessed this document";
-export const assessmentNotRun = (): PacketFinding => ({ level: "review", bullet: null, code: "assessment-not-run", message: ASSESSMENT_NOT_RUN });
+export const ASSESSMENT_NOT_RUN = "the original assessment of this answer failed, so this row is held for a person and is never promoted by a replay";
+export const assessmentNotRun = (): PacketFinding => ({
+  level: "review",
+  bullet: null,
+  code: "assessment-not-run",
+  message: ASSESSMENT_NOT_RUN,
+  detail: "the other findings on this row are the current validator's reading of the document; this one is about the assessment that never ran",
+});
 
 /** The review finding a row carries when no profile on hand reproduces the facts it was built on. */
 export const PROFILE_NOT_REPRODUCIBLE = "profile not reproducible: no fact set on hand has this packet's facts hash, so nothing on it could be revalidated";

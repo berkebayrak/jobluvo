@@ -89,7 +89,7 @@ async function main() {
         : p.status === "invalid"
           ? "rejected: the document is kept so a person can read what was written, and the status is what stops it being served (D-038)"
           : p.status === "failed"
-            ? "the execution that wrote this row failed after its answer parsed, so the document was kept and nothing has ever assessed it (D-045, D-050)"
+            ? "the execution that wrote this row failed after its answer parsed, so the document was kept and its original assessment never ran (D-045, D-050)"
             : `not consumable: the row is ${p.status}`
     }`,
   );

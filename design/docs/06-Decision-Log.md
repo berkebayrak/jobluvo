@@ -132,6 +132,75 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-064. The restamp counts recomputed from the database, and the sentence that mixed three ledgers
+
+The tenth review's item 3, and the instruction with it: do not adjust the sentence to fit, recompute.
+**Nothing here is a restamp. Every figure is read only, taken 19 September 2026, and no restamp runs
+until the user says so in writing.**
+
+**What was wrong, stated before the numbers.** D-056 wrote "122 copies across 13 rows, of which 109
+are duplicates" and, in the next sentence, "the report's own review table falls from 148 findings to
+13". Three separate faults:
+
+1. **109 is wrong.** It subtracted the row count from the count of copies **carrying a code** and
+   ignored 13 more copies of the same finding stored before codes existed. The duplicate count is
+   **122**.
+2. **148 and 13 are one bucket of the review table, not the table.** The table's projected total
+   falls from 163 to 28.
+3. **The two figures are different populations.** 109 was stored, 148 was projected. Putting them in
+   adjacent sentences invites the subtraction the review made, 148 minus 109, which compares a
+   projection with a stored count and lands on nothing.
+
+**The five figures, recomputed.**
+
+| | Stored today | Projected by the replay |
+|---|---|---|
+| occurrences of `summary-not-revalidated` carrying the code | 122 | |
+| the same finding stored before codes existed, recognised by message | 13 | |
+| **total occurrences of that finding** | **135** | **13** |
+| distinct packets carrying it | 13 | 13 |
+| **duplicates**, total less one per row | **122** | 0 |
+| **review findings, all codes** | **150** | **28** |
+| findings at every level | 155 | |
+
+Per row: 11 rows carry 11 copies each and 2 carry 7, which is one original plus one per restamp
+those rows have lived through. **148 is now explained too**: on the parent branch the replay retains
+all 135 and appends one per row, 135 plus 13.
+
+**Every removal, and not all of them are duplicates.** Review findings go from 150 to 28, a fall of
+122, and the arithmetic is not one line:
+
+| Code | Stored | Projected | Change | Why |
+|---|---|---|---|---|
+| `summary-not-revalidated` | 135 | 13 | **−122** | the duplicates, collapsed by D-056 |
+| `responsibility-not-in-cited` | 2 | 0 | **−2** | **not a duplicate.** D-034 withdrew the rule, and the replay recomputes bullet findings from scratch, so a finding from a deleted rule is withdrawn with it. That is the restamp doing its job |
+| `posting-moved` | 1 | 3 | **+2** | two more jobs' text has moved since the r11 restamp |
+| `posting-word-unknown` | 9 | 9 | 0 | |
+| `name-unknown` | 3 | 3 | 0 | |
+
+150 − 122 − 2 + 2 = 28.
+
+**The 13 that 109 missed are the interesting ones.** They are the original `summary not revalidated`
+finding on each of those rows, written before codes existed, carrying a message and no code. They
+are removed because D-056 reads through `codeOf`, which maps them by their message. **That half of
+D-056 was written as a precaution and it turns out to be doing a tenth of the work**, which is worth
+knowing before anyone decides the `codeOf` read is redundant.
+
+**"24 held packets against 13 review findings" needs no explanation once the bucket is named.** 13 is
+the `summary-not-revalidated` bucket. The projected review table is 28 findings, and the 24 held
+packets are held by a mix: 13 by the coverage finding, the rest by a posting word, a name, or a
+posting that has moved.
+
+**The user's own line, corrected.** The bundle said "every stored row is still stamped
+`2026-09-19.r11`" directly above a table listing 2 invalid rows at `2026-09-18.r6`. **105 rows are at
+r11 and 2 are at r6.** The 2 have never been restamped because neither has a document to rebuild
+from, so the replay leaves them alone. D-061 carried the same wrong sentence and is corrected in
+place.
+
+**The stored state, to be quoted in this form until a restamp is applied: 83 ready, 22 held, 2
+invalid, 105 rows at `2026-09-19.r11` and 2 at `2026-09-18.r6`.** The 81 ready and 24 held that the
+report prints are **what a restamp would write**, not what is there.
+
 ### D-063. Suppression is tied to the occurrence, not to leading digits, and what that releases in the pass direction is stated rather than masked
 
 The tenth review's item 2, verified by the user against the code. **D-055's own fix, corrected on the
@@ -321,8 +390,12 @@ existed whose message no legacy prefix matches; it is genuinely unrecognised and
 **Measured, and it changes nothing about the stored rows.** The report is read only. The three
 `posting-moved` findings it was calling unclassified are the same three findings; they are now
 called "posting moved since the packet was written". **The stored state is unchanged at 83 ready, 22
-held and 2 invalid, stamped `2026-09-19.r11`.** What the report prints as 81 ready and 24 held is
-what a restamp would write, not what is there.
+held and 2 invalid: 105 rows stamped `2026-09-19.r11` and the 2 invalid at `2026-09-18.r6`.** What
+the report prints as 81 ready and 24 held is what a restamp would write, not what is there.
+
+*(Corrected 19 September 2026 by D-064. This said all of them were stamped r11, directly above the
+two rows that are not. The 2 invalid have never been restamped, because neither has a document to
+rebuild from and the replay leaves them alone.)*
 
 ### D-060. Four comments and a claim are made to match the code, and the ninth review's remaining findings are placed
 
@@ -592,6 +665,15 @@ have lived through, which is the mechanism confirming itself rather than a secon
 The report's own review table falls from **148 findings to 13** under this change, one per row that
 has a summary it cannot read again.
 
+*(**Both figures in that paragraph are wrong, and it mixed three ledgers in one sentence.** Corrected
+19 September 2026 by D-064, the tenth review's item 3. The duplicate count is **122, not 109**: 109
+counted only the copies carrying a code and ignored 13 more stored before codes existed, which
+`isDerived` catches through `codeOf` and which this entry's own mechanism is what removes. "The
+report's review table" is **one bucket of that table, not the table**: the table's projected total
+falls from 163 to 28. And 148 is a **projected** figure from the report while 109 was a **stored**
+one, so the subtraction the sentence invites, 148 minus 109, compares two populations and lands on
+nothing. The full reconciliation, five figures and every removal, is in D-064.)*
+
 **The fix is a replacement, not a deduplication by code**, and the distinction is the reason it is
 written this way. Deduplicating by code would be wrong: findings legitimately share a code, and a
 line with three unknown values carries three `value-unknown` findings that all belong on the row.
@@ -618,8 +700,8 @@ of it. A second test asserts the mechanism directly, that the derived finding ap
 passes and the row's own summary finding also appears once, so a failure says which half broke.
 
 **The order of the restamp.** D-055 deliberately held its restamp for this entry. One restamp is
-applied from merged code once both are in, and it collapses the 109 duplicates rather than adding a
-110th.
+applied from merged code once both are in, and it collapses the duplicates rather than adding another.
+*(The count said 109 here and is 122, corrected by D-064.)*
 
 ### D-055. A suppressed number must carry the finding that suppressed it, because a silent suppression is a rejection
 

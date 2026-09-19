@@ -132,6 +132,68 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-062. `storedAs` says what was written to the row, because the signal built to replace an inference was inferring
+
+The tenth review's item 1, verified by the user against the code. **It is D-057's own fix being
+corrected, one commit after it was proposed, and it was wrong in both directions.**
+
+**What D-057 built.** `storedAs` was set from `keptArtifact.length` before either write:
+
+```
+outcome.storedAs = keptArtifact.length ? "execution" : "artifact";
+```
+
+`keptArtifact` is empty in two unrelated situations: this execution produced a document, so the
+update was never attempted; and this execution produced none and the update matched nothing. The
+enumeration collapsed them.
+
+| Path | What it read | What the doc said it meant |
+|---|---|---|
+| produced no document, no row matched | `artifact` | "it produced a document and owns every artifact column" |
+| produced no document, matched a row that also holds no document | `execution` | "a row with the same inputs kept its artifact" |
+
+The second is **the ninth review's finding 3 arriving inside the fix for finding 5.** The update is
+guarded on the user, the job and the two hashes, and on nothing about what the row is holding, so a
+failure after a failure "preserves" an artifact that does not exist. `scripts/tailor.ts` printed
+"the row keeps the artifact an earlier execution left" over a row holding nothing, unguarded.
+
+**A signal that has to be read together with the document to be true is an inference**, which is
+what D-057 set out to remove. It removed one and added another a layer down.
+
+**The enumeration now describes the write and nothing else**, and each value is decidable from what
+the code did:
+
+| Value | What happened |
+|---|---|
+| `packet` | this execution wrote the row's artifact columns. The row is its own. **It may hold no document**, which is what a first execution that produced nothing looks like |
+| `kept` | this execution produced no document and a row with the same inputs existed, so its artifact columns were untouched and only `error` and `updated_at` moved. **Whether that artifact holds a document is a separate question this does not answer** |
+| `none` | nothing was written, because `store` was false |
+
+Set inside each branch rather than from a length beforehand, so neither value can be reached by a
+path that did not do what it names.
+
+**The sentence is now code, beside the enumeration, and asserted.** `describeStorage` takes the
+outcome and the row, because the row is the only thing that can say whether a document exists. The
+wrong string was the user facing half of the defect and an untested string is how it survived
+review, so the test asserts the sentence and not only the value.
+
+**Five cases, each written out rather than reasoned about:**
+
+| Case | `storedAs` | What the reader is told |
+|---|---|---|
+| first execution ever, produced nothing | `packet` | the row is this execution's own and holds no document |
+| failure after failure | `kept` | the row it left alone holds none either, so there was no artifact to preserve |
+| a document, then a failure over the same inputs | `kept` | the row keeps the artifact an earlier execution left |
+| a failure whose inputs moved, so no row matches | `packet` | no stored packet matched its inputs |
+| `store` off | `none` | nothing was written to the row |
+
+**What this does not fix.** The preservation branch still matches a row holding no artifact, so the
+row still wears an earlier execution's labels with this execution's error. That is the ninth
+review's finding 3 and it stays in phase 1 item 21, where D-060 put it. What changes is that it is
+now **visible**: nothing claims an artifact was kept when none was.
+
+D-057's table is corrected in place rather than deleted, so the mistake stays findable.
+
 ### D-061. Every finding code has a label, and a code without one fails the typecheck instead of printing a word
 
 The user's instruction after review nine, and the reason for it is the one that matters: **the report
@@ -400,6 +462,13 @@ So `tailorJob` now reports what it wrote, where that is known rather than inferr
 | `artifact` | it produced a document and owns every artifact column |
 | `execution` | it produced none, a row with the same inputs kept its artifact, and only `error` and `updated_at` moved |
 | `none` | nothing was written, because `store` was false |
+
+*(Corrected 19 September 2026 by D-062, the tenth review's item 1. **Both of the first two rows were
+false on paths that reach them.** `artifact` was also read when this execution produced no document
+and no row matched; `execution` was also read when the row it left alone held no document either,
+which is the ninth review's finding 3 arriving inside the fix for finding 5. The values are now
+`packet`, `kept` and `none`, and they describe the write rather than the document. The table is
+left here because the mistake is the point.)*
 
 **Every non consumable document was called "held for review".** `needs_review`, `invalid` and
 `failed` are three different things and the sentence was true of one of them. Each now says what it

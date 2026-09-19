@@ -129,6 +129,21 @@ export interface TailorOutcome {
   changes: number;
   /** The document this execution produced, null when it produced none. Not the row's document. */
   resume: ResumeDocument | null;
+  /**
+   * What this execution wrote to the row.
+   *
+   *   artifact   it produced a document and owns every artifact column, so the row is this execution's
+   *   execution  it produced none and a row with the same inputs kept its artifact, so only `error` and
+   *              `updated_at` moved and the row's document belongs to an earlier execution (D-051)
+   *   none       nothing was written, because `store` was false
+   *
+   * This is the signal that a preservation happened, and it is here because
+   * there was no other honest one. Comparing this outcome's status with the
+   * row's does not say: two executions can share a status, so a preserved row
+   * whose earlier execution also ended `invalid` looks like a row this
+   * execution wrote (the ninth review's finding 5).
+   */
+  storedAs: "artifact" | "execution" | "none";
   error?: string;
   tokensIn: number;
   tokensCached: number;
@@ -336,6 +351,7 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
     changes: final.candidate?.applied.diff.length ?? 0,
     resume,
     error,
+    storedAs: "none",
     ...totals,
     usd: Number(totals.usd.toFixed(8)),
   };
@@ -373,6 +389,8 @@ export async function tailorJob(db: DbPool | Tx, facts: ResumeFacts, job: Scorin
           .set({ error: error ?? null, updatedAt: sql`now()` })
           .where(and(eq(packets.userId, facts.userId), eq(packets.jobId, job.id), eq(packets.factsHash, facts.factsHash), eq(packets.contentHash, contentHash)))
           .returning({ id: packets.id });
+    // Which of the two happened, recorded here where it is known rather than inferred downstream from a status.
+    outcome.storedAs = keptArtifact.length ? "execution" : "artifact";
     if (!keptArtifact.length)
       await db
         .insert(packets)

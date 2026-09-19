@@ -132,6 +132,50 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-059. The sticky hold says the original assessment failed, rather than that nothing has assessed the document
+
+The ninth review's finding 7. **The policy is right and stays exactly as it is.** A row whose
+assessment failed is never promoted by a replay; a person decides. What was wrong is the sentence
+printed beside it.
+
+**What it said and why it was false.** `ASSESSMENT_NOT_RUN` read "the validator threw on this answer
+when it was written, so nothing has ever assessed this document". By the time a reader sees that
+finding on a restamped row, the replay **has** assessed the document, under the current validator,
+and used those findings to decide the status it is wearing. The message contradicted the row it was
+attached to.
+
+**What it says now.** "The original assessment of this answer failed, so this row is held for a
+person and is never promoted by a replay", with a detail that keeps the two apart: the other findings
+on the row are the current validator's reading of the document, and this one is about the assessment
+that never ran. The historical failure and the latest validation result are two facts and the row
+carries both.
+
+**Recorded before anything implements it: a person cannot clear this by changing the status alone.**
+The stickiness re-derives the finding from the row's own copy of it, so a row moved to `ready` by
+hand is held again by the next replay. Clearing it means removing the finding as well, and nothing
+does that today. Whatever resolves a held packet has to do both. This is written into the code beside
+the finding rather than only here, so it is found before the screen is built and not after it ships
+a button that appears to do nothing.
+
+**Nothing stored moves.** Read 19 September 2026: **no row carries an `assessment-not-run` finding**,
+so this is a message no stored row is wearing. The code is stamped on rows as they are restamped and
+the count is zero today.
+
+**The test note, which is fair and is answered rather than argued with.** The unit test injects a
+hard finding into `replayDecision`, so it proves that function uses the findings it is handed. It
+does not prove that anything reaches a failed row and hands it any. Both halves are now covered and
+labelled: the unit test says in as many words what it covers, and a new test in the write guard suite
+takes a failed row with a kept document through the real write and asserts it comes back held, with
+its document, off the consumable path. **One step is still read rather than asserted**, the report's
+own select, which takes every packet with no status filter. Saying which part is covered is the
+point of the note, so it is said.
+
+**One thing observed and not fixed**, flagged rather than done quietly. `REVIEW_LABELS` in
+`scripts/validator-report.ts` has no entry for `assessment-not-run`, `posting-moved`,
+`profile-not-reproducible` or `value-unknown`, so those print as "unclassified" in the review table
+even though this build knows all four. It is a labelling gap in a report, it is outside what this
+entry was asked to do, and it belongs with phase 1 item 25's report inconsistencies.
+
 ### D-058. The first paid run reports a joint rate, needs an execution identity to be readable at all, and may not claim a cost it has not established coverage for
 
 The ninth review's findings 8 and 9. Both are D-041 and **neither is a code change to the tailoring

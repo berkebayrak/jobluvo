@@ -111,6 +111,29 @@ export interface RepairSource {
 export const SUMMARY_NOT_REVALIDATED = "summary not revalidated: the packet stores no change set";
 export const summaryNotRevalidated = (): PacketFinding => ({ level: "review", bullet: "summary", code: "summary-not-revalidated", message: SUMMARY_NOT_REVALIDATED });
 
+/**
+ * True when the row has something a replay could read again: a document, or
+ * the change set to rebuild one from. A `failed` row usually has neither,
+ * because the call did not return or the answer did not parse. One kind of
+ * failed row does: the answer parsed and the validator threw on it, and D-045
+ * keeps that document rather than deleting it (D-050).
+ */
+export const hasCandidate = (row: Pick<ReplayRow, "resume" | "changeSet">): boolean => !!row.resume || !!row.changeSet;
+
+/**
+ * The review finding a row carries when its document was never assessed: the
+ * answer parsed, the validator threw, and D-045 kept the document.
+ *
+ * It holds the row and it is sticky. Sticky because the alternative is the
+ * defect D-049 fixed one entry earlier: without it, the first pass would hold
+ * the row, the finding would not be retained, and the second pass would read a
+ * held row with a clean document and stamp it ready. A row whose assessment
+ * failed is not promoted by a replay at all. Something with a person in it
+ * decides that, and until then the row says why it is waiting.
+ */
+export const ASSESSMENT_NOT_RUN = "the validator threw on this answer when it was written, so nothing has ever assessed this document";
+export const assessmentNotRun = (): PacketFinding => ({ level: "review", bullet: null, code: "assessment-not-run", message: ASSESSMENT_NOT_RUN });
+
 /** The review finding a row carries when no profile on hand reproduces the facts it was built on. */
 export const PROFILE_NOT_REPRODUCIBLE = "profile not reproducible: no fact set on hand has this packet's facts hash, so nothing on it could be revalidated";
 export const profileNotReproducible = (): PacketFinding => ({ level: "review", bullet: null, code: "profile-not-reproducible", message: PROFILE_NOT_REPRODUCIBLE });
@@ -161,6 +184,10 @@ export const sameDocument = (a: ResumeDocument, b: ResumeDocument): boolean => r
  * consumable path, so both are left where they are.
  */
 export function unreplayable(row: ReplayRow, finding: PacketFinding): ReplayDecision {
+  // A failed row is left exactly as it is, even when it carries a parsed candidate. Holding it would move it to
+  // needs_review on the strength of not having been able to check it, and the finding that says its document was
+  // never assessed would not be on the row to keep it held afterwards. Nothing is lost: the document stays and the
+  // next report that can read the profile revalidates it properly (D-050).
   if (row.status !== "ready" && row.status !== "needs_review") return { kind: "no_candidate" };
   // The stored findings are kept beside the reason: nothing was re-read, so nothing the row already carried is withdrawn.
   return { kind: "hold", status: "needs_review", findings: [...row.findings.filter((f) => f.code !== finding.code), finding], resume: row.resume, why: finding.message };
@@ -177,8 +204,14 @@ export function replayDecision(
   extra: PacketFinding[] = [],
   repair?: RepairSource,
 ): ReplayDecision {
-  if (row.status === "failed") return { kind: "no_candidate" };
+  // A failed execution that produced no answer has nothing to read again. A parsed candidate whose assessment failed
+  // is a different thing and was being skipped with it: D-045 paid to keep that document and this early return meant
+  // no restamp could ever reach it, so fixing the validator would never revisit the answer it threw on (D-050).
+  if (row.status === "failed" && !hasCandidate(row)) return { kind: "no_candidate" };
   const coverage: ReplayCoverage = row.changeSet ? "full" : "bullets";
+  // Sticky, so that reading the row twice says the same thing: once written, the finding keeps the row held on every
+  // later pass rather than clearing and letting a clean document be stamped ready (D-049's shape, avoided here).
+  const neverAssessed = (row.status === "failed" && hasCandidate(row)) || row.findings.some((f) => f.code === "assessment-not-run");
   // A repair is verified before any of this: the offered document counts for nothing unless the row's own stored
   // changes, plus that document's own summary, reproduce it. Nothing here trusts a file for being in the repository.
   const verified = !row.resume && repair && candidate && sameDocument(repair.document, candidate) ? repair : null;
@@ -186,7 +219,11 @@ export function replayDecision(
   // A repaired row is read the same way, on the summary the offered document carries, so a restored summary is never
   // stamped as revalidated when nothing revalidated it.
   const legacySummary = coverage === "bullets" && !!(row.resume?.summary ?? verified?.document.summary);
-  const findings = [...(coverage === "full" ? replayed : [...replayed, ...retainedFindings(row.findings), ...(legacySummary ? [summaryNotRevalidated()] : [])]), ...extra];
+  const findings = [
+    ...(coverage === "full" ? replayed : [...replayed, ...retainedFindings(row.findings), ...(legacySummary ? [summaryNotRevalidated()] : [])]),
+    ...extra,
+    ...(neverAssessed ? [assessmentNotRun()] : []),
+  ];
   const status = statusOf(findings);
   const repaired = (): ReplayDecision => ({
     kind: "repair",
@@ -202,14 +239,22 @@ export function replayDecision(
   // decide whether one exists, and a row with a document and an invalid status is not a promotion.
   if (status === "invalid") return verified ? repaired() : { kind: "restamp", status, findings, resume: row.resume, coverage };
   if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) {
-    // A row that is consumable or reviewable today on a document nothing can verify is revoked.
-    if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: row.resume, coverage };
-    // A rejected row whose resume was cleared, but which stores the change set it was built from, is rebuilt
-    // from the base plus that change set and stamped on what the validator says about it now (D-037). This is
-    // not a promotion on evidence nothing can check, which is what review five's finding 6 forbids: base plus
-    // a stored change set is deterministic and both are on the row, so the candidate is verifiable in the only
-    // sense that matters. A bullets only row stores no change set, cannot be rebuilt, and stays as it is.
+    // A row with no document at all, which stores the change set it was built from, is rebuilt from the base plus
+    // that change set and stamped on what the validator says about it now (D-037). This is not a promotion on
+    // evidence nothing can check, which is what review five's finding 6 forbids: base plus a stored change set is
+    // deterministic and both are on the row, so the candidate is verifiable in the only sense that matters.
+    //
+    // This is asked BEFORE the revoke, and the order is the whole of D-049. It used to be asked after, and the
+    // revoke was guarded on the row being ready or held, so a ready row with no resume and a full change set was
+    // revoked to invalid on one pass and then, being invalid, fell past the revoke into this branch on the next and
+    // came back ready. Revoked on one pass, promoted on the next, over identical inputs, with the hard finding that
+    // revoked it silently dropped because a replay retains only summary findings. Asking here makes the two passes
+    // agree: a row that can rebuild itself does so the first time, whatever its status, and the answer is the same
+    // every time it is read.
     if (!row.resume && candidate && coverage === "full") return { kind: "rebuild", status, findings, resume: candidate, coverage };
+    // A row that is consumable or reviewable today on a document nothing can verify, and that cannot rebuild one
+    // from itself, is revoked. A bullets only row stores no change set and is the case this still catches.
+    if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: row.resume, coverage };
     // A row with no change set cannot be rebuilt from itself, and D-037 left six of them invalid with no document. Four
     // of those six have their document in a frozen snapshot that is in version control, so the document exists and the
     // row said it did not, which is the kind of untruth this week has been spent removing. It is restored only through

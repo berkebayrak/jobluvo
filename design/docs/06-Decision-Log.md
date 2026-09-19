@@ -132,6 +132,123 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-050. A parsed candidate whose assessment failed is read again, instead of being skipped with the executions that produced nothing
+
+The eighth review's finding 4, verified by the user, and done in the same pass as D-049 because
+it is the same function and the file is not worth opening twice.
+
+**The gap between two entries.** D-045 decided that when the validator throws on an answer that
+parsed, the document is kept rather than discarded, because what failed is our code and not the
+answer. The replay then began with `if (row.status === "failed") return { kind: "no_candidate" }`,
+on the older assumption that a failed row has nothing to read. So the document D-045 paid to keep
+**could never be read again**: fixing the validator and restamping would not reach it, and the
+row would sit with a document and no verdict on it forever.
+
+**The distinction.** A call that never returned, or an answer that never parsed, produced nothing
+and is still skipped. A parsed candidate whose assessment failed has a document, or the change set
+to rebuild one, and is now read like any other row: `hasCandidate` separates them.
+
+**Three constraints on how it is read, each from the user's instruction.**
+
+*The document is actually validated.* The findings come from running the validator over the stored
+change set today, not from the row's stored findings. Those are empty because nothing ever read
+the answer, and reading empty findings as a pass is the mistake this is built to avoid. A hard
+finding rejects such a row exactly as it would any other, and a test asserts that.
+
+*A failed row is not promoted.* The row carries a sticky `assessment-not-run` review finding, so
+the best status it can reach is `needs_review`. Something with a person in it decides whether an
+answer whose assessment failed should be served; a report does not.
+
+*Reading it twice says the same thing.* The finding is re-derived from the row's own findings as
+well as from its status, so it survives the row moving from `failed` to `needs_review`. Without
+that it would be D-049's defect in a new place: held on the first pass, finding not retained,
+stamped ready on the second. The idempotence sweep in `replay.test.ts` covers this shape too.
+
+**One thing deliberately not done.** `unreplayable`, which holds a row when the profile or the
+posting cannot be read, still leaves a failed row alone. Holding it would move it to
+`needs_review` on the strength of not having been able to check it, and the finding that keeps
+such a row held would not be on the row afterwards. Nothing is lost by waiting: the document stays
+and the next report that can read the profile assesses it properly.
+
+**How many stored rows are in this state today: zero.** Measured rather than expected, and the
+wider count is worth having beside it, because it says the state is reachable and not yet
+occupied:
+
+| Status | Rows | With a document | With a change set |
+|---|---|---|---|
+| ready | 83 | 83 | 73 |
+| needs_review | 22 | 22 | 7 |
+| invalid | 2 | 0 | 0 |
+| failed | 0 | 0 | 0 |
+
+There are no failed rows at all, so nothing changes in the database and nothing needs restamping.
+This is a recovery path built before it is needed, which is the only time it can be built calmly.
+
+### D-049. The replay revoked a row on one pass and promoted it on the next, and the rebuttal that closed the finding checked one of the two cases
+
+The eighth review's finding 3, verified by the user against the code. It reopens a finding this
+project closed as impossible, and **the reason it was closed wrongly is the part worth keeping**.
+
+**The defect.** A row that is `ready` with **no resume** and a full change set:
+
+| Pass | What happens |
+|---|---|
+| 1 | `!row.resume` enters the unverifiable branch; the row is `ready`, so it is revoked to `invalid` with a hard `unverifiable-resume` finding |
+| 2 | the row is now `invalid`, so the revoke, which is guarded on `ready` or `needs_review`, is skipped; `retainedFindings` keeps only summary findings so the hard finding is gone; the replayed status comes back `ready`; the rebuild branch fires on `!row.resume && candidate && coverage === "full"` and stamps it **ready** |
+
+Revoked on one pass, promoted on the next, over identical inputs, with the finding that revoked
+it silently dropped on the way. Reproduced before the fix.
+
+**Why the rebuttal was wrong, which matters more than the defect.** The seventh review named two
+cases: a ready row with a **missing** resume and one with a **mismatched** resume. The rebuttal
+built a row with a mismatched resume, traced it, found it falls to `no_resume` rather than being
+promoted, and concluded the whole finding could not happen. It then recorded that conclusion in
+D-048's item 15 as verified against the code, and renamed the placement around it.
+
+Every step of that was done properly except the first. The trace was right, the branch guard was
+read rather than assumed, the result was reported with the code path. **It answered one of the
+two cases the finding named and was written up as answering the finding.** "Verified against the
+code" was true of what was checked and said nothing about what was not. A rebuttal has to cover
+every case the finding names, and saying which cases were checked is part of the rebuttal, not a
+detail. D-048's item 15 is rewritten rather than deleted, so the mistake stays findable.
+
+**The other wrong statement in that item, which is the review's and not the rebuttal's.** It said
+a revoked row **is never re-examined by any later pass**. That is not what `no_resume` does.
+Returning it prevents **a write in that pass**; it does nothing to the next report, which reads
+every row on hand and evaluates this one again exactly as it evaluated it the first time. The row
+is re-read every time and written never, which is a narrower and less alarming thing than being
+dropped from consideration. Corrected here rather than carried forward, because an item that
+overstates its own defect is as hard to act on as one that understates it.
+
+**What is actually left of item 15 after both corrections** is a labelling defect: the branch is
+named for rows with no document and is reached by a row holding one, and the report's column says
+"no resume stored" about a row with a resume. It stays on the phase 1 list under that description.
+
+**The fix, and it is an ordering.** The rebuild is now asked **before** the revoke. A row with no
+document that stores the change set it was built from rebuilds from base plus that change set
+whatever its status, so the first pass gives the answer the second pass used to give, and the two
+agree. A row that cannot rebuild itself, which means a bullets only row with no change set, is
+still revoked exactly as before.
+
+**The property that was missing, now asserted.** Not a case but an invariant: reading a row twice
+says the same thing. `replay.test.ts` reads five shapes three times each, feeding every decision
+back onto the row, and asserts the status and the presence of a document settle on the first pass
+and stay:
+
+| Shape | Before | After |
+|---|---|---|
+| ready, no resume, full change set | ready/none, invalid/none, **ready/document** | ready/document from pass 1 |
+| ready, no resume, bullets only | invalid/none, stable | unchanged |
+| ready, mismatched resume | invalid/document, stable | unchanged |
+| invalid, no resume, full change set | ready/document, stable | unchanged |
+| ready, resume matches | ready/document, stable | unchanged |
+
+Only the first row moves, and it is the defect.
+
+**Measured before shipping: no stored row moves.** 83 ready, 22 held, 2 invalid, unchanged. No
+live row is `ready` with a missing resume, which is why this never showed up in a restamp table
+and had to be found by reading the branch.
+
 ### D-048. The repair's provenance claim is narrowed to what it establishes, the case 1 example stops making the mistake it warns against, and the rest of the seventh review is placed
 
 The seventh review's findings 2, 3's remainder and 11, plus its deferrals. No code changes with
@@ -183,21 +300,16 @@ documentation only and no prompt carries it, which is why it survived a round of
     recorded from the other side.
 14. **Document mode loses the skill order.** Finding 8. `readAnswer` builds its change set with
     `skills: []`, so a document mode answer's ordering is dropped on the way into the row.
-15. **A revoked row is never re-examined, under a branch named for rows that have no document.**
-    Finding 9, and it replaces the placement D-042 made under a different name, "the replay
-    revokes on one pass and promotes on the next". That description no longer fits the code and
-    filing this under it would leave the real defect unfindable, so the item is renamed to what
-    it is.
+15. **A revoked row that cannot rebuild itself reaches a branch named for rows with no document.**
+    *(Rewritten 19 September 2026 by D-049, which corrects two wrong statements in the version
+    that stood here. Both are named in D-049 and neither is left in place.)*
 
-    What was checked, rather than taken from the description: the revoke branch is guarded on a
-    row being `ready` or `needs_review`, and a revoked row is `invalid` by the second pass, so
-    **a revoked row cannot be revoked again and cannot be promoted either**. What happens instead
-    is that a revoked row keeps its document now (D-038), so on the next pass it reaches
-    `no_resume`: **a branch named for a row that has no document, while the row is holding one.**
-    Three consequences, all verified: nothing is written, so **the row is never re-examined by
-    any later pass**; the report prints **"passes as ready but no resume stored" about a row with
-    a resume**; and a document nothing can verify sits on a row that no restamp will look at
-    again. A mislabel and a silent dead end. Smaller than the defect that was placed, and real.
+    What is left, and it is a labelling defect rather than a behaviour one: a revoked row that
+    cannot rebuild itself keeps its document (D-038), so a later pass reaches `no_resume`, **a
+    branch named for a row that has no document while the row is holding one**, and the report
+    prints **"passes as ready but no resume stored" about a row with a resume.** No write happens
+    in that pass, which is correct, and the branch and the column both describe the row wrongly,
+    which is not.
 16. **The report omits repairs from its totals.** Finding 12, and the same shape as item 4's
     rebuilds: `repaired` is counted and not carried into the totals the report prints.
 17. **The remaining contradictions in the current state section.** Finding 13.

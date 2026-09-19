@@ -545,7 +545,37 @@ documentation only and no prompt carries it, which is why it survived a round of
     in that state today and the frozen sample predates D-051, so nothing is wrong now. It becomes
     wrong on the first paid run where a regeneration fails, in the tool that run would be judged
     with, which is the worst moment to discover it.
-24. **The rest of the current state inconsistencies**, the eighth review's finding 9 less the
+24. **Tailoring has no guard in front of the model call, so a second request for the same job
+    pays for a fresh one.** A cost item, not a correctness one, and that distinction decides
+    both when it is due and what the guard is allowed to do.
+
+    What is true today, read rather than assumed: `tailorJob` reads the facts hash and the
+    content hash **only after the call**, once at line 374 to decide what a failed run may keep
+    (D-051) and again to write them onto the row. Nothing queries the packets table before
+    `tailorCall`. The only callers are `scripts/tailor-sample.ts` and `scripts/tailor.ts`; there
+    is **no product path that calls tailoring at all**, let alone twice, because submission is
+    not built and no regenerate button exists for a user to press.
+
+    **What the guard may serve, and this is the half a later reader would get wrong.** It may
+    skip the call **only when the stored packet would actually be served**, which is what
+    `consumableResume` decides and nothing else decides. **A held or rejected packet must never
+    suppress a new attempt.** Doing so would turn a rejection into a permanent refusal to try
+    again, and D-038 exists precisely to stop a rejection being the end of the road: it kept the
+    document so a person could act on it, not so the system could cite it as a reason never to
+    produce another. The guard is an optimisation for the `ready` case and for nothing else.
+
+    **What counts as unchanged, and it is three things rather than two.** Both hashes, the facts
+    and the posting text, **and the validator revision**. A packet stamped under older rules is
+    re-examined rather than served on the strength of having once passed. A restamp is not the
+    same thing as a fresh answer: it re-reads a stored document under today's rules and says
+    what it now thinks of it, which is a different question from what the model would write
+    today, and neither substitutes for the other.
+
+    **The trigger.** Due before any path exists that can call tailoring twice, which is **the
+    signed-in product rather than the paid run**. A paid run is a script with a job list and
+    does not press anything twice; a regenerate button is the obvious thing a user presses
+    twice, and by then the spend is already going out.
+25. **The rest of the current state inconsistencies**, the eighth review's finding 9 less the
     revision label, which is fixed rather than placed (D-054).
 
 **The first phase 1 item is still the pre rank.** Nothing here changes that.

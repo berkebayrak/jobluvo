@@ -55,6 +55,17 @@
  * in silence. The invariant that would have caught it is now stated and held
  * below: a numeric span is either interpreted and checked, or reported as
  * uninterpretable, and it never disappears quietly (D-055).
+ *
+ * The tenth review, item 2, and it is the same axis a third time. D-055 stated
+ * that invariant and then located each span by the phrase's **leading digits**,
+ * so a readable number sharing a head with an ambiguous one was suppressed with
+ * it: "Ambiguous 2023,4; In 2023,we launched" lost the second year. The
+ * invariant was true of the head and false of the occurrence. Suppression is
+ * tied to the occurrence now, and where an occurrence cannot be told from
+ * another, **nothing is suppressed rather than a readable number being taken
+ * with the unreadable one**. What that costs in the other direction is real and
+ * is written down in D-063 and in phase 1 item 20, which now carries both
+ * directions and a trigger.
  */
 
 const UNITS = new Map<string, number>([
@@ -82,13 +93,26 @@ export interface NumberReading {
    * coordinates of `text`, not of the input, and they are what `claimsOf`
    * filters on.
    *
-   * **Every range here is produced by a phrase in `unreadable`**, and that is
-   * the invariant rather than an incidental property (D-055). A range with no
-   * phrase behind it is the worst of both halves: the value is suppressed, so
-   * nothing on the profile can support a later line that states it, and the
-   * text still reads as fully readable, so D-040's guard sees no reason to
-   * hold and `value-unknown` rejects. A truthful line then loses its packet
-   * over a missing space after a comma.
+   * **Every range here is produced by a phrase in `unreadable`, at the
+   * occurrence that phrase produced**, and that is the invariant rather than an
+   * incidental property (D-055, D-063). Both halves are load bearing and each
+   * has failed once.
+   *
+   * A range with **no phrase** behind it is the worst case: the value is
+   * suppressed, so nothing on the profile can support a later line that states
+   * it, and the text still reads as fully readable, so D-040's guard sees no
+   * reason to hold and `value-unknown` rejects. A truthful line then loses its
+   * packet over a missing space after a comma (D-055).
+   *
+   * A range at **another occurrence** of the same leading digits suppresses a
+   * readable number, and that one is held rather than rejected, because the
+   * text does report a phrase and D-040 demotes. Milder, still a truthful line
+   * made unavailable (D-063).
+   *
+   * What is **not** covered by either: a phrase reported and never located
+   * leaves its fragments in the claims, and D-040 does not help there, because
+   * it softens an unmatched value and a fragment admitted as evidence is a
+   * matched one. Phase 1 item 20.
    */
   unreadableSpans: [number, number][];
 }
@@ -263,10 +287,40 @@ export function readNumbers(text: string): NumberReading {
   for (const phrase of unreadable) {
     for (let i = output.indexOf(phrase); i >= 0; i = output.indexOf(phrase, i + phrase.length)) spans.push([i, i + phrase.length]);
   }
+  /*
+   * A comma phrase is located by its occurrence, not by its leading digits (the tenth review's item 2).
+   *
+   * The first version of this matched `head,[\d,]*` and suppressed every hit, so in
+   * "Ambiguous 2023,4; In 2023,we launched" it suppressed the readable year in the second clause for sharing a
+   * head with the ambiguous run in the first. The invariant on the type was true of the head digits and false of
+   * the occurrence, which is the same mistake D-053 made in a different place: a pattern written for one case
+   * matching a class.
+   *
+   * Two steps, and neither of them guesses:
+   *
+   * 1. **A surviving run, `head,` followed by digits.** A digit, a comma and a digit in the output is the
+   *    signature of a comma the thousands strip refused, and every one of those is in `commas`. "9,2 million"
+   *    leaves "9,2000000"; "2023,4" leaves "2023,4". Suppressed.
+   * 2. **The wreckage, a bare `head,`, only when it is the one such occurrence in the output.** This is the case
+   *    D-053 was written for: in "9,2 hundred hundred" the word machinery takes the 2 and leaves "9,". One
+   *    occurrence and one phrase is not a guess about which is which. Two occurrences is, so nothing is
+   *    suppressed rather than a readable number being taken with the unreadable one.
+   *
+   * What step 2's guard costs is real and is not hidden: a phrase this cannot locate is reported and its
+   * fragments are read, so "usd 9" can enter the claims. That is the residual D-055 already named, reached by
+   * one more path, and it is the pass direction rather than the reject direction. The fix for the class is
+   * carrying offsets through the rewrite, phase 1 item 20, and it stays deferred.
+   */
   for (const phrase of commas) {
     const head = /^\d+/.exec(phrase)?.[0];
     if (!head) continue;
-    for (const m of output.matchAll(new RegExp(`(?<![\\d,])${head},[\\d,]*`, "g"))) spans.push([m.index!, m.index! + m[0].length]);
+    const runs = [...output.matchAll(new RegExp(`(?<![\\d,])${head},[\\d,]+`, "g"))];
+    if (runs.length) {
+      for (const m of runs) spans.push([m.index!, m.index! + m[0].length]);
+      continue;
+    }
+    const wreckage = [...output.matchAll(new RegExp(`(?<![\\d,])${head},(?![\\d,])`, "g"))];
+    if (wreckage.length === 1) spans.push([wreckage[0].index!, wreckage[0].index! + wreckage[0][0].length]);
   }
   return { text: output, unreadable: [...commas, ...unreadable], unreadableSpans: spans };
 }

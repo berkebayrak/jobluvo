@@ -354,6 +354,69 @@ describe("a numeric span is either interpreted and checked, or reported as unint
     expect(levels("Built the OKR system in 1998,now used by 38 teams.", slipped)).toEqual(["hard"]);
   });
 
+  it("suppresses the ambiguous occurrence and leaves a readable one that merely shares its leading digits", () => {
+    /*
+     * The tenth review's item 2, reproduced before the fix. The span was located by the phrase's leading digits,
+     * `head,[\d,]*`, so in the input below the readable year in the second clause was suppressed for sharing a
+     * head with the ambiguous run in the first. The invariant on the type was true of the head digits and false
+     * of the occurrence, which is D-053's mistake in a different place.
+     *
+     * The consequence was milder than D-053's and is still real: `commas` is non-empty, so the profile reports an
+     * unreadable phrase, D-040 demotes and the truthful line is held rather than rejected. On the generated side
+     * the mechanism is different and worth stating rather than merging into one: the line's own claims are under
+     * reported rather than unmatched, so `number-unreadable` is what holds it, not the demotion. Held either way,
+     * never rejected, through two different paths.
+     */
+    for (const text of ["Ambiguous 2023,4; In 2023,we launched.", "In 2023,we launched. Ambiguous 2023,4 teams."]) {
+      const r = readNumbers(text);
+      expect(`${text}: ${JSON.stringify(r.unreadable)}`).toBe(`${text}: ["2023,4"]`);
+      // One span, on the ambiguous run, and not on the readable occurrence beside it.
+      expect(r.unreadableSpans.map(([a, b]) => r.text.slice(a, b))).toEqual(["2023,4"]);
+      expect(claimsOf(text).map((c) => c.key)).toEqual(["year:2023"]);
+    }
+    // A repeated head where both occurrences really are ambiguous: both are runs, so both are suppressed.
+    expect(claimsOf("Ran 2023,4 and 2023,5 programmes.").map((c) => c.key)).toEqual([]);
+    expect(readNumbers("Ran 2023,4 and 2023,5 programmes.").unreadable).toEqual(["2023,4", "2023,5"]);
+  });
+
+  it("holds and does not reject on the fact side, and holds by a different finding on the line side", () => {
+    // Both mechanisms asserted, because "held either way" through two paths is the kind of thing that gets
+    // simplified into one and then gets one of them wrong.
+    const facts = factSet([entry("R1.1", "Ambiguous 2023,4; In 2023,we launched.")]);
+    // The fact side: the readable year is evidence again, so a truthful line stating it matches and says nothing.
+    expect(facts.all.map((c) => c.key)).toEqual(["year:2023"]);
+    expect(levels("Launched the pricing review in 2023.", facts)).toEqual([]);
+    // And an unmatched value on this profile is held rather than rejected, because a phrase could not be read.
+    expect(facts.unreadablePhrases).toEqual(["2023,4"]);
+    expect(levels("Launched the pricing review in 1998.", facts)).toEqual(["review"]);
+    // The line side: the line's own ambiguous run yields no claim, so nothing is unmatched and the demotion is
+    // not what holds it. `number-unreadable` is.
+    const clean = factSet([entry("R1.1", "Launched the pricing review in 2023.")]);
+    expect(clean.unreadablePhrases).toEqual([]);
+    const found = checkLine("Ambiguous 2023,4; In 2023,we launched.", "R1.1", ["R1.1"], clean);
+    expect(found.filter((f) => f.code === "value-unknown")).toEqual([]);
+    expect(found.filter((f) => f.code === "number-unreadable").map((f) => f.value)).toEqual(["2023,4"]);
+  });
+
+  it("does not suppress a bare head it cannot tell from another, and the cost of that is a fragment read", () => {
+    /*
+     * The guard on the wreckage fallback, and what it costs, asserted rather than described. D-053's case has one
+     * bare `9,` in the output and is suppressed. Put a second bare `9,` in the same text and nothing can say which
+     * is the wreckage, so neither is suppressed: the readable 9 is read, which is right, and the fragment "usd 9"
+     * is read too, which is not.
+     *
+     * That is the pass direction, and D-040 does not cover it: the demotion softens an UNMATCHED value, and a
+     * matched one produces no finding at all. Placed, not fixed, because the fix is offsets through the rewrite.
+     */
+    expect(claimsOf("Raised USD 9,2 hundred hundred").map((c) => c.key)).toEqual([]);
+    expect(claimsOf("Raised USD 9,2 hundred hundred. Cut 9,then held it.").map((c) => c.key)).toEqual(["money:usd:9", "num:9"]);
+    // The chain that follows from it, stated as a test so nobody has to take the paragraph's word for it.
+    const unlocated = factSet([entry("R1.1", "Raised USD 9,2 hundred hundred. Cut 9,then held it.")]);
+    expect(checkLine("Raised USD 9.", "R1.1", ["R1.1"], unlocated)).toEqual([]);
+    const located = factSet([entry("R1.1", "Raised USD 9,2 hundred hundred.")]);
+    expect(checkLine("Raised USD 9.", "R1.1", ["R1.1"], located).map((f) => [f.level, f.code])).toEqual([["review", "value-unknown"]]);
+  });
+
   it("still suppresses and still reports the ambiguous comma D-053 was written for", () => {
     // The case the patch was right about, unchanged: the digits after the comma are consumed by the word
     // machinery, "usd 9" is left behind, and it is neither read as a value nor passed over in silence.

@@ -3,6 +3,7 @@ import type { ResumeFacts } from "@/server/match/profile";
 import { baseResume, factEntries } from "./resume";
 import { readNumbers } from "./normalise";
 import type { FactEntry } from "./resume";
+import { claimsOf } from "./claims";
 import { actionable, checkLine, factSet, normaliseNumbers, validateChangeSet, valuesOf } from "./validate";
 
 /*
@@ -84,13 +85,14 @@ describe("normaliser", () => {
     expect(normaliseNumbers("team of six.")).toBe("team of 6 .");
   });
   it("leaves a phrase the grammar cannot read as its words and reports it", () => {
-    expect(readNumbers("five thousand two million")).toEqual({ text: "five thousand two million", unreadable: ["five thousand two million"] });
-    expect(readNumbers("two million thousand dollars")).toEqual({ text: "two million thousand dollars", unreadable: ["two million thousand"] });
-    expect(readNumbers("one million hundred")).toEqual({ text: "one million hundred", unreadable: ["one million hundred"] });
+    expect(readNumbers("five thousand two million")).toEqual({ text: "five thousand two million", unreadable: ["five thousand two million"], unreadableSpans: [[0, 25]] });
+    expect(readNumbers("two million thousand dollars")).toEqual({ text: "two million thousand dollars", unreadable: ["two million thousand"], unreadableSpans: [[0, 20]] });
+    expect(readNumbers("one million hundred")).toEqual({ text: "one million hundred", unreadable: ["one million hundred"], unreadableSpans: [[0, 19]] });
     expect(readNumbers("eight teams").unreadable).toEqual([]);
+    expect(readNumbers("eight teams").unreadableSpans).toEqual([]);
   });
   it("review four, finding 7: a tens word takes a units word under ten only, digits scale a hundred, every separator drops, and a sign stays", () => {
-    expect(readNumbers("twenty ten teams")).toEqual({ text: "twenty ten teams", unreadable: ["twenty ten"] });
+    expect(readNumbers("twenty ten teams")).toEqual({ text: "twenty ten teams", unreadable: ["twenty ten"], unreadableSpans: [[0, 10]] });
     expect(normaliseNumbers("2 hundred users")).toBe("200 users");
     expect(normaliseNumbers("1,234,567,890,123 rows")).toBe("1234567890123 rows");
     expect(normaliseNumbers("achieved -11 percent growth")).toBe("achieved -11 percent growth");
@@ -209,6 +211,62 @@ describe("the lookup is profile wide, not against the cited facts", () => {
     expect(hard("Oversight of four managers and two analysts")).toEqual([]);
     // The same claim opened by a verb the list knows is not flagged at all.
     expect(review("Oversaw four managers and two analysts")).toEqual([]);
+  });
+});
+
+describe("a span the normaliser could not read supplies no value at all", () => {
+  /*
+   * The seventh review's finding 4, reproduced before the fix. A span was marked uncertain and then read anyway:
+   * "Raised USD 9,2 million" reported "9,2 million" as unreadable and still produced money:usd:9 and num:2000000.
+   * Two figures nobody wrote, arriving as confirmed evidence on the fact side and as fabrications on the line side.
+   * Marking a span and harvesting it is worse than either alone. Finding 5 is the same defect on the generated
+   * side: a hard value-unknown derived from a span the parser could not read.
+   */
+
+  const entry = (id: string, text: string): FactEntry => ({ id, text, kind: "employment", role: "R1", source: FROM_RESUME });
+
+  it("emits no claim from a decimal comma span, and none from a word number the grammar could not read", () => {
+    expect(claimsOf("Raised USD 9,2 million in Series B").map((c) => c.key)).toEqual([]);
+    expect(claimsOf("Grew revenue five thousand two million").map((c) => c.key)).toEqual([]);
+    // The same text written unambiguously is read as usual.
+    expect(claimsOf("Raised USD 9.2 million in Series B").map((c) => c.key)).toEqual(["money:usd:9200000"]);
+  });
+
+  it("reads every other number in the same text, so one bad span does not silence a fact", () => {
+    expect(claimsOf("Cut costs 11 percent and raised USD 9,2 million").map((c) => c.key)).toEqual(["pct:11"]);
+    expect(claimsOf("Joined in twenty ten and managed 6 analysts").map((c) => c.key)).toEqual(["num:6"]);
+    // A genuine thousands separator is not a span at all and is read normally.
+    expect(claimsOf("a study of 2,000 customers that lifted ARPU 6 percent").map((c) => c.key)).toEqual(["num:2000", "pct:6"]);
+  });
+
+  it("the intended amount is held when its source is ambiguous, rather than rejected", () => {
+    // The fact carries the ambiguous amount; the line states it cleanly. The line's value matches nothing, and
+    // D-040 holds it because the profile carries an unreadable phrase. It is not a fabrication and is not rejected.
+    const facts = factSet([entry("R1.1", "Raised USD 9,2 million in Series B."), entry("R1.2", "Closed 3 rounds.")]);
+    const found = checkLine("Raised USD 9.2 million in Series B.", "R1.1", ["R1.1"], facts).filter((f) => f.code === "value-unknown");
+    expect(found.map((f) => f.level)).toEqual(["review"]);
+  });
+
+  it("the fragments from that source do not pass as confirmed values", () => {
+    // This is the half that matters most. Before the fix the fact above contributed money:usd:9 and num:2000000, so
+    // a line inventing either of them was waved through as supported by the profile. Both are unknown now.
+    const facts = factSet([entry("R1.1", "Raised USD 9,2 million in Series B."), entry("R1.2", "Closed 3 rounds.")]);
+    expect(facts.all.map((c) => c.key)).toEqual(["num:3"]);
+    for (const invented of ["Raised USD 9 million.", "Served 2000000 customers."]) {
+      const found = checkLine(invented, "R1.1", ["R1.1"], facts).filter((f) => f.code === "value-unknown");
+      expect(found.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("finding 5: no hard value-unknown is derived from a span the parser could not read, and other values on the line still are", () => {
+    // A clean profile, so D-040's demotion is not what is doing the work here: the line's own bad span simply
+    // produces no claim to reject. The readable invention beside it is still rejected.
+    const clean = factSet([entry("R1.1", "Cut costs 11 percent."), entry("R1.2", "Managed 6 analysts.")]);
+    expect(clean.unreadablePhrases).toEqual([]);
+    const found = checkLine("Raised USD 9,2 million and cut costs 40 percent.", "R1.1", ["R1.1"], clean);
+    // Nothing hard from the ambiguous amount; the line is held because the lookup never ran on that phrase.
+    expect(found.filter((f) => f.code === "value-unknown").map((f) => [f.level, f.value])).toEqual([["hard", "pct:40"]]);
+    expect(found.filter((f) => f.code === "number-unreadable").map((f) => f.value)).toEqual(["9,2 million"]);
   });
 });
 

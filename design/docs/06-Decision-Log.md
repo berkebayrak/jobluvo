@@ -132,6 +132,61 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-046. A span the normaliser could not read supplies no value, on either side of the check
+
+The seventh review's findings 4 and 5. The user reproduced finding 4 himself.
+
+**What was wrong, and it is worse than either half alone.** D-040 made an ambiguous numeric
+span report itself as unreadable so a line would be held rather than rejected. It did not stop
+anything reading values out of that span. `readNumbers("Raised USD 9,2 million")` returned the
+phrase as unreadable, and `claimsOf` on the same string returned `money:usd:9` and
+`num:2000000`: two figures nobody wrote, produced by a comma the code had just declared it
+could not interpret.
+
+Those figures then did real work in both directions. On a **fact** they stood as confirmed
+evidence, so a tailored line inventing "USD 9 million" was supported by the profile. On a
+**line** they were fabrications the check could reject, which is finding 5: a hard
+`value-unknown` derived from a span the parser could not read.
+
+**Marking a span uncertain and then harvesting it is the worst of the three options**, because
+the fragments arrive downstream looking exactly like values somebody wrote. The comment in
+`normalise.ts` said "nothing below tries to give it a value", which was false when it was
+written, and it was in our own materials saying so.
+
+**The rule.** `readNumbers` now returns `unreadableSpans`, the character ranges in its own
+output that an unreadable phrase covers, and `claimsOf` emits no claim that overlaps one.
+Overlap rather than containment, because a currency match starts before the digits it reads:
+`usd 9` begins outside the span and ends inside it.
+
+| Text | Claims before | Claims now |
+|---|---|---|
+| "Raised USD 9,2 million in Series B" | `money:usd:9`, `num:2000000` | none |
+| "Grew revenue five thousand two million" | none | none |
+| "Cut costs 11 percent and raised USD 9,2 million" | `pct:11`, `money:usd:9`, `num:2000000` | `pct:11` |
+| "Joined in twenty ten and managed 6 analysts" | `num:6` | `num:6` |
+| "a study of 2,000 customers that lifted ARPU 6 percent" | `num:2000`, `pct:6` | `num:2000`, `pct:6` |
+
+**Numbers elsewhere in the same text still count.** One bad span does not silence a fact, which
+is the line between this and the blunt alternative of discarding any text with an unreadable
+phrase in it. The tests assert both directions on purpose: the intended amount is held when its
+source is ambiguous, and the fragments from that source do not pass as confirmed values.
+
+**Finding 5 needs no separate rule.** A line's ambiguous span now produces no claim, so there
+is nothing for `value-unknown` to be derived from, and `number-unreadable` still holds the line
+because the lookup did not run on that phrase. Other values on the same line are read normally
+and can still reject: `validate.test.ts` asserts that "Raised USD 9,2 million and cut costs 40
+percent" on a clean profile yields exactly one hard finding, on `pct:40`.
+
+**Measured before shipping, and nothing moves.** Stored packets read the same, 83 ready, 22
+held, 2 invalid. The 80 saved answers read the same, 74 ready, 6 held, 0 invalid, with the same
+two findings firing. The 30 false lines are flagged the same, 8 of 30. No live profile or line
+carries an ambiguous comma or an unreadable word number, so this is a correctness fix for data
+nobody has uploaded yet, exactly as D-040 was, and it should not be quoted as an improvement to
+any number.
+
+`VALIDATOR_REVISION` is `2026-09-19.r10`. The restamp that writes it is applied from merged
+code and reported with it.
+
 ### D-045. D-038 is extended to the attempt that produced nothing, and the tests stop asserting the deletion
 
 The seventh review's finding 1, which the user reproduced and verified. D-038 said a rejection

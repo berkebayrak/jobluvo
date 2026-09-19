@@ -27,6 +27,14 @@
  * told from the text, and guessing either way invents a value the user did not
  * write, so the phrase is reported as unreadable and the caller holds the line
  * instead of rejecting it (D-040).
+ *
+ * The seventh review, finding 4: reporting the span and then reading values out
+ * of it anyway is worse than either alone. "USD 9,2 million" was marked
+ * unreadable and still yielded USD 9 and 2000000, two figures nobody wrote,
+ * which then stood as confirmed evidence on the fact side and as fabrications
+ * on the line side. `unreadableSpans` says where in `text` each such phrase
+ * sits, and `claimsOf` emits nothing that overlaps one. Numbers elsewhere in
+ * the same text are untouched: one bad span does not silence a fact (D-046).
  */
 
 const UNITS = new Map<string, number>([
@@ -45,8 +53,16 @@ export const fmt = (n: number) => {
 export interface NumberReading {
   /** The text with every readable number in digits. */
   text: string;
-  /** Number phrases the grammar could not read, left as their words in `text`. */
+  /** Number phrases the grammar could not read, worded as a person would read them back. */
   unreadable: string[];
+  /**
+   * Where those phrases sit in `text`, as half open character ranges. A value
+   * that overlaps one is not a value: the span could not be read, so nothing
+   * taken out of it is evidence of anything (D-046). The ranges are in the
+   * coordinates of `text`, not of the input, and they are what `claimsOf`
+   * filters on.
+   */
+  unreadableSpans: [number, number][];
 }
 
 /**
@@ -68,7 +84,9 @@ export function readNumbers(text: string): NumberReading {
   t = t.replace(/(?<=\d),(?=\d{3}(?:,\d{3})*(?!\d))/g, "");
   // Whatever commas are left between digits were not separators. The scale word after one is taken with it, so the
   // phrase reads as it was written: "9,2 million", not "9,2". Nothing below tries to give it a value.
-  // Longest scale word first, so the phrase is reported as it was written: "9,2 million", not "9,2 m".
+  // Longest scale word first, so the phrase is reported as it was written: "9,2 million", not "9,2 m". This is the
+  // wording a person reads; where it lands in the output is worked out at the end, because the pipeline below
+  // rewrites the text around it.
   const commas = [...t.matchAll(/\d+(?:,\d+)+(?:\s?(?:million|billion|thousand|mn|bn|k|m|b))?/g)].map((m) => m[0]);
   // A hyphen before a digit that follows nothing alphanumeric is a sign, "-11 percent", and stays. Every other hyphen carries no value:
   // "3-year", "three-year", "two-thirds", "2019-2023" all open up. The one in a YYYY-MM date stays.
@@ -193,5 +211,14 @@ export function readNumbers(text: string): NumberReading {
   }
   if (pendingAnd) phrase.pop();
   flush();
-  return { text: out.join("").replace(/\s+/g, " ").trim(), unreadable: [...commas, ...unreadable] };
+  const output = out.join("").replace(/\s+/g, " ").trim();
+  // Where each unreadable phrase sits in the text that comes out, so a caller can refuse to read values out of it.
+  // A word number phrase survives the pipeline as its own words, so it is found by looking for it. A comma run does
+  // not survive as it was written, because the scale word after it is expanded, but the comma itself is still there
+  // and the run around it is the span: "9,2 million" leaves "9,2000000", and that whole token is the span (D-046).
+  const spans: [number, number][] = [...output.matchAll(/\d+(?:,\d+)+/g)].map((m) => [m.index!, m.index! + m[0].length] as [number, number]);
+  for (const phrase of unreadable) {
+    for (let i = output.indexOf(phrase); i >= 0; i = output.indexOf(phrase, i + phrase.length)) spans.push([i, i + phrase.length]);
+  }
+  return { text: output, unreadable: [...commas, ...unreadable], unreadableSpans: spans };
 }

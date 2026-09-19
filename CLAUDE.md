@@ -192,8 +192,8 @@ added that is not on your profile."
   one door and it serves a `ready` packet only, so the status is what stops a rejected
   document, not its absence. Do not add a path that clears a resume to stop it being used.
 - Never say or imply that Jobluvo verifies a tailored resume is truthful. It does not.
-  Measured over 30 known false lines: **8 are flagged, 4 of them rejected and 4 held**, and
-  22 pass. Of a second author's 14, none is flagged at all. Say "flagged", not "caught": a
+  Measured over 32 known false lines: **8 are flagged, 4 of them rejected and 4 held**, and
+  24 pass. Of a second author's 14, none is flagged at all. Say "flagged", not "caught": a
   held line is not a caught fabrication, because nobody has decided any of them yet.
   `npm run probe-cheap-check` reproduces that, and `pairs.test.ts` records it, which no
   longer asserts the old "28 of 28". The hand written check is a placeholder until the

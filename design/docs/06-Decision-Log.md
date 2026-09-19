@@ -132,6 +132,68 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-060. Four comments and a claim are made to match the code, and the ninth review's remaining findings are placed
+
+The ninth review's item 6 and its placements. No behaviour changes in this entry. Every correction
+is made **where the relevant code is**, so a reader hits it before they hit the decision log.
+
+**1. `replay.ts`'s introductory rules described a file it has stopped being.** Three of them:
+
+| It said | What the code does |
+|---|---|
+| a failed packet is not replayed, because it has no candidate | a failed row **with** a candidate is replayed, read, validated and held (D-050) |
+| a packet with no stored resume needs a new run | it rebuilds from its own stored change set (D-037), or is repaired from an offered document its own changes reproduce (D-043) |
+| a revocation drops the resume | the document is kept and the status is what stops it being served (D-038) |
+
+All three are the file's own history read as its present tense, which is the failure mode of a
+comment that is edited by addition. Corrected in place, each naming the decision that moved it.
+
+**2. `consumableResume` said an invalid or failed packet has no resume.** Three ways it can have
+one, all of them deliberate: a rejection blocks a document and does not delete it (D-038), an answer
+that parsed and threw the validator keeps its document on a `failed` row (D-045), and a run that
+produced nothing leaves the previous run's document where it is (D-051). That is precisely why the
+function is a status test and not a null test, so the comment was undermining the thing it described.
+
+**3. The cost summary said `pairs.test.ts` asserts nothing about the 32 unsupported lines.** It
+asserts one thing: `STILL_CAUGHT` names **8 of the 32 by their text** and the test fails if any of
+those 8 comes back `ready`. The same sentence already said the file "names the lines the invention
+check still rejects", so the page contradicted itself within a clause. The exception is stated: a
+floor under the 8 that are flagged today, nothing about the other 24.
+
+**4. D-041's absolute rate claim** is corrected by D-058 in this same round and is not repeated here.
+
+**The placements.**
+
+- **The ninth review's findings 2 and 3** go to **phase 1 item 21**, which stops being the stale
+  writer alone and becomes the packet write under a second writer, in three parts. Finding 2 is a
+  concurrent success inserted between the update and the insert and overwritten with nulls by the
+  second statement, which equal input hashes do not prevent and a transaction does not fix, because
+  an absent row gives nothing to lock; the fix is **an atomic decision against the row as seen at
+  conflict time**. Finding 3 is the preservation branch matching a row that holds no artifact at
+  all, so a failure after a failure keeps an earlier failure's labels and wears this one's error.
+  Both need one user with concurrent or repeated runs, and there is one user and no concurrency.
+
+  **And the comment over that write is corrected in the item rather than left standing.** "The row
+  either keeps all of them or none" is true of **each statement** and false of **the operation**:
+  between the two, the row can change, and what the pair does to a row that appeared in the gap is
+  neither.
+
+- **The ninth review's finding 10 corrects phase 1 item 24** rather than adding to it, and the guard
+  is still not built. Two corrections and a deletion. The factual line was wrong: **both hashes are
+  available before the call**, and what is missing is a lookup of the existing packet before it.
+  The reuse condition was wrong: both hashes and the validator revision say the inputs and the rules
+  have not moved, and **do not say the request is the same request**; a regenerate, a different model
+  and a new prompt configuration all satisfy them while deserving a fresh call. So the item now
+  separates **a repeated delivery of the same request** from **a request for another generation**,
+  and names the settings that take part: the two hashes, the validator revision, the model and the
+  prompt revision. And the reassurance that two scripts are the only callers is deleted, because
+  either script can be rerun over the same job.
+
+  **The trigger is unchanged and its reasoning is not.** It stays at the signed-in product, but not
+  because nothing can call tailoring twice today. It is who is pressing and whether they can see the
+  cost: an operator holding a job list can count the calls before making them, and a user with a
+  regenerate button cannot.
+
 ### D-059. The sticky hold says the original assessment failed, rather than that nothing has assessed the document
 
 The ninth review's finding 7. **The policy is right and stays exactly as it is.** A row whose
@@ -812,9 +874,38 @@ documentation only and no prompt carries it, which is why it survived a round of
     or consume the characters they covered. One hole is closed and tested; the class is open, and
     closing it means carrying offsets through the separator strip, the hyphen rules, the suffix
     expansion and the tokeniser.
-21. **The stale writer.** The eighth review's finding 2. The ownership work already deferred, and
-    it needs one user with concurrent runs to bite, which is why it waits rather than being
-    forgotten.
+21. **The packet write under a second writer.** The ownership work already deferred, now three
+    findings rather than one. All three need one user with concurrent or repeated runs to bite, and
+    there is one user and no concurrency, which is why they wait rather than being forgotten.
+
+    a. **The stale writer.** The eighth review's finding 2.
+
+    b. **A concurrent success is overwritten between the two statements.** The ninth review's
+       finding 2. When a run produces no document it first updates the row's execution columns, and
+       if that matches nothing it falls through to the insert, whose conflict branch writes `resume`
+       and every other artifact column as null. A successful execution that lands **between those two
+       statements** is destroyed by the second one. Equal input hashes do not prevent it, because the
+       update ran when there was no row to match, and a transaction alone does not fix it either,
+       since an absent row gives nothing to lock.
+
+       **The fix is an atomic decision against the row as seen at conflict time**, not two statements
+       in sequence: the conflict branch has to look at what is there and decide whether to keep the
+       artifact, rather than assuming the earlier miss is still true.
+
+       **A correction to the comment that stands over that code.** It says the write is two
+       statements rather than one conditional upsert "because the condition is the same for every
+       artifact column and the row either keeps all of them or none". That is true of **each
+       statement** and it is not true of **the operation**: between the two, the row can change, and
+       what the pair does to a row that appeared in the gap is neither keep-all nor keep-none. The
+       comment describes the statements and was being read as describing the operation.
+
+    c. **The preservation branch matches a row that holds no artifact at all.** The ninth review's
+       finding 3. The update is guarded on the user, the job and the two hashes, and on nothing about
+       what the row is holding. So a failure after a failure "preserves" an empty artifact: the row
+       keeps the first execution's `attempts`, `run`, `model`, `attempt` and validator revision, and
+       wears the second execution's error. Nothing is lost, because there was nothing to lose, and
+       the row then describes a run that produced nothing under the labels of an earlier run that
+       also produced nothing.
 22. **The probe implements the old retention policy**, the eighth review's finding 6, and the
     distinction it draws is kept because it is the useful part: **the frozen historical sample
     keeps its historical selection**, since changing how a 2026-09-18 sample is read would make
@@ -854,12 +945,17 @@ documentation only and no prompt carries it, which is why it survived a round of
     pays for a fresh one.** A cost item, not a correctness one, and that distinction decides
     both when it is due and what the guard is allowed to do.
 
-    What is true today, read rather than assumed: `tailorJob` reads the facts hash and the
-    content hash **only after the call**, once at line 374 to decide what a failed run may keep
-    (D-051) and again to write them onto the row. Nothing queries the packets table before
-    `tailorCall`. The only callers are `scripts/tailor-sample.ts` and `scripts/tailor.ts`; there
-    is **no product path that calls tailoring at all**, let alone twice, because submission is
-    not built and no regenerate button exists for a user to press.
+    What is true today, read rather than assumed, **and corrected on 19 September 2026 by the ninth
+    review's finding 10.** The version that stood here said `tailorJob` reads the facts hash and the
+    content hash only after the call. That is wrong about the hashes: **both are available before it**,
+    `facts.factsHash` on the input and `job.contentHash` read into a local at the top of the function.
+    What is missing is not the hashes but **a lookup of the existing packet before the call**: nothing
+    queries the packets table until after `tailorCall` has been paid for.
+
+    **The reassurance that stood beside it is dropped.** It said the only callers are
+    `scripts/tailor-sample.ts` and `scripts/tailor.ts` and that no product path calls tailoring at
+    all, as though that bounded the exposure. It does not. **Either script can be run twice**, over
+    the same job, and that is the whole of the case this item describes.
 
     **What the guard may serve, and this is the half a later reader would get wrong.** It may
     skip the call **only when the stored packet would actually be served**, which is what
@@ -869,17 +965,32 @@ documentation only and no prompt carries it, which is why it survived a round of
     document so a person could act on it, not so the system could cite it as a reason never to
     produce another. The guard is an optimisation for the `ready` case and for nothing else.
 
-    **What counts as unchanged, and it is three things rather than two.** Both hashes, the facts
-    and the posting text, **and the validator revision**. A packet stamped under older rules is
-    re-examined rather than served on the strength of having once passed. A restamp is not the
-    same thing as a fresh answer: it re-reads a stored document under today's rules and says
-    what it now thinks of it, which is a different question from what the model would write
-    today, and neither substitutes for the other.
+    **What counts as unchanged, and it is a question with two halves rather than a list.** Corrected
+    19 September 2026 (finding 10): **both hashes and the validator revision are not enough to decide
+    reuse.** They say the inputs and the rules have not moved. They do not say the request is the same
+    request, and three things satisfy all three conditions while deserving a fresh call: a user
+    pressing regenerate, a different model, and a new prompt configuration.
 
-    **The trigger.** Due before any path exists that can call tailoring twice, which is **the
-    signed-in product rather than the paid run**. A paid run is a script with a job list and
-    does not press anything twice; a regenerate button is the obvious thing a user presses
-    twice, and by then the spend is already going out.
+    So the item must separate the two:
+
+    - **a repeated delivery of the same request**, which may be served from the stored packet;
+    - **a request for another generation**, which must never be, whatever the hashes say.
+
+    And it must name which settings take part in the decision rather than leaving them implied. The
+    inputs, the facts hash and the posting content hash. The rules, the validator revision, so a packet
+    stamped under older rules is re-examined rather than served on the strength of having once passed.
+    **And the configuration: the model and the prompt revision**, because a packet produced by a
+    different model or a different prompt is not an answer to today's question at all. A restamp is
+    not a substitute for any of this: it re-reads a stored document under today's rules and says what
+    it now thinks of it, which is a different question from what the model would write today.
+
+    **The trigger, unchanged: the signed-in product rather than the paid run.** The reason is not
+    that nothing can call tailoring twice today, which is what the dropped paragraph above implied
+    and is false: either script can be rerun over the same job. It is **who is pressing and whether
+    they can see the cost.** A rerun of a script is a deliberate act by an operator holding the job
+    list, who can count the calls before making them. A regenerate button is pressed by a user who
+    cannot, as often as they like, and by the time anybody reads the total the spend has gone out.
+    The guard is worth its complexity at the second of those and not at the first.
 25. **The rest of the current state inconsistencies**, the eighth review's finding 9 less the
     revision label, which is fixed rather than placed (D-054).
 26. **An execution identity on the packet row, and the attempt identities inside it.** From D-058,

@@ -85,9 +85,17 @@ export type AttemptOutcome = "ready" | "needs_review" | "invalid" | "failed";
 /**
  * The one door a packet's resume leaves through. Only a ready packet's
  * resume may be handed to anything downstream; a needs_review packet keeps
- * its resume for the review screen and nothing else, an invalid or failed
- * one has none. Submission does not ship before the screen that resolves a
- * held packet exists (D-017).
+ * its resume for the review screen and nothing else. Submission does not
+ * ship before the screen that resolves a held packet exists (D-017).
+ *
+ * **An invalid or a failed packet may have a resume too, and this comment
+ * used to say it had none** (the ninth review's item 6). A rejection blocks
+ * a document and does not delete it (D-038); an answer that parsed and
+ * threw the validator keeps its document on a `failed` row (D-045); and a
+ * run that produced nothing leaves the previous run's document where it is
+ * (D-051). That is the whole reason this function is a status test and not
+ * a null test: the status is what stops a document being served, and the
+ * absence of a document is not.
  */
 export function consumableResume(p: { status: string; resume: ResumeDocument | null }): ResumeDocument | null {
   return p.status === "ready" ? p.resume : null;

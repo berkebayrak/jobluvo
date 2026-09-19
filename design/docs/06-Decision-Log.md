@@ -132,6 +132,44 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-070. The sticky hold is read the same way as every other derived finding, and the ordering that makes it work is asserted
+
+The tenth review's item A. **The reviewer's worry was wrong and the gap he found next to it was real**,
+which is the useful shape of the finding.
+
+**The worry.** That `retainedFindings` filters derived findings away, so `assessment-not-run` could be
+dropped before it is re-derived and the row promoted. **It cannot.** `neverAssessed` reads
+`row.findings` directly, and it does so **before** the retention filter runs in the array literal
+below it. The user verified the ordering against the code and so did I.
+
+**The gap.** Nothing asserted that ordering. It is the kind of thing a later edit rearranges without
+noticing, and the whole point of the finding it protects is that a row whose assessment failed is
+never promoted by a report. **Five passes now, not two**, each feeding the decision back onto the row,
+because "sticky" is a claim about every later pass rather than about the second one: the row stays
+held, the reason is present exactly once on every pass, and the document stays.
+
+The test also asserts the half D-059 recorded and nothing checked: **a person moving the status to
+`ready` by hand does not clear it**, because the finding is still on the row and re-derives. Clearing
+it takes removing the finding as well.
+
+**The two reads are consistent.** `neverAssessed` read `f.code` directly while `isDerived` read through
+`codeOf`. Same field, same purpose, two ways of asking, which is a difference waiting to matter. Both
+go through `codeOf` now.
+
+**`LEGACY` has no entry for this finding's old message, and that is the answer rather than an
+omission.** A row carrying D-059's old wording with no code would not be recognised. **No such row can
+exist**: the finding has carried its code since the day it was written, and zero rows carry it at all
+today, read 19 September 2026. An unreachable case gets an explanation of why it cannot occur, not
+defensive code that outlives the reason for it. That was the user's instruction and it is the right
+rule: a `LEGACY` entry added for a case that cannot happen is a line nobody can ever delete, because
+nobody can prove it is safe to.
+
+**Proved by breaking it**: with the re-derivation removed, four tests fail, the first with
+`expected 'ready' to be 'needs_review'`, which is the promotion the stickiness exists to stop.
+
+**Nothing stored moves.** No rule changed and no revision bumped. **The stored state remains 83 ready,
+22 held and 2 invalid, 105 rows at `2026-09-19.r11` and 2 at `2026-09-18.r6`.**
+
 ### D-069. The evaluation cells become a partition, three rationales are corrected, and "guarantee" comes out of the source comments
 
 The tenth review's items 6 to 9, run together because they are documents and comments. **One of them

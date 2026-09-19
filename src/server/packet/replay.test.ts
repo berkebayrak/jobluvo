@@ -282,6 +282,35 @@ describe("replay decision", () => {
     expect(d.kind === "restamp" && d.findings.map((f) => f.code)).toEqual(["assessment-not-run"]);
   });
 
+  it("holds an unresolved row on every successive replay, once, and never loses the reason", () => {
+    /*
+     * The tenth review's item A. The concern was that `retainedFindings` drops derived findings, so the sticky
+     * hold might be filtered away before it is re-derived and the row promoted. **It cannot**: `neverAssessed`
+     * reads `row.findings` before the retention filter runs. The ordering was already right and nothing asserted
+     * it, which is the actual gap.
+     *
+     * Five passes rather than two, each feeding the decision back onto the row, because "sticky" is a claim about
+     * every later pass and not about the second one.
+     */
+    let row_: ReplayRow = row({ status: "failed", resume: doc, findings: [], changeSet });
+    for (let pass = 1; pass <= 5; pass += 1) {
+      const d = replayDecision(row_, [], doc);
+      expect(`pass ${pass}: ${d.kind}`).toBe(`pass ${pass}: restamp`);
+      const findings = d.kind === "restamp" ? d.findings : [];
+      // Held, with the reason present exactly once however many times the row has been read.
+      expect(`pass ${pass}: ${d.kind === "restamp" ? d.status : ""}`).toBe(`pass ${pass}: needs_review`);
+      expect(`pass ${pass}: ${findings.filter((f) => f.code === "assessment-not-run").length}`).toBe(`pass ${pass}: 1`);
+      expect(`pass ${pass}: ${d.kind === "restamp" && d.resume ? "document" : "none"}`).toBe(`pass ${pass}: document`);
+      row_ = { ...row_, status: d.kind === "restamp" ? d.status : row_.status, findings };
+    }
+    // A person moving the status by hand does not clear it: the finding is still on the row and re-derives.
+    const byHand = replayDecision({ ...row_, status: "ready" }, [], doc);
+    expect(byHand).toMatchObject({ kind: "restamp", status: "needs_review" });
+    // Clearing it means removing the finding as well, and then only because the row is no longer `failed`.
+    const cleared = replayDecision({ ...row_, status: "ready", findings: [] }, [], doc);
+    expect(cleared).toMatchObject({ kind: "restamp", status: "ready" });
+  });
+
   it("does not replay a failed packet: an empty change set is no answer, not a clean one", () => {
     expect(replayDecision(row({ status: "failed", resume: null, resumeHash: null }), [], null)).toEqual({ kind: "no_candidate" });
   });

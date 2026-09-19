@@ -132,11 +132,24 @@ const KNOWN: ReadonlySet<string> = new Set(FINDING_CODES);
  * of its sections describe a check the current validator does not perform
  * (D-067).
  *
- * **This list cannot drift.** `codes.test.ts` derives the written set by
- * scanning the sources and fails if the declared codes minus the written ones
- * are not exactly these. A rule withdrawn without being added here fails the
- * build, which is the only way a report stops quietly describing a check
- * nobody runs.
+ * **This set is declared by hand. What is derived is the test.**
+ * `codes.test.ts` scans the sources for the codes this build actually writes
+ * and fails if the declared codes minus the written ones are not exactly
+ * these, so a rule withdrawn without being added here fails the build.
+ *
+ * **Its coverage is the files and the syntax the scan recognises**, which is a
+ * quoted lower case string on a line after `code:`. A producer it cannot see,
+ * a code assembled from a variable or spread from an object, is outside it.
+ *
+ * **An unrecognised producer usually makes the test fail**, and loudly: the
+ * code drops out of the written set, so the declared minus written list gains
+ * it and the equality breaks.
+ *
+ * **One case passes in silence, and it is the one to remember. A code already
+ * listed here that later gains a producer the scan cannot see.** The written
+ * set still lacks it, the equality still holds, and the report goes on calling
+ * a live rule retired with nothing objecting. `value-not-in-cited` is in this
+ * set today, so that is a real shape rather than a hypothetical.
  */
 export const RETIRED_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
   "wrong-role",

@@ -278,11 +278,32 @@ defect as the unexplained zero pointed the other way.
    inline between two current sections. A historical section sitting between two live ones is read as
    live however it is labelled.
 
-**The retired set is derived, not listed by hand.** `RETIRED_CODES` is in `codes.ts`, and
-`codes.test.ts` computes the written set by scanning the sources and fails if the declared codes less
-the written ones are not exactly that set. **A rule withdrawn without being added there fails the
-build.** That is the only thing that stops the report drifting back into describing a check nobody
-runs, which is what it had done three times over.
+**`RETIRED_CODES` is declared by hand in `codes.ts`. What is derived is the test.**
+`codes.test.ts` scans the sources for the codes this build actually writes and fails if the declared
+codes less the written ones are not exactly that set, so **a rule withdrawn without being added there
+fails the build.** That is what stops the report drifting back into describing a check nobody runs,
+which is what it had done three times over.
+
+**The coverage is the files and the syntax the scan recognises**, which is a quoted lower case string
+on a line after `code:`. A producer it cannot see, a code assembled from a variable or spread from an
+object, is outside it.
+
+**An unrecognised producer usually makes the test fail, and loudly**: the code drops out of the
+written set, the declared minus written list gains it, and the equality breaks.
+
+**One case passes in silence, and it is the half a later reader needs. A code already in
+`RETIRED_CODES` that later gains a producer the scan cannot see.** The written set still lacks it, so
+the equality still holds and the disjointness check passes for the same reason, and the report goes on
+calling a live rule retired with nothing objecting. **`value-not-in-cited` is in that set today**, so
+this is a real shape and not a hypothetical.
+
+*(Both halves corrected 19 September 2026 on the user's reading. This paragraph opened "the retired
+set is derived, not listed by hand" and then described the real mechanism in its next sentence, so it
+contradicted itself inside one paragraph; `codes.ts` said "this list cannot drift", which asserts an
+impossibility where the log at least named a mechanism. **And the limit was first stated backwards by
+both of us**: a live code whose producer the scan cannot see was said to read as retired without
+anything failing, which is false, because it fails the equality. The silent case is the narrower one
+above.)*
 
 **The two live sections that were message keyed are now keyed by code**: names by `name-unknown`,
 posting words by `posting-word-unknown`. The mislabelled sample is now `number-unreadable` under its

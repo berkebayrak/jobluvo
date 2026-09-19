@@ -31,6 +31,11 @@ what the sixth review found.
 | needs_review | 22 | 2026-09-19.r11 | 22 |
 | invalid | 2 | 2026-09-18.r6 | 0 |
 
+**A restamp is pending and has not run. Until it does, this table is the stored state**, and any
+figure from `npm run validator-report` is **what a restamp would write, not what is there** (D-064).
+As of 19 September 2026 the report projects 81 ready and 24 held; the rows say 83 and 22. Quote the
+table, and say "would write" for the other pair.
+
 Two restamps produced this, both applied 19 September 2026 from merged code. The r9 restamp
 (D-040) wrote 101 rows and **changed no status**, which is what it was expected to do. The
 repair (D-043) then wrote 105 rows and changed four: the four rejected rows whose document

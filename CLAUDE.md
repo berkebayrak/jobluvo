@@ -198,6 +198,12 @@ added that is not on your profile."
   `npm run probe-cheap-check` reproduces that, and `pairs.test.ts` records it, which no
   longer asserts the old "28 of 28". The hand written check is a placeholder until the
   checking model call of D-036 is built; it is not the design.
+- **A repaired row's document is consistent with the row, not proven to be its own (D-048).**
+  `--repair-from` accepts a document only when the row's stored changes reproduce it, which is a
+  compatibility check and not an identity one: any document those changes could produce would
+  pass. The `resume-repaired` finding does not survive a replay and is already gone from all four
+  repaired rows. Say "consistent with", never "verified as". Real provenance is phase 1 item 19
+  and happens before any repair touches a real user's row.
 - **The current state of the stored packets lives in one place**, the
   `Current state, 19 September 2026` section at the top of
   `design/docs/07-Phase-0-Cost-Summary.md`. Every other figure on that page keeps its date

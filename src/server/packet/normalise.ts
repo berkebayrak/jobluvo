@@ -263,10 +263,40 @@ export function readNumbers(text: string): NumberReading {
   for (const phrase of unreadable) {
     for (let i = output.indexOf(phrase); i >= 0; i = output.indexOf(phrase, i + phrase.length)) spans.push([i, i + phrase.length]);
   }
+  /*
+   * A comma phrase is located by its occurrence, not by its leading digits (the tenth review's item 2).
+   *
+   * The first version of this matched `head,[\d,]*` and suppressed every hit, so in
+   * "Ambiguous 2023,4; In 2023,we launched" it suppressed the readable year in the second clause for sharing a
+   * head with the ambiguous run in the first. The invariant on the type was true of the head digits and false of
+   * the occurrence, which is the same mistake D-053 made in a different place: a pattern written for one case
+   * matching a class.
+   *
+   * Two steps, and neither of them guesses:
+   *
+   * 1. **A surviving run, `head,` followed by digits.** A digit, a comma and a digit in the output is the
+   *    signature of a comma the thousands strip refused, and every one of those is in `commas`. "9,2 million"
+   *    leaves "9,2000000"; "2023,4" leaves "2023,4". Suppressed.
+   * 2. **The wreckage, a bare `head,`, only when it is the one such occurrence in the output.** This is the case
+   *    D-053 was written for: in "9,2 hundred hundred" the word machinery takes the 2 and leaves "9,". One
+   *    occurrence and one phrase is not a guess about which is which. Two occurrences is, so nothing is
+   *    suppressed rather than a readable number being taken with the unreadable one.
+   *
+   * What step 2's guard costs is real and is not hidden: a phrase this cannot locate is reported and its
+   * fragments are read, so "usd 9" can enter the claims. That is the residual D-055 already named, reached by
+   * one more path, and it is the pass direction rather than the reject direction. The fix for the class is
+   * carrying offsets through the rewrite, phase 1 item 20, and it stays deferred.
+   */
   for (const phrase of commas) {
     const head = /^\d+/.exec(phrase)?.[0];
     if (!head) continue;
-    for (const m of output.matchAll(new RegExp(`(?<![\\d,])${head},[\\d,]*`, "g"))) spans.push([m.index!, m.index! + m[0].length]);
+    const runs = [...output.matchAll(new RegExp(`(?<![\\d,])${head},[\\d,]+`, "g"))];
+    if (runs.length) {
+      for (const m of runs) spans.push([m.index!, m.index! + m[0].length]);
+      continue;
+    }
+    const wreckage = [...output.matchAll(new RegExp(`(?<![\\d,])${head},(?![\\d,])`, "g"))];
+    if (wreckage.length === 1) spans.push([wreckage[0].index!, wreckage[0].index! + wreckage[0][0].length]);
   }
   return { text: output, unreadable: [...commas, ...unreadable], unreadableSpans: spans };
 }

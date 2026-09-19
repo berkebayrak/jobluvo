@@ -132,6 +132,88 @@ more than getting them right quietly.
 
 ## 19 September 2026
 
+### D-063. Suppression is tied to the occurrence, not to leading digits, and what that releases in the pass direction is stated rather than masked
+
+The tenth review's item 2, verified by the user against the code. **D-055's own fix, corrected on the
+same axis it was written to correct**: a pattern written for one case matching a class.
+
+**The defect.** The span was located by the phrase's leading digits, `head,[\d,]*`, and every hit was
+suppressed. So in "Ambiguous 2023,4; In 2023,we launched" the readable year in the second clause was
+suppressed for sharing a head with the ambiguous run in the first. The invariant written on the type,
+"every range here is produced by a phrase in `unreadable`", **was true of the head digits and false of
+the occurrence.**
+
+**What it cost, and both mechanisms, because they are different and get merged into one.** The
+consequence is milder than D-053's and it is still a truthful line made unavailable:
+
+- **On the fact side**, the value is missing from the evidence, so a truthful line stating it matches
+  nothing. `commas` is non-empty on that text, so `unreadablePhrases` is non-empty, so D-040 demotes
+  and the line is **held**, not rejected.
+- **On the line side** the mechanism is not that one at all. The line's own claims are under reported
+  rather than unmatched, so there is nothing for the demotion to soften; `number-unreadable` is what
+  holds it.
+
+Held either way, never rejected, through two different paths.
+
+**The fix, in two steps, neither of which guesses.**
+
+1. **A surviving run**, `head,` followed by digits. A digit, a comma and a digit in the output is the
+   signature of a comma the thousands strip refused, and every one of those is in `commas`.
+2. **The wreckage**, a bare `head,`, **only when it is the one such occurrence in the output.** That
+   is the case D-053 was written for: in "9,2 hundred hundred" the word machinery takes the 2 and
+   leaves "9,". One occurrence and one phrase is not a guess. Two occurrences is, so nothing is
+   suppressed rather than a readable number being taken with the unreadable one.
+
+**What it releases and withholds, measured on this branch against its parent before it ships:**
+
+| Input | Before | After |
+|---|---|---|
+| "Ambiguous 2023,4; In 2023,we launched." | nothing read | `year:2023` released |
+| "In 2023,we launched. Ambiguous 2023,4 teams." | nothing read | `year:2023` released |
+| "Ran 2023,4 and 2023,5 programmes." | nothing read | withheld, both are runs |
+| "Raised USD 9,2 hundred hundred" | nothing read | withheld, D-053's case is unchanged |
+| **"Raised USD 9,2 hundred hundred. Cut 9,then held it."** | **nothing read** | **`money:usd:9` and `num:9` released** |
+| "Raised USD 9,2 million in Series B" | nothing read | withheld |
+| "a study of 2,000 customers…" | read | read |
+| "Managed 4, 5 and 6 teams" | read | read |
+| "In 2023,we launched the pricing review." | read | read |
+
+**The fifth row is a cost and it is not hidden.** `num:9` is a real value the text asserts and is
+correctly released. **`money:usd:9` is a fragment nobody wrote**, admitted as evidence because the
+phrase could not be located and the guard refuses to suppress a readable occurrence beside it. The
+old rule withheld it, and it withheld it by suppressing indiscriminately, which is the behaviour
+being removed.
+
+**The reviewer's second direction, answered rather than reasoned about.** Missing evidence can hold a
+truthful line; the opposite is a fragment admitted as evidence letting a claim pass. **It is
+reachable, and D-040 does not cover it**, because the demotion softens an **unmatched** value and a
+**matched** one produces no finding at all. Reproduced against this module:
+
+| Fact | Evidence it contributes | Line "Raised USD 9." |
+|---|---|---|
+| "Raised USD 9,2 hundred hundred. Cut 9,then held it." | `money:usd:9`, `num:9` | **no finding at all** |
+| "Raised USD 9,2 hundred hundred." | none | `review value-unknown` |
+
+Both rows are asserted in `validate.test.ts`, so the paragraph is not what carries this. **This is the
+pass direction of the residual D-055 already named**, reached by one more path, and this change widens
+the set of inputs on which a phrase goes unlocated. The fix for the class is carrying offsets through
+the rewrite, **phase 1 item 20, which stays deferred on the user's instruction.**
+
+**Stated plainly, because it is a trade and not a pure win.** This removes a certain defect in the
+reject direction, a readable number suppressed, and widens a residual in the pass direction. The
+user's instruction was explicit that a pattern must not be widened to be safe, and the project's own
+rule prefers holding to passing, so the two pull against each other on this one input class. The
+instruction wins here because the reject direction destroys work and this one does not; if that
+reading is wrong the alternative is to suppress every bare `head,` when they cannot be told apart,
+which restores the old over-suppression and is one line.
+
+**Nothing stored can move.** The report is identical on this branch and on its parent: 81 ready, 24
+held, 0 invalid, 2 not promoted. Structurally as well as empirically: **no stored profile fact
+contains a digit followed by a comma and a non space non digit at all**, read 19 September 2026, so
+no comma phrase of this shape exists in the population. **The stored state remains 83 ready, 22 held
+and 2 invalid, 105 rows at `2026-09-19.r11` and 2 at `2026-09-18.r6`.** The 81 and 24 are what a
+restamp would write.
+
 ### D-062. `storedAs` says what was written to the row, because the signal built to replace an inference was inferring
 
 The tenth review's item 1, verified by the user against the code. **It is D-057's own fix being
@@ -595,6 +677,13 @@ phrase is on the list and D-040 then holds rather than rejects, and it is the sa
 as before: the fix is carrying offsets through the rewrite, **phase 1 item 20**, unchanged by this
 entry.
 
+*(Corrected 19 September 2026 by D-063. **"That direction is safe" is wrong, and it is the sentence
+the tenth review's second direction went through.** D-040 softens an UNMATCHED value; a fragment
+admitted as evidence is a MATCHED one, and a matched value produces no finding at all. So an
+unlocated phrase does not hold a line, it can let one pass. D-063 reproduces it and places it. The
+locating rule itself is also corrected there, because it was suppressing readable occurrences that
+merely shared leading digits.)*
+
 **Tested on both sides, with the space and without**, and the chain that ends in the false
 rejection is a test of its own rather than a property left to be inferred: a fact carrying the
 slip, a truthful line stating the same year, and no finding at all. The invariant itself is
@@ -993,11 +1082,24 @@ documentation only and no prompt carries it, which is why it survived a round of
     unresolved judgements and the success rule all frozen before generation.
 19. **Verifiable durable provenance for a repaired row**, from part 1 above, beside the
     reconstruction items. Needed before any repair touches a real user's row.
-20. **Carry the unreadable span through the rewrite instead of rediscovering it.** From D-053.
-    The spans are found by searching the rewritten text, and every pass in `readNumbers` can move
-    or consume the characters they covered. One hole is closed and tested; the class is open, and
-    closing it means carrying offsets through the separator strip, the hyphen rules, the suffix
-    expansion and the tokeniser.
+20. **Carry the unreadable span through the rewrite instead of rediscovering it.** From D-053, and
+    **the pass direction added 19 September 2026 by D-063.** The spans are found by searching the
+    rewritten text, and every pass in `readNumbers` can move or consume the characters they covered.
+    Two holes are closed and tested; the class is open, and closing it means carrying offsets through
+    the separator strip, the hyphen rules, the suffix expansion and the tokeniser.
+
+    **Both directions are now known and they are not equally protected.** A phrase located too
+    widely suppresses a readable value, and that direction is covered: the text reports an unreadable
+    phrase, D-040 demotes, and the line is held. A phrase **not located at all** leaves its fragments
+    in the evidence, and **that direction is not covered by anything**, because D-040 softens an
+    unmatched value and a fragment admitted as evidence is a matched one, which produces no finding.
+    D-063 reproduces the chain: a fact reading "Raised USD 9,2 hundred hundred. Cut 9,then held it."
+    contributes `money:usd:9`, and the line "Raised USD 9." then passes silently.
+
+    **The trigger, which this item did not have before.** It is unreachable on the stored population
+    today, since no stored profile fact carries a comma of this shape, and it becomes reachable the
+    day a real user uploads a resume written with decimal commas, which is most of Europe. **Due
+    before the first upload from a locale that writes numbers that way**, not before the paid run.
 21. **The packet write under a second writer.** The ownership work already deferred, now three
     findings rather than one. All three need one user with concurrent or repeated runs to bite, and
     there is one user and no concurrency, which is why they wait rather than being forgotten.

@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dbPool, endPool, type Tx } from "@/db/client";
 import { jobs, packets, sources, users, type PacketFinding, type ResumeDocument } from "@/db/schema";
-import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, summaryNotRevalidated, unreplayable, unverifiable, type ReplayRow } from "./replay";
+import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, summaryNotRevalidated, unreplayable, unverifiable, type ReplayDecision, type ReplayRow } from "./replay";
 import { resumeHash } from "./resume";
 import { consumableResume } from "./run";
 import { VALIDATOR_REVISION } from "./validate";
@@ -158,6 +158,54 @@ describe("replay decision", () => {
     // Bullets only, no summary: nothing was left unread.
     const noSummary = { ...doc, summary: null };
     expect(replayDecision(row({ resume: noSummary, resumeHash: resumeHash(noSummary) }), [], noSummary)).toEqual({ kind: "restamp", status: "ready", findings: [], resume: noSummary, coverage: "bullets" });
+  });
+
+  /*
+   * D-049, the eighth review's finding 3. A ready row with NO resume and a full change set was revoked to invalid
+   * on one pass and rebuilt to ready on the next, over identical inputs: the revoke is guarded on the row being
+   * ready or held, so once it was invalid the next pass fell past the revoke into the rebuild. The hard finding
+   * that revoked it went with it, because a replay retains only summary findings.
+   *
+   * The seventh review named two cases, a MISSING resume and a MISMATCHED one, and the rebuttal that closed the
+   * finding checked only the mismatched one. These cover both, and the last one covers every shape, because the
+   * property that was missing is not about a case at all: it is that reading a row twice says the same thing.
+   */
+  it("rebuilds a ready row that has no resume, rather than revoking it and rebuilding it on the next pass", () => {
+    const missing = row({ status: "ready", resume: null, resumeHash: null, findings: [], changeSet });
+    const d = replayDecision(missing, [], doc);
+    expect(d).toEqual({ kind: "rebuild", status: "ready", findings: [], resume: doc, coverage: "full" });
+    // The old order gave revoke here, and a rebuild to ready on the pass after it.
+    expect(d.kind).not.toBe("revoke");
+  });
+
+  it("still revokes a ready row with no resume that cannot rebuild itself", () => {
+    // Bullets only: no change set, so there is nothing to rebuild from and the revoke is the right answer.
+    const legacy = row({ status: "ready", resume: null, resumeHash: null, findings: [] });
+    expect(replayDecision(legacy, [], null)).toMatchObject({ kind: "revoke", status: "invalid" });
+  });
+
+  it("says the same thing about a row however many times it is read", () => {
+    // The general property. Each shape is read three times, feeding each decision back onto the row, and the
+    // status and the presence of a document must settle on the first pass and stay there.
+    const apply = (r: ReplayRow, d: ReplayDecision): ReplayRow =>
+      d.kind === "no_resume" || d.kind === "no_candidate"
+        ? r
+        : { ...r, status: d.status, resume: "resume" in d ? (d.resume as ResumeDocument | null) : r.resume, findings: "findings" in d ? d.findings : r.findings };
+    const state = (r: ReplayRow) => `${r.status}/${r.resume ? "document" : "none"}`;
+    const shapes: [string, ReplayRow, ResumeDocument | null][] = [
+      ["ready, no resume, full change set", row({ status: "ready", resume: null, resumeHash: null, findings: [], changeSet }), doc],
+      ["ready, no resume, bullets only", row({ status: "ready", resume: null, resumeHash: null, findings: [] }), null],
+      ["ready, mismatched resume", row({ resume: drifted, changeSet }), doc],
+      ["invalid, no resume, full change set", row({ status: "invalid", resume: null, resumeHash: null, findings: [], changeSet }), doc],
+      ["ready, resume matches", row({ changeSet }), doc],
+    ];
+    for (const [name, start, candidate] of shapes) {
+      const first = apply(start, replayDecision(start, [], candidate));
+      const second = apply(first, replayDecision(first, [], candidate));
+      const third = apply(second, replayDecision(second, [], candidate));
+      expect(`${name}: ${state(second)}`).toBe(`${name}: ${state(first)}`);
+      expect(`${name}: ${state(third)}`).toBe(`${name}: ${state(first)}`);
+    }
   });
 
   it("does not replay a failed packet: an empty change set is no answer, not a clean one", () => {

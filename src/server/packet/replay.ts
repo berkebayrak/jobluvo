@@ -202,14 +202,22 @@ export function replayDecision(
   // decide whether one exists, and a row with a document and an invalid status is not a promotion.
   if (status === "invalid") return verified ? repaired() : { kind: "restamp", status, findings, resume: row.resume, coverage };
   if (!row.resume || !candidate || !sameDocument(row.resume, candidate)) {
-    // A row that is consumable or reviewable today on a document nothing can verify is revoked.
-    if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: row.resume, coverage };
-    // A rejected row whose resume was cleared, but which stores the change set it was built from, is rebuilt
-    // from the base plus that change set and stamped on what the validator says about it now (D-037). This is
-    // not a promotion on evidence nothing can check, which is what review five's finding 6 forbids: base plus
-    // a stored change set is deterministic and both are on the row, so the candidate is verifiable in the only
-    // sense that matters. A bullets only row stores no change set, cannot be rebuilt, and stays as it is.
+    // A row with no document at all, which stores the change set it was built from, is rebuilt from the base plus
+    // that change set and stamped on what the validator says about it now (D-037). This is not a promotion on
+    // evidence nothing can check, which is what review five's finding 6 forbids: base plus a stored change set is
+    // deterministic and both are on the row, so the candidate is verifiable in the only sense that matters.
+    //
+    // This is asked BEFORE the revoke, and the order is the whole of D-049. It used to be asked after, and the
+    // revoke was guarded on the row being ready or held, so a ready row with no resume and a full change set was
+    // revoked to invalid on one pass and then, being invalid, fell past the revoke into this branch on the next and
+    // came back ready. Revoked on one pass, promoted on the next, over identical inputs, with the hard finding that
+    // revoked it silently dropped because a replay retains only summary findings. Asking here makes the two passes
+    // agree: a row that can rebuild itself does so the first time, whatever its status, and the answer is the same
+    // every time it is read.
     if (!row.resume && candidate && coverage === "full") return { kind: "rebuild", status, findings, resume: candidate, coverage };
+    // A row that is consumable or reviewable today on a document nothing can verify, and that cannot rebuild one
+    // from itself, is revoked. A bullets only row stores no change set and is the case this still catches.
+    if (row.status === "ready" || row.status === "needs_review") return { kind: "revoke", status: "invalid", would: status, findings: [...findings, unverifiable()], resume: row.resume, coverage };
     // A row with no change set cannot be rebuilt from itself, and D-037 left six of them invalid with no document. Four
     // of those six have their document in a frozen snapshot that is in version control, so the document exists and the
     // row said it did not, which is the kind of untruth this week has been spent removing. It is restored only through

@@ -45,6 +45,7 @@ export const FINDING_CODES = [
   // Written by the replay and the run rather than the validator.
   "summary-not-revalidated",
   "resume-repaired",
+  "assessment-not-run",
   "profile-not-reproducible",
   "posting-moved",
   "unverifiable-resume",

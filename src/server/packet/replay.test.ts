@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dbPool, endPool, type Tx } from "@/db/client";
 import { jobs, packets, sources, users, type PacketFinding, type ResumeDocument } from "@/db/schema";
-import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, summaryNotRevalidated, unreplayable, unverifiable, type ReplayDecision, type ReplayRow } from "./replay";
+import { applyReplay, postingMoved, profileNotReproducible, replayDecision, sameDocument, summaryNotRevalidated, unreplayable, unverifiable, assessmentNotRun, hasCandidate, type ReplayDecision, type ReplayRow } from "./replay";
 import { resumeHash } from "./resume";
 import { consumableResume } from "./run";
 import { VALIDATOR_REVISION } from "./validate";
@@ -198,6 +198,7 @@ describe("replay decision", () => {
       ["ready, mismatched resume", row({ resume: drifted, changeSet }), doc],
       ["invalid, no resume, full change set", row({ status: "invalid", resume: null, resumeHash: null, findings: [], changeSet }), doc],
       ["ready, resume matches", row({ changeSet }), doc],
+      ["failed, parsed candidate never assessed", row({ status: "failed", resume: doc, findings: [], changeSet }), doc],
     ];
     for (const [name, start, candidate] of shapes) {
       const first = apply(start, replayDecision(start, [], candidate));
@@ -206,6 +207,49 @@ describe("replay decision", () => {
       expect(`${name}: ${state(second)}`).toBe(`${name}: ${state(first)}`);
       expect(`${name}: ${state(third)}`).toBe(`${name}: ${state(first)}`);
     }
+  });
+
+  /*
+   * D-050, the eighth review's finding 4. D-045 keeps the document when the validator throws on an answer that
+   * parsed, and the replay skipped every `failed` row on the assumption that failed means no candidate. So the
+   * document D-045 paid to keep could never be read again: fixing the validator and restamping would not reach it.
+   *
+   * The two failures are different things. A call that never returned, or an answer that never parsed, has nothing
+   * to read. A parsed candidate whose assessment failed has a document and no verdict on it.
+   */
+  it("reads a parsed candidate whose assessment failed, instead of skipping it with the executions that produced nothing", () => {
+    const assessed = row({ status: "failed", resume: doc, findings: [], changeSet });
+    expect(hasCandidate(assessed)).toBe(true);
+    const d = replayDecision(assessed, [], doc);
+    expect(d.kind).toBe("restamp");
+    // Held, never promoted: the row records an execution that failed and a person decides, not a report.
+    expect(d.kind === "restamp" && d.status).toBe("needs_review");
+    expect(d.kind === "restamp" && d.findings.map((f) => f.code)).toContain("assessment-not-run");
+    expect(d.kind === "restamp" && d.resume).toEqual(doc);
+  });
+
+  it("still skips a failed execution that produced no answer", () => {
+    expect(hasCandidate(row({ status: "failed", resume: null, resumeHash: null, changeSet: null }))).toBe(false);
+    expect(replayDecision(row({ status: "failed", resume: null, resumeHash: null, findings: [], changeSet: null }), [], null)).toEqual({ kind: "no_candidate" });
+  });
+
+  it("actually validates the kept document rather than reading its empty findings as a pass", () => {
+    // The stored findings of such a row are empty because nothing ever read it, not because it passed. What the
+    // validator says today is what decides, and a hard finding rejects the row exactly as it would any other.
+    const assessed = row({ status: "failed", resume: doc, findings: [], changeSet });
+    const d = replayDecision(assessed, [bulletHard], doc);
+    expect(d).toMatchObject({ kind: "restamp", status: "invalid" });
+    // The hard finding is the validator's, read today over the stored change set, not anything the row carried.
+    expect(d.kind === "restamp" && d.findings).toContainEqual(bulletHard);
+  });
+
+  it("keeps holding such a row on every later pass, rather than clearing the reason and stamping it ready", () => {
+    // The sticky half. Without it this is D-049's defect again: hold on pass one, finding not retained, ready on
+    // pass two. The finding is re-derived from the row's own findings, so the row stays held until a person acts.
+    const held = row({ status: "needs_review", resume: doc, findings: [assessmentNotRun()], changeSet });
+    const d = replayDecision(held, [], doc);
+    expect(d).toMatchObject({ kind: "restamp", status: "needs_review" });
+    expect(d.kind === "restamp" && d.findings.map((f) => f.code)).toEqual(["assessment-not-run"]);
   });
 
   it("does not replay a failed packet: an empty change set is no answer, not a clean one", () => {

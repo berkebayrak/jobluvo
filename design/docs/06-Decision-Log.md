@@ -41,7 +41,7 @@ this, because it measured rewording and tailoring is rewording (D-022).
 |---|---|---|
 | "Made a tool for tracking candidate pipelines" | "Built a candidate pipeline tracker" | shorter, and the posting's noun. Same actor, same scope |
 | "Presented findings to the executive committee every quarter" | "Reported quarterly to the executive committee" | the posting's verb. Same frequency, same audience |
-| "Ran the pricing workstream of a telecom relaunch, with a conjoint study of 2,000 customers" | "Ran a conjoint study of 2,000 customers for a telecom pricing relaunch" | a different fact leads. Same claim |
+| "Ran the pricing workstream of a telecom relaunch, with a conjoint study of 2,000 customers" | "On a telecom relaunch, ran the pricing workstream with a 2,000 customer conjoint study" | a different fact leads. The activity stays attached to the workstream |
 
 **These replace two examples that contradicted case 3, corrected on 19 September 2026
 (D-041).** This paragraph used to offer "helped deliver" to "delivered" and "improved" to
@@ -131,6 +131,79 @@ is recorded here on the user's instruction: getting two labels wrong and saying 
 more than getting them right quietly.
 
 ## 19 September 2026
+
+### D-048. The repair's provenance claim is narrowed to what it establishes, the case 1 example stops making the mistake it warns against, and the rest of the seventh review is placed
+
+The seventh review's findings 2, 3's remainder and 11, plus its deferrals. No code changes with
+this entry; two of its three parts are corrections to claims, which is what the user asked for
+instead of machinery.
+
+**1. What the repair guard establishes, and what it does not.**
+
+D-043 said the source is named on the row and read as though the document's identity had been
+established. The review is right on both halves and the user confirmed both.
+
+- The guard proves the offered document is **consistent with the row's own stored changes**. Any
+  document those changes could produce passes the same test, so it does not prove these bytes
+  are the artifact that row historically held.
+- The summary is the weakest part of it. It is taken from the offered document and then compared
+  against a candidate built with that same summary, so **the summary cannot fail the test**.
+- The hash the source recorded goes into a finding's detail and **is never checked** against the
+  document.
+- The finding itself is not retained by a replay, because only summary findings survive one.
+
+**And that last point is not hypothetical: it has already happened.** The repair was applied on
+19 September and the r10 restamp of the same day dropped `resume-repaired` from all four rows.
+Checked, not assumed: the four rows carry their documents and nothing on them says where those
+documents came from. Their provenance now lives in this log and in the cost summary, and nowhere
+in the database.
+
+**Nothing is built for this, on the user's instruction, and the reason is worth keeping.** The
+path has run once, on four rows of a demo profile. Verifiable durable provenance is real work
+and building it now would be machinery for a path nobody is using. The claim is weakened instead,
+here and in the cost summary, and the work is placed in phase 1 beside the reconstruction items.
+**If a repair is ever needed on a real user's row, that work happens first.**
+
+**2. The case 1 example made the mistake it warns against.**
+
+D-041's third example was "Ran the pricing workstream of a telecom relaunch, with a conjoint
+study of 2,000 customers" becoming "Ran a conjoint study of 2,000 customers for a telecom pricing
+relaunch". That assigns ownership of the study, which is exactly the case 3 line D-044 moved out
+of the controls three entries ago. **The same trap twice, in the entry written to fix it.**
+
+Corrected to "On a telecom relaunch, ran the pricing workstream with a 2,000 customer conjoint
+study": a different fact leads and the activity stays attached to the workstream. The example is
+documentation only and no prompt carries it, which is why it survived a round of review.
+
+**3. The rest of the seventh review, placed in phase 1, in its recommended order.**
+
+12. **The parser truncation and the change cap.** Finding 6.
+13. **The raw answer is overwritten by the merged one before it is logged.** Finding 7. What the
+    model actually returned on a retry is not recoverable from the row, which is the limit D-039
+    recorded from the other side.
+14. **Document mode loses the skill order.** Finding 8. `readAnswer` builds its change set with
+    `skills: []`, so a document mode answer's ordering is dropped on the way into the row.
+15. **The two pass replay, with its scope corrected.** Finding 9. D-042 placed this as "revoking
+    on one pass and promoting on the next". That is no longer what happens and the corrected
+    scope is narrower and verified against the code: a revoked row now keeps its document
+    (D-038), so on the next pass it falls into the `no_resume` branch, which is **named for a row
+    that has no document while the row is holding one**. Nothing is written, the row is never
+    re-examined, and the report prints "passes as ready but no resume stored" about a row with a
+    resume. A mislabel and a silent dead end rather than a promotion.
+16. **The report omits repairs from its totals.** Finding 12, and the same shape as item 4's
+    rebuilds: `repaired` is counted and not carried into the totals the report prints.
+17. **The remaining contradictions in the current state section.** Finding 13.
+18. **The evaluation design.** Finding 14, and the one to read properly when phase 1 opens
+    rather than to action piecemeal. Its argument, which the user endorsed: another set of
+    supplied false sentences measures the checker and not the prompt, and the only real test is
+    generating answers from frozen inputs with a person judging them. It also observes that
+    changing the self check, the retry protocol and the example together measures a configuration
+    rather than any one change, which is exactly what the first paid run is currently scheduled
+    to do to three changes at once (D-041). That tension is real and is not resolved here.
+19. **Verifiable durable provenance for a repaired row**, from part 1 above, beside the
+    reconstruction items. Needed before any repair touches a real user's row.
+
+**The first phase 1 item is still the pre rank.** Nothing here changes that.
 
 ### D-047. The standard for a truthful control is written down, the rest are audited against it, and what cannot be placed is marked rather than guessed
 
@@ -355,7 +428,7 @@ of its four conditions is met by construction rather than by care:
 
 | The condition | How |
 |---|---|
-| the source is named on the row | a soft `resume-repaired` finding carrying the file path and the hash that source recorded. Soft, like the retry's provenance: it says how the row was reached, not that something is wrong with it |
+| the source is named on the row | a soft `resume-repaired` finding carrying the file path and the hash that source recorded. **This is weaker than it sounds and the claim is corrected in D-048: the finding does not survive the next replay, and by the end of the same day it was gone from all four rows** |
 | the document is validated under today's rules before any status is decided | the repair branch runs after the validator has read the change set, and the status is `statusOf` over those findings like every other row |
 | nothing is promoted by hand | no branch here can produce `ready` that the validator did not produce. A repaired row that holds, holds; one that is rejected stays rejected and keeps its document |
 | the repair is a branch in the code | `kind: "repair"` in `replayDecision`, reached by `npm run validator-report -- --repair-from <dir>`, with tests. No script was written and none is needed again |
@@ -367,6 +440,14 @@ five's finding 6 unchanged: the inputs are on the row, the function is determini
 result is validated again before anything is stamped. A document that fails it is refused
 however good the source, and the tests assert that with a document from the right file and the
 wrong row.
+
+**What that test does and does not establish, narrowed by D-048 after the seventh review.** It
+establishes that the offered document is **consistent with the row's stored changes**. It does
+not establish that these bytes are the artifact that row historically held: any document those
+changes could produce passes it equally. The summary is a weaker part still, because it is taken
+from the offered document and then compared against a candidate built with that same summary, so
+it cannot fail. And the hash the source recorded is written into a finding's detail and is never
+checked against the document. Read the guard as a compatibility check, which is what it is.
 
 **What the outside file supplies that the row cannot is the summary text**, which is why these
 four could not be rebuilt from themselves. Nothing supplies the facts that summary cited, so

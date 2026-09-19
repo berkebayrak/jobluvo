@@ -28,8 +28,15 @@ Two restamps produced this, both applied 19 September 2026 from merged code. The
 repair (D-043) then wrote 105 rows and changed four: the four rejected rows whose document
 exists in `design/snapshots/2026-09-18-packets` had it restored, verified against their own
 stored changes, revalidated, and stamped **needs_review** on what the validator said. None was
-promoted to ready. Each of the four carries a soft `resume-repaired` finding naming the file and
-the hash that source recorded.
+promoted to ready.
+
+**What the repair establishes, stated narrowly after the seventh review (D-048).** The guard
+proves the offered document is **consistent with the row's own stored changes**. It does not
+prove the bytes are that row's historical artifact: any document those changes could produce
+would pass the same test. **The four rows carry documents from a snapshot and the rows no longer
+say so**, because the `resume-repaired` finding is not retained by a replay and the r10 restamp
+of the same day dropped it from all four. Their provenance is in D-043 and in this page, not in
+the database.
 
 **Every row in the table now has a document except the two that never had one.** That is the
 first time that has been true since 18 September.

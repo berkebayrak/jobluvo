@@ -158,10 +158,15 @@ declared union is covered; it proves nothing about what is persisted.
    reason.**
 3. **`readFindings` is the boundary check**, run over the stored set before any row is interpreted,
    in `validator-report` on the database side and `reconcile-sample` on the JSON side. It counts
-   unknown codes by name and codeless findings separately, and prints a line only when there is
-   something to say, so a clean read leaves no line to misread as a finding. **It never throws**: a
-   report that stops because one row is odd tells you less than one that prints the row, and these
-   are the instrument the restamp is judged with.
+   unknown codes by name and codeless findings separately. **It never throws**: a report that stops
+   because one row is odd tells you less than one that prints the row, and these are the instrument
+   the restamp is judged with.
+
+   **It prints a line either way, which is this entry's own rule applied to itself.** The first
+   version returned nothing on a clean read, so the boundary was silent exactly when everything was
+   recognised, and a silent check cannot be told from one that did not run. That is the floor both
+   scans in item B carry and the boundary had none. The clean line says how many findings were read
+   and that every code is declared; the by-name detail is unchanged for the unclean case.
 
 **What is enforced and where, which is also D-061's sentence corrected.** D-061 said a codeless
 finding "is a row written before codes existed". That is stronger than anything enforces; it usually

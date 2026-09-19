@@ -155,8 +155,11 @@ describe("every finding carries a stable code", () => {
     const line = describeFindingsRead(read)!;
     expect(line).toContain('2 carrying the code "a-rule-from-another-build"');
     expect(line).toContain("1 carrying no code");
-    // A clean set says nothing at all, so the report has no line to misread as a finding.
-    expect(describeFindingsRead(readFindings([{ code: "value-unknown", message: "x" }]))).toBeNull();
+    // A clean set still prints, and says so. A boundary that goes quiet when it finds nothing cannot be told
+    // from one that did not run, which is the floor the two scans above already carry.
+    expect(describeFindingsRead(readFindings([{ code: "value-unknown", message: "x" }]))).toBe(
+      "1 stored findings read, and every code on them is one this build declares",
+    );
   });
 
   it("names a finding that carries no code this build knows as codeless, rather than as one of the labels", () => {

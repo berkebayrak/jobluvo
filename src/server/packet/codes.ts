@@ -189,12 +189,22 @@ export function readFindings(findings: { code?: string; message: string }[]): Fi
   return { unknownCodes, unrecognised, total: findings.length };
 }
 
-/** One line saying what a read could not recognise, or null when everything was known. */
-export function describeFindingsRead(r: FindingsRead): string | null {
+/**
+ * One line saying what the read found, **always**.
+ *
+ * It used to return null on a clean read, so the boundary printed nothing when
+ * everything was recognised. That is the defect this file's own scans carry a
+ * floor against: a check that found nothing reports no violations and is
+ * indistinguishable from a check that did not run, in the one report a restamp
+ * is judged from. The clean line says how many findings were read and that
+ * every code is declared, so the reader can tell the two apart.
+ */
+export function describeFindingsRead(r: FindingsRead): string {
   const parts: string[] = [];
   for (const [code, n] of [...r.unknownCodes].sort((a, b) => b[1] - a[1])) parts.push(`${n} carrying the code "${code}", which this build does not declare`);
   if (r.unrecognised) parts.push(`${r.unrecognised} carrying no code and no message this build names`);
-  return parts.length ? `of ${r.total} stored findings read: ${parts.join("; ")}. Counted and printed by name, never as "undefined" and never folded into another reason` : null;
+  if (!parts.length) return `${r.total} stored findings read, and every code on them is one this build declares`;
+  return `${r.total} stored findings read: ${parts.join("; ")}. Counted and printed by name, never as "undefined" and never folded into another reason`;
 }
 
 /**

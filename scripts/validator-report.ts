@@ -131,8 +131,7 @@ async function main() {
   // assertion about the column rather than a guarantee from it, so a code this build does not declare can arrive
   // on a row written by a later build, a hand edit or a restored snapshot. It is counted and named here rather
   // than reaching a table as "undefined" (D-066).
-  const boundary = describeFindingsRead(readFindings(rows.flatMap((p) => p.findings)));
-  if (boundary) console.log(`\nstored findings this build could not recognise: ${boundary}`);
+  console.log(`\nboundary check on the stored findings: ${describeFindingsRead(readFindings(rows.flatMap((p) => p.findings)))}`);
   const perPacket: { row: ReplayRow; run: string; status: string; edits: number; decision: ReplayDecision; findings: PacketFinding[]; outcome: string; hashHolds: boolean | null; rebuilds: boolean | null; excluded: boolean; postingMoved: boolean }[] = [];
   const profilesUsed: Record<string, number> = {};
   for (const [userId, ps] of byUser) {
